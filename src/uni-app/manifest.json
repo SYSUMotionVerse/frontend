@@ -1,0 +1,14 @@
+{
+  "name": "sport-snack-student-app",
+  "appid": "__UNI__SPORT_SNACK_STUDENT_APP",
+  "description": "Student miniapp shell for the uni-app migration.",
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "touristappid",
+    "setting": {
+      "urlCheck": false
+    }
+  }
+}

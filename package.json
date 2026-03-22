@@ -1,0 +1,34 @@
+{
+  "name": "sport-snack-student-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "uni -p mp-weixin",
+    "dev:web": "vite",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build": "uni build -p mp-weixin",
+    "build:web": "vue-tsc --noEmit && vite build",
+    "build:mp-weixin": "uni build -p mp-weixin",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-5000420260318001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-5000420260318001",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "3.4.28",
+    "@dcloudio/vite-plugin-uni": "3.0.0-5000420260318001",
+    "@furinalu/unocss-preset-weapp": "^0.6.31",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "5.2.4",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.7.3",
+    "unocss": "^66.5.4",
+    "vite": "5.2.8",
+    "vitest": "^3.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}

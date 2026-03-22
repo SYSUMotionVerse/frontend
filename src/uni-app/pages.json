@@ -1,0 +1,70 @@
+{
+  "pages": [
+    {
+      "path": "pages/access/register",
+      "style": {
+        "navigationBarTitleText": "Register"
+      }
+    },
+    {
+      "path": "pages/access/questionnaire",
+      "style": {
+        "navigationBarTitleText": "Questionnaire"
+      }
+    },
+    {
+      "path": "pages/access/questionnaire-result",
+      "style": {
+        "navigationBarTitleText": "Questionnaire Result"
+      }
+    },
+    {
+      "path": "pages/training/home",
+      "style": {
+        "navigationBarTitleText": "Training Home"
+      }
+    },
+    {
+      "path": "pages/training/select",
+      "style": {
+        "navigationBarTitleText": "Select Training"
+      }
+    },
+    {
+      "path": "pages/training/visual-session",
+      "style": {
+        "navigationBarTitleText": "Visual Session"
+      }
+    },
+    {
+      "path": "pages/training/stair-session",
+      "style": {
+        "navigationBarTitleText": "Stair Session"
+      }
+    },
+    {
+      "path": "pages/training/short-questionnaire",
+      "style": {
+        "navigationBarTitleText": "Short Questionnaire"
+      }
+    },
+    {
+      "path": "pages/training/feedback",
+      "style": {
+        "navigationBarTitleText": "Feedback"
+      }
+    },
+    {
+      "path": "pages/growth/index",
+      "style": {
+        "navigationBarTitleText": "Growth"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Sport Snack",
+    "navigationBarBackgroundColor": "#FCF7F0",
+    "backgroundColor": "#FCF7F0"
+  }
+}

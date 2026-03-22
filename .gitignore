@@ -1,0 +1,91 @@
+# ============================
+# Agent / AI config (do not commit)
+# ============================
+
+# Claude Code
+.claude/
+.codex/
+.gemini/
+.agent/
+.agents/
+
+# Keep CI config in .github, ignore only agent-related files
+.github/skills/
+.github/prompts/
+
+# Other AI tool config
+.agentignore
+
+# ============================
+# Node / pnpm
+# ============================
+
+node_modules/
+.pnpm-store/
+.pnpm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# pnpm lock file - recommended to keep for deterministic installs
+# Uncomment the next line only if you intentionally do not want to commit it
+# pnpm-lock.yaml
+
+# ============================
+# Mini Program / WeChat Mini Program
+# ============================
+
+# WeChat DevTools
+.devtools/
+.project.lock.json
+project.config.json
+project.private.config.json
+.miniprogram/
+
+# Mini Program build output
+dist/
+miniprogram_dist/
+unpackage/
+build/
+
+# Mini Program dependencies
+miniprogram_npm/
+
+# IDE config (do not commit)
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ============================
+# Local development environment
+# ============================
+
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-log/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# ============================
+# OpenSpec (if you do not want to commit it)
+# ============================
+
+# openspec/
