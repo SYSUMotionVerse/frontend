@@ -12,7 +12,6 @@
 - [x] Reminder return state is mapped through the uni-app reminder adapter and reflected in the training home entry flow.
 - [x] Checkpoint gating resolves from the portable student state snapshot without relying on `vue-router`.
 - [x] Three-check-in completion remains capped at three valid daily check-ins and still drives weekly adherence.
-- [x] Access, training, and growth uni-app pages now exist alongside the legacy web preview shell.
 - [x] Growth physical-metrics empty state still renders the documented fallback message.
 
 ## Evidence
@@ -26,5 +25,5 @@
 ## Build integration notes
 
 - The uni CLI expects its canonical manifest and route files under `src/`, so the final integration places `src/manifest.json`, `src/pages.json`, and `src/uni.scss` at the project root.
-- The uni runtime entry now lives at `src/main.ts` and `src/App.vue`, while the legacy browser preview shell is preserved at `src/web-preview/main.ts` and `src/web-preview/App.vue`.
+- The uni runtime entry now lives at `src/main.ts` and `src/App.vue`.
 - Thin wrapper pages under `src/pages/**` keep the canonical Mini Program paths stable while reusing the migrated uni-app page implementations under `src/uni-app/pages/**`.

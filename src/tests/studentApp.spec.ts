@@ -33,12 +33,12 @@ describe('student miniapp route map', () => {
     expect(app).toBeTruthy()
   })
 
-  it('makes the uni-app shell the default runtime target and keeps web as preview-only', async () => {
+  it('makes the mini-program runtime the only exposed app target', async () => {
     const packageManifest = await import('../../package.json')
 
     expect(packageManifest.scripts.dev).toContain('mp-weixin')
     expect(packageManifest.scripts.build).toContain('mp-weixin')
-    expect(packageManifest.scripts['dev:web']).toBeTypeOf('string')
-    expect(packageManifest.scripts['build:web']).toBeTypeOf('string')
+    expect(packageManifest.scripts).not.toHaveProperty('dev:web')
+    expect(packageManifest.scripts).not.toHaveProperty('build:web')
   })
 })

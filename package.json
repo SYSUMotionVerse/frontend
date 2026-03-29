@@ -4,18 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "uni -p mp-weixin",
-    "dev:web": "vite",
     "dev:mp-weixin": "uni -p mp-weixin",
     "build": "uni build -p mp-weixin",
-    "build:web": "vue-tsc --noEmit && vite build",
     "build:mp-weixin": "uni build -p mp-weixin",
     "test": "vitest run"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5000420260318001",
+    "@dcloudio/uni-components": "3.0.0-5000420260318001",
     "@dcloudio/uni-mp-weixin": "3.0.0-5000420260318001",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.1"
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@dcloudio/types": "3.4.28",

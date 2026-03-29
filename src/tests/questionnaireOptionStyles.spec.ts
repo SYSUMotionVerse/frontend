@@ -27,7 +27,7 @@ describe('questionnaire rating option styles', () => {
 
   it('keeps long-questionnaire circle options compact enough for miniapp layouts', () => {
     const css = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/features/questionnaire/ratingOptionStyles.css'),
+      resolve('src/features/questionnaire/ratingOptionStyles.css'),
       'utf8'
     )
 
@@ -36,7 +36,7 @@ describe('questionnaire rating option styles', () => {
 
   it('keeps short-questionnaire rounded options uniformly compact across every rounded prompt', () => {
     const css = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/features/questionnaire/ratingOptionStyles.css'),
+      resolve('src/features/questionnaire/ratingOptionStyles.css'),
       'utf8'
     )
 
