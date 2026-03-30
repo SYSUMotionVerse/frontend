@@ -1,3 +1,17 @@
+<script setup lang="ts">
+import FloatingDock from '../navigation/FloatingDock.vue'
+
+type DockTab = 'home' | 'playground' | 'growth'
+
+withDefaults(defineProps<{
+  dockTab?: DockTab
+  showDock?: boolean
+}>(), {
+  dockTab: 'playground',
+  showDock: true
+})
+</script>
+
 <template>
   <view class="training-shell">
     <view class="training-shell__halo training-shell__halo--coral" />
@@ -5,6 +19,7 @@
     <view class="training-shell__inner">
       <slot />
     </view>
+    <FloatingDock v-if="showDock" :active-tab="dockTab" />
   </view>
 </template>
 
@@ -14,7 +29,7 @@
   min-height: 100vh;
   overflow: hidden;
   background: #FCF7F0;
-  padding: 56rpx 32rpx 96rpx;
+  padding: 56rpx 32rpx 216rpx;
 }
 
 .training-shell__halo {
