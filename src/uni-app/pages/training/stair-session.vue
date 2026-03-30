@@ -62,7 +62,7 @@ onBeforeUnmount(clearTimer)
 </script>
 
 <template>
-  <UniTrainingPageShell>
+  <UniTrainingPageShell dock-tab="playground">
     <StairTrainingPanel
       :seconds-left="secondsLeft"
       @complete="finishSession"

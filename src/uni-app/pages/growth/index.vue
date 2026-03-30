@@ -21,7 +21,7 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
 </script>
 
 <template>
-  <UniGrowthPageShell>
+  <UniGrowthPageShell dock-tab="growth">
     <view class="growth-page__header">
       <view class="growth-page__eyebrow">
         <text>成长乐园</text>

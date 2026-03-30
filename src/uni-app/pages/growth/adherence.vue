@@ -10,7 +10,7 @@ const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
 </script>
 
 <template>
-  <UniGrowthPageShell>
+  <UniGrowthPageShell dock-tab="growth">
     <h1 class="detail-page__title">达标详情</h1>
     <p class="detail-page__subtitle">近期训练行为的日级热力图。</p>
 

@@ -11,7 +11,7 @@ const earnedCount = computed(() => summary.value.achievements.filter((badge) => 
 </script>
 
 <template>
-  <UniGrowthPageShell>
+  <UniGrowthPageShell dock-tab="growth">
     <view class="achievement-page__hero-card">
       <view class="achievement-page__eyebrow">
         <text>奖杯陈列室</text>

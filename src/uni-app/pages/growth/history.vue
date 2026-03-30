@@ -17,7 +17,7 @@ const questionnaires = computed(() => store.getSnapshot().longQuestionnaires)
 </script>
 
 <template>
-  <UniGrowthPageShell>
+  <UniGrowthPageShell dock-tab="growth">
     <h1 class="detail-page__title">训练与评估历史</h1>
     <p class="detail-page__subtitle">训练亮点与长问卷评估点。</p>
 

@@ -44,7 +44,7 @@ function interruptSession() {
 </script>
 
 <template>
-  <UniTrainingPageShell>
+  <UniTrainingPageShell dock-tab="playground">
     <VisualTrainingPanel
       :coach-label="`${title} 教练`"
       :learner-label="`${title} 学员视角`"

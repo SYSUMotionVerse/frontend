@@ -11,7 +11,7 @@ const emptyStateHint = computed(() => metricsState.value.hasMetrics ? '' : metri
 </script>
 
 <template>
-  <UniGrowthPageShell>
+  <UniGrowthPageShell dock-tab="growth">
     <h1 class="detail-page__title">体能指标详情</h1>
     <p class="detail-page__subtitle">导入的体测数据与趋势快照。</p>
 
