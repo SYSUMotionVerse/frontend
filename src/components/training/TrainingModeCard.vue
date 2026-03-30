@@ -6,40 +6,53 @@ const props = defineProps<{
   modality: TrainingModality
   title: string
   description: string
-  accentClass: string
+  duration: string
+  difficulty: string
+  cardIndex: number
 }>()
 
 const emit = defineEmits<{
   choose: [modality: TrainingModality]
 }>()
 
+const posterBars = [1, 2, 3]
+
 const modeMeta = computed(() => {
   if (props.modality === 'wushu') {
     return {
-      emoji: '🥋',
-      kicker: '武术挑战',
-      cta: '开启引导',
-      chipBackground: '#FF8B8B',
-      chipColor: '#FFFFFF'
+      accentLabel: '流动招式',
+      buttonLabel: '开始这一关',
+      buttonIcon: '🥋',
+      buttonClass: 'training-level-card__cta--coral',
+      difficultyClass: 'training-level-card__pill--gold',
+      posterClass: 'training-level-card__poster--wushu',
+      posterMark: '武',
+      posterIcon: '↗'
     }
   }
 
   if (props.modality === 'hiit') {
     return {
-      emoji: '⚡',
-      kicker: '节奏冲刺',
-      cta: '开始爆发',
-      chipBackground: '#FFD384',
-      chipColor: '#1A202C'
+      accentLabel: '爆发冲刺',
+      buttonLabel: '点燃节奏',
+      buttonIcon: '⚡',
+      buttonClass: 'training-level-card__cta--sky',
+      difficultyClass: 'training-level-card__pill--rose',
+      posterClass: 'training-level-card__poster--hiit',
+      posterMark: '燃',
+      posterIcon: '•'
     }
   }
 
   return {
-    emoji: '🪜',
-    kicker: '阶梯冲刺',
-    cta: '立即攀登',
-    chipBackground: '#89CFFF',
-    chipColor: '#1A202C'
+    accentLabel: '快速登阶',
+    buttonLabel: '轻快出发',
+    buttonIcon: '👟',
+    buttonClass: 'training-level-card__cta--amber',
+    difficultyClass: 'training-level-card__pill--sage',
+    posterClass: 'training-level-card__poster--stair',
+    posterMark: '阶',
+    posterIcon: '∎'
   }
 })
 
@@ -49,147 +62,293 @@ function handleChoose() {
 </script>
 
 <template>
-  <view
-    class="training-mode-card card-shell w-full cursor-pointer p-[48rpx] text-left bouncy-btn"
-    hover-class="training-mode-card--pressed"
-    @click="handleChoose"
-  >
-    <view class="training-mode-card__topline">
-      <view class="training-mode-card__sticker" :class="props.accentClass">
-        <text class="training-mode-card__sticker-emoji">{{ modeMeta.emoji }}</text>
+  <view class="training-level-card">
+    <view class="training-level-card__glow" :class="`training-level-card__glow--${props.modality}`" />
+
+    <view class="training-level-card__meta">
+      <view class="training-level-card__pill training-level-card__pill--neutral">
+        <text>{{ props.duration }}</text>
       </view>
-      <view class="training-mode-card__spark">
-        <text>{{ modeMeta.kicker }}</text>
+      <view class="training-level-card__pill" :class="modeMeta.difficultyClass">
+        <text>{{ props.difficulty }}</text>
       </view>
     </view>
 
-    <view
-      class="chip-soft training-mode-card__chip border-2"
-      :style="{ backgroundColor: modeMeta.chipBackground, color: modeMeta.chipColor }"
+    <view class="training-level-card__poster" :class="modeMeta.posterClass">
+      <text class="training-level-card__poster-mark">{{ modeMeta.posterMark }}</text>
+      <text class="training-level-card__poster-icon">{{ modeMeta.posterIcon }}</text>
+      <view
+        v-if="props.modality === 'stair'"
+        class="training-level-card__poster-steps"
+      >
+        <view
+          v-for="bar in posterBars"
+          :key="bar"
+          class="training-level-card__poster-step"
+          :class="`training-level-card__poster-step--${bar}`"
+        />
+      </view>
+    </view>
+
+    <view class="training-level-card__copy">
+      <view class="training-level-card__kicker">
+        <text>第 {{ props.cardIndex + 1 }} 关 · {{ modeMeta.accentLabel }}</text>
+      </view>
+      <text class="training-level-card__title">{{ props.title }}</text>
+      <text class="training-level-card__description">{{ props.description }}</text>
+    </view>
+
+    <button
+      class="training-level-card__cta"
+      :class="modeMeta.buttonClass"
+      form-type="button"
+      hover-class="training-level-card__cta--pressed"
+      type="button"
+      @click="handleChoose"
     >
-      <text class="training-mode-card__chip-text">{{ props.title }} 快餐</text>
-    </view>
-    <text class="block text-[40rpx] font-900 text-brand-ink tracking-[-0.03em]">{{ props.title }}</text>
-    <text class="block text-[32rpx] leading-snug text-slate-600 font-700">{{ props.description }}</text>
-
-    <view class="training-mode-card__footer">
-      <view class="training-mode-card__cta">
-        <text>{{ modeMeta.cta }}</text>
-      </view>
-      <text class="training-mode-card__hint">1个简短引导课程</text>
-    </view>
+      <text>{{ modeMeta.buttonLabel }} {{ modeMeta.buttonIcon }}</text>
+    </button>
   </view>
 </template>
 
 <style scoped>
-.training-mode-card {
-  box-sizing: border-box;
+.training-level-card {
+  position: relative;
   display: flex;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 320rpx;
   flex-direction: column;
-  justify-content: center;
-  gap: 12rpx;
-  border-bottom-width: 12rpx !important;
+  gap: 28rpx;
+  min-height: 338rpx;
+  padding: 42rpx 34rpx 34rpx;
+  border-radius: 34rpx;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 22rpx 46rpx rgba(37, 47, 61, 0.08),
+    0 10rpx 0 rgba(255, 236, 213, 0.85);
   overflow: hidden;
 }
 
-.training-mode-card__topline {
+.training-level-card__glow {
+  position: absolute;
+  right: -36rpx;
+  bottom: -48rpx;
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 9999px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.training-level-card__glow--wushu {
+  background: rgba(255, 177, 177, 0.28);
+}
+
+.training-level-card__glow--hiit {
+  background: rgba(184, 225, 255, 0.3);
+}
+
+.training-level-card__glow--stair {
+  background: rgba(255, 221, 153, 0.26);
+}
+
+.training-level-card__meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14rpx;
+  max-width: 360rpx;
   flex-wrap: wrap;
-  gap: 20rpx;
-  margin-bottom: 8rpx;
 }
 
-.training-mode-card__sticker {
+.training-level-card__pill {
   display: inline-flex;
-  width: 92rpx;
-  height: 92rpx;
-  flex: none;
   align-items: center;
   justify-content: center;
+  min-height: 44rpx;
+  padding: 8rpx 18rpx;
   border-radius: 9999px;
-  border: 6rpx solid #ffffff;
-  box-shadow: 0 10rpx 0 rgba(0, 0, 0, 0.04);
-}
-
-.training-mode-card__sticker-emoji {
-  font-size: 42rpx;
-}
-
-.training-mode-card__spark {
-  display: inline-flex;
-  max-width: 100%;
-  width: fit-content;
-  align-items: center;
-  justify-content: center;
-  padding: 12rpx 18rpx;
-  border-radius: 9999px;
-  border: 4rpx solid rgba(255, 211, 132, 0.24);
-  background: rgba(255, 211, 132, 0.14);
-  color: #D97706;
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.training-mode-card__chip {
-  align-self: flex-start;
-  max-width: 100%;
-}
-
-.training-mode-card__chip-text {
-  display: block;
-  color: inherit;
-}
-
-.training-mode-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 20rpx;
-  margin-top: 16rpx;
-  min-width: 0;
-}
-
-.training-mode-card__cta {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  min-height: 72rpx;
-  padding: 12rpx 24rpx;
-  border-radius: 9999px;
-  background: #1A202C;
-  color: #ffffff;
-  font-size: 24rpx;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  box-shadow: 0 8rpx 0 rgba(26, 32, 44, 0.16);
-}
-
-.training-mode-card__hint {
-  display: block;
-  flex: 1 1 100%;
-  min-width: 0;
-  color: #94A3B8;
-  font-size: 24rpx;
-  font-weight: 800;
-  line-height: 1.4;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
-  word-break: break-word;
+  text-transform: uppercase;
 }
 
-.training-mode-card--pressed {
+.training-level-card__pill--neutral {
+  background: #edf4ff;
+  color: #5c6c84;
+}
+
+.training-level-card__pill--gold {
+  background: #ffecc2;
+  color: #866100;
+}
+
+.training-level-card__pill--rose {
+  background: #ffe2e4;
+  color: #df6c88;
+}
+
+.training-level-card__pill--sage {
+  background: #eef2d6;
+  color: #6f7f3a;
+}
+
+.training-level-card__poster {
+  position: absolute;
+  top: 30rpx;
+  right: 28rpx;
+  display: flex;
+  width: 188rpx;
+  height: 160rpx;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 22rpx 20rpx;
+  border-radius: 28rpx 28rpx 14rpx 14rpx;
+  overflow: hidden;
+}
+
+.training-level-card__poster--wushu {
+  background:
+    linear-gradient(135deg, rgba(255, 241, 220, 0.96), rgba(255, 187, 150, 0.95)),
+    #ffe8d1;
+}
+
+.training-level-card__poster--hiit {
+  background:
+    linear-gradient(135deg, rgba(255, 245, 232, 0.95), rgba(198, 228, 249, 0.95)),
+    #eef6ff;
+}
+
+.training-level-card__poster--stair {
+  background:
+    linear-gradient(180deg, rgba(255, 244, 222, 0.94), rgba(242, 214, 169, 0.98)),
+    #f7e5c8;
+}
+
+.training-level-card__poster-mark {
+  position: relative;
+  z-index: 1;
+  color: rgba(37, 47, 61, 0.72);
+  font-size: 72rpx;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.training-level-card__poster-icon {
+  position: absolute;
+  top: 16rpx;
+  right: 18rpx;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 42rpx;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.training-level-card__poster-steps {
+  position: absolute;
+  right: 24rpx;
+  bottom: 18rpx;
+  display: flex;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.training-level-card__poster-step {
+  width: 20rpx;
+  border-radius: 10rpx 10rpx 0 0;
+  background: rgba(113, 77, 34, 0.62);
+}
+
+.training-level-card__poster-step--1 {
+  height: 42rpx;
+}
+
+.training-level-card__poster-step--2 {
+  height: 66rpx;
+}
+
+.training-level-card__poster-step--3 {
+  height: 92rpx;
+}
+
+.training-level-card__copy {
+  display: flex;
+  max-width: 400rpx;
+  min-height: 154rpx;
+  flex-direction: column;
+  gap: 14rpx;
+  padding-top: 10rpx;
+}
+
+.training-level-card__kicker {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 10rpx 16rpx;
+  border-radius: 9999px;
+  background: rgba(247, 239, 223, 0.92);
+  color: #8a6f52;
+  font-size: 20rpx;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.training-level-card__title {
+  display: block;
+  color: #243244;
+  font-size: 44rpx;
+  line-height: 1.18;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.training-level-card__description {
+  display: block;
+  color: #6d7a8b;
+  font-size: 27rpx;
+  line-height: 1.58;
+  font-weight: 700;
+}
+
+.training-level-card__cta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 92rpx;
+  margin-top: 16rpx;
+  border: 0;
+  border-radius: 9999px;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.training-level-card__cta--coral {
+  background: linear-gradient(135deg, #ff7e87, #ff9a9e);
+  box-shadow: 0 10rpx 0 rgba(237, 121, 130, 0.34);
+  color: #ffffff;
+}
+
+.training-level-card__cta--sky {
+  background: linear-gradient(135deg, #b7dcff, #a5d1ff);
+  box-shadow: 0 10rpx 0 rgba(140, 184, 226, 0.34);
+  color: #29415d;
+}
+
+.training-level-card__cta--amber {
+  background: linear-gradient(135deg, #ffd47f, #ffcb63);
+  box-shadow: 0 10rpx 0 rgba(227, 176, 71, 0.34);
+  color: #5a4320;
+}
+
+.training-level-card__cta--pressed,
+.training-level-card__cta:active {
   transform: translateY(4rpx);
-  box-shadow: none;
+  box-shadow: 0 6rpx 0 rgba(37, 47, 61, 0.16);
 }
 </style>
