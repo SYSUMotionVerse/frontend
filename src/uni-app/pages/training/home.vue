@@ -1,18 +1,97 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import DailyProgressCard from '../../../components/training/DailyProgressCard.vue'
-import ReminderBanner from '../../../components/training/ReminderBanner.vue'
+import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
+import TrainingHomeFeatureCard from '../../../components/training/TrainingHomeFeatureCard.vue'
+import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
+import TrainingHomeQuestPanel from '../../../components/training/TrainingHomeQuestPanel.vue'
+import { DEFAULT_AVATAR_URL } from '../../../constants/defaultAvatar'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { resolveReminderSource } from '../../platform/reminders'
 
 const store = useStudentStore()
 
-const showReminderBanner = computed(() => {
-  const snapshot = store.getSnapshot()
-  return snapshot.reminderSource === 'wechat-reminder' && snapshot.dailyAdherence.validCheckIns < 3
+const profileAvatarUrl = computed(() =>
+  store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
+)
+
+const displayName = computed(() => store.state.profile.name.trim() || '同学')
+
+const reminderLabel = computed(() =>
+  store.state.dailyAdherence.reminderEligible ? '今日提醒仍然开启' : '今天的提醒目标已完成'
+)
+
+const quests = computed(() => {
+  const validCheckIns = store.state.dailyAdherence.validCheckIns
+  const qualifyingDays = store.state.weeklyAdherence.qualifyingDays
+
+  return [
+    {
+      id: 'daily-first',
+      title: '完成 1 次有效打卡',
+      detail: validCheckIns > 0 ? `今天已经完成 ${validCheckIns} 次有效打卡。` : '先完成一次短训练，把今天的状态点亮。',
+      completed: validCheckIns >= 1,
+      highlight: false
+    },
+    {
+      id: 'daily-three',
+      title: '今日累计 3 次有效打卡',
+      detail: `当前进度 ${validCheckIns}/3，完成后就能保持今日满格节奏。`,
+      completed: validCheckIns >= 3,
+      highlight: validCheckIns < 3
+    },
+    {
+      id: 'weekly-streak',
+      title: '本周达标 3 天',
+      detail: `目前已达标 ${qualifyingDays} 天，再稳住节奏就能拿下本周目标。`,
+      completed: qualifyingDays >= 3,
+      highlight: validCheckIns >= 3 && qualifyingDays < 3
+    }
+  ]
 })
+
+const completedQuestCount = computed(() => quests.value.filter((quest) => quest.completed).length)
+
+const learnCards = [
+  {
+    id: 'jump-shot',
+    eyebrow: '基础动作',
+    title: 'Perfect Jump Shot Arc',
+    description: '抬肘、压腕、顺势出手，把动作感觉先找回来。',
+    posterTone: 'sky' as const,
+    timeLabel: '04:22'
+  },
+  {
+    id: 'footwork',
+    eyebrow: '移动训练',
+    title: 'Advanced Crossover',
+    description: '脚下先稳，再把横移和启动速度一点点提上去。',
+    posterTone: 'sand' as const,
+    timeLabel: '08:15'
+  }
+]
+
+const coachCards = computed(() => [
+  {
+    id: 'quote',
+    eyebrow: '教练金句',
+    title: '今天先把动作做扎实',
+    body: `“${displayName.value}，真正的进步不是一次爆发，而是把每一次基本动作都做对。”`,
+    footer: 'Coach Harris',
+    tone: 'quote' as const
+  },
+  {
+    id: 'recovery',
+    eyebrow: '恢复建议',
+    title: '补水和放松别落下',
+    body: store.state.dailyAdherence.reminderEligible
+      ? '训练后先喝水，再做两分钟放松拉伸，下一轮会更轻松。'
+      : '今天的目标已经完成，记得补水并让身体慢慢降下来。',
+    footer: '恢复优先，明天会更稳。',
+    tone: 'tip' as const
+  }
+])
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -28,141 +107,193 @@ onLoad((query) => {
 onShow(() => {
   store.refreshReminderEligibility()
 })
-
 </script>
 
 <template>
-  <UniTrainingPageShell>
-    <ReminderBanner :visible="showReminderBanner" />
+  <UniTrainingPageShell dock-tab="home">
+    <view class="home-page">
+      <TrainingHomeHeader
+        :avatar-url="profileAvatarUrl"
+        :display-name="displayName"
+        :reminder-label="reminderLabel"
+        mini-tag="TODAY'S QUEST"
+        title="今天先完成主线任务"
+        title-pill="训练首页"
+        variant="home"
+      />
 
-    <view class="card-shell home-page__hero">
-      <view class="home-page__hero-tag">
-        <text>每日中心</text>
+      <TrainingHomeQuestPanel
+        :completed-count="completedQuestCount"
+        :quests="quests"
+        :total-count="quests.length"
+        title="今日任务"
+      />
+
+      <view class="home-page__section">
+        <view class="home-page__section-head">
+          <view class="home-page__section-copy">
+            <text class="home-page__section-kicker">LEARN & PLAY</text>
+            <text class="home-page__section-title">边练边学</text>
+            <text class="home-page__section-subtitle">先看看动作提示，再带着感觉去训练。</text>
+          </view>
+          <navigator
+            class="home-page__section-link"
+            hover-class="home-page__section-link--pressed"
+            url="/pages/growth/index"
+          >
+            <text>成长页</text>
+          </navigator>
+        </view>
+
+        <view class="home-page__feed">
+          <TrainingHomeFeatureCard
+            v-for="card in learnCards"
+            :key="card.id"
+            :description="card.description"
+            :eyebrow="card.eyebrow"
+            :poster-tone="card.posterTone"
+            :time-label="card.timeLabel"
+            :title="card.title"
+          />
+        </view>
       </view>
-      <text class="section-title">选择下一个训练</text>
-      <text class="home-page__hero-copy">
-        选择一个有趣的训练，完成它，保持你的连续记录。
-      </text>
-    </view>
 
-    <DailyProgressCard
-      :qualifying-days="store.state.weeklyAdherence.qualifyingDays"
-      :reminder-eligible="store.state.dailyAdherence.reminderEligible"
-      :valid-check-ins="store.state.dailyAdherence.validCheckIns"
-    />
+      <view class="home-page__section">
+        <view class="home-page__section-copy">
+          <text class="home-page__section-kicker">COACH'S CORNER</text>
+          <text class="home-page__section-title">教练角</text>
+          <text class="home-page__section-subtitle">今天的重点和恢复建议，先看一眼再开练。</text>
+        </view>
 
-    <view class="card-shell p-[40rpx]">
-      <view class="home-page__hero-tag home-page__hero-tag--teal">
-        <text>快捷操作</text>
+        <view class="home-page__feed">
+          <TrainingHomeCoachCard
+            v-for="card in coachCards"
+            :key="card.id"
+            :body="card.body"
+            :eyebrow="card.eyebrow"
+            :footer="card.footer"
+            :title="card.title"
+            :tone="card.tone"
+          />
+        </view>
       </view>
-      <text class="block section-title mt-[20rpx]">选择下一个训练</text>
-      <text class="block mt-[20rpx] text-[34rpx] leading-8 text-slate-600 font-700">
-        武术、HIIT 和楼梯训练可自由组合，每完成一次引导训练都计入进度。
-      </text>
 
-      <view class="home-page__actions">
-        <navigator
-          class="home-action home-action--primary"
-          hover-class="home-action--pressed"
-          url="/pages/training/select"
-        >
-          <text>开始训练</text>
-        </navigator>
-        <navigator
-          class="home-action home-action--secondary"
-          hover-class="home-action--pressed"
-          url="/pages/growth/index"
-        >
-          <text>打开成长</text>
-        </navigator>
-      </view>
+      <navigator
+        class="home-page__cta"
+        hover-class="home-page__cta--pressed"
+        url="/pages/training/select"
+      >
+        <text>开始训练</text>
+      </navigator>
     </view>
   </UniTrainingPageShell>
 </template>
 
 <style scoped>
-.home-page__hero {
+.home-page {
+  display: flex;
+  flex-direction: column;
+  gap: 48rpx;
+}
+
+.home-page__section {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
 }
 
-.home-page__hero-tag {
+.home-page__section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.home-page__section-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.home-page__section-kicker {
   display: inline-flex;
   width: fit-content;
   align-items: center;
   justify-content: center;
-  padding: 12rpx 22rpx;
+  padding: 8rpx 16rpx;
   border-radius: 9999px;
-  border: 4rpx solid rgba(255, 211, 132, 0.24);
-  background: rgba(255, 211, 132, 0.14);
-  color: #D97706;
-  font-size: 24rpx;
+  background: rgba(255, 236, 199, 0.32);
+  color: #c69021;
+  font-size: 18rpx;
+  line-height: 1.2;
   font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
-.home-page__hero-tag--teal {
-  border-color: rgba(137, 207, 255, 0.24);
-  background: rgba(137, 207, 255, 0.14);
-  color: #2B7CB8;
-}
-
-.home-page__hero-copy {
+.home-page__section-title {
   display: block;
-  color: #64748B;
-  font-size: 34rpx;
-  line-height: 1.5;
+  color: #203042;
+  font-size: 52rpx;
+  line-height: 1.06;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.home-page__section-subtitle {
+  display: block;
+  color: #7b8798;
+  font-size: 24rpx;
+  line-height: 1.48;
   font-weight: 700;
 }
 
-.home-page__actions {
-  margin-top: 44rpx;
-  display: flex;
-  gap: 24rpx;
-}
-
-.home-action {
-  display: flex;
-  flex: 1 1 0;
+.home-page__section-link {
+  display: inline-flex;
+  min-height: 52rpx;
+  flex: none;
   align-items: center;
   justify-content: center;
-  min-width: 0;
-  min-height: 108rpx;
+  padding: 10rpx 20rpx;
   border-radius: 9999px;
-  padding: 16rpx 24rpx;
-  font-size: 32rpx;
-  line-height: 1.3;
-  text-align: center;
+  background: rgba(184, 225, 255, 0.22);
+  color: #7b94b1;
+  font-size: 20rpx;
+  line-height: 1.2;
   font-weight: 900;
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  letter-spacing: 0.08em;
 }
 
-.home-action--primary {
-  background: #FF8B8B;
-  color: white;
-  box-shadow: 0 8rpx 0 #DE6E6E;
+.home-page__section-link--pressed {
+  transform: translateY(2rpx);
 }
 
-.home-action--primary:active {
-  transform: translateY(4rpx);
-  box-shadow: 0 4rpx 0 #DE6E6E;
+.home-page__feed {
+  display: flex;
+  flex-direction: column;
+  gap: 34rpx;
 }
 
-.home-action--secondary {
-  background: white;
-  color: #1A202C;
-  border: 6rpx solid #FFEAC2;
-  box-shadow: 0 8rpx 0 rgba(0, 0, 0, 0.04);
+.home-page__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 98rpx;
+  margin-top: 20rpx;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #ff8088, #ff9a9e);
+  box-shadow:
+    0 18rpx 30rpx rgba(255, 128, 136, 0.24),
+    0 12rpx 0 rgba(224, 111, 120, 0.9);
+  color: #ffffff;
+  font-size: 34rpx;
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-align: center;
 }
 
-.home-action--secondary:active {
-  transform: translateY(4rpx);
-  box-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.04);
-}
-
-.home-action--pressed {
+.home-page__cta--pressed {
   transform: translateY(4rpx);
 }
 </style>
