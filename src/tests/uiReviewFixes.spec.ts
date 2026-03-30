@@ -150,6 +150,99 @@ describe('ui review fixes', () => {
     expect(feedbackPage).toContain('uni.redirectTo')
   })
 
+  it('restyles the training playground selection page as a level-based flow', () => {
+    const selectionPage = readFileSync(
+      resolve('src/uni-app/pages/training/select.vue'),
+      'utf8'
+    )
+    const trainingModeCard = readFileSync(
+      resolve('src/components/training/TrainingModeCard.vue'),
+      'utf8'
+    )
+
+    expect(selectionPage).toContain('准备开练了吗？')
+    expect(selectionPage).toContain('今天想挑战哪一种训练小零食？')
+    expect(selectionPage).toContain('再完成 1 次训练，就能点亮 3 天连击。')
+    expect(selectionPage).toContain('trainingModes')
+    expect(selectionPage).toContain('select-page__streak-card')
+    expect(trainingModeCard).toContain('training-level-card__poster')
+    expect(trainingModeCard).toContain('training-level-card__cta')
+  })
+
+  it('adds a profile greeting header to the training playground', () => {
+    const selectionPage = readFileSync(
+      resolve('src/uni-app/pages/training/select.vue'),
+      'utf8'
+    )
+
+    expect(selectionPage).toContain('const profileAvatarUrl = computed(() =>')
+    expect(selectionPage).toContain("const displayName = computed(() => store.state.profile.name.trim() || '同学')")
+    expect(selectionPage).toContain('TrainingHomeHeader')
+    expect(selectionPage).toContain("mini-tag=\"SELECT A SNACK\"")
+    expect(selectionPage).toContain('variant="compact"')
+  })
+
+  it('wires a shared floating dock across training and growth shells while excluding rating pages', () => {
+    const trainingShell = readFileSync(
+      resolve('src/uni-app/components/training/UniTrainingPageShell.vue'),
+      'utf8'
+    )
+    const growthShell = readFileSync(
+      resolve('src/uni-app/components/growth/UniGrowthPageShell.vue'),
+      'utf8'
+    )
+    const floatingDock = readFileSync(
+      resolve('src/uni-app/components/navigation/FloatingDock.vue'),
+      'utf8'
+    )
+    const trainingHomePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+    const trainingSelectPage = readFileSync(
+      resolve('src/uni-app/pages/training/select.vue'),
+      'utf8'
+    )
+    const growthIndexPage = readFileSync(
+      resolve('src/uni-app/pages/growth/index.vue'),
+      'utf8'
+    )
+    const shortQuestionnairePage = readFileSync(
+      resolve('src/uni-app/pages/training/short-questionnaire.vue'),
+      'utf8'
+    )
+    const feedbackPage = readFileSync(
+      resolve('src/uni-app/pages/training/feedback.vue'),
+      'utf8'
+    )
+
+    expect(trainingShell).toContain('FloatingDock')
+    expect(growthShell).toContain('FloatingDock')
+    expect(floatingDock).toContain('open-type="redirect"')
+    expect(trainingHomePage).toContain('dock-tab="home"')
+    expect(trainingSelectPage).toContain('dock-tab="playground"')
+    expect(growthIndexPage).toContain('dock-tab="growth"')
+    expect(shortQuestionnairePage).toContain(':show-dock="false"')
+    expect(feedbackPage).toContain(':show-dock="false"')
+  })
+
+  it('rebuilds the training home page as a quest and content feed', () => {
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+
+    expect(homePage).toContain('TrainingHomeHeader')
+    expect(homePage).toContain('TrainingHomeQuestPanel')
+    expect(homePage).toContain('TrainingHomeFeatureCard')
+    expect(homePage).toContain('TrainingHomeCoachCard')
+    expect(homePage).toContain('今日任务')
+    expect(homePage).toContain('边练边学')
+    expect(homePage).toContain('教练角')
+    expect(homePage).toContain('开始训练')
+    expect(homePage).toContain('url="/pages/growth/index"')
+  })
+
   it('registers miniapp growth detail pages that the growth hub navigates to', () => {
     const uniPagesManifest = readFileSync(
       resolve('/Users/pi-dal/Developer/sport-snack/src/uni-app/pages.json'),
@@ -463,6 +556,158 @@ describe('ui review fixes', () => {
     expect(summaryCards).toContain('summary-card--highlight')
   })
 
+  it('adds richer video-frame and coach-bubble details to the training home feed cards', () => {
+    const featureCard = readFileSync(
+      resolve('src/components/training/TrainingHomeFeatureCard.vue'),
+      'utf8'
+    )
+    const coachCard = readFileSync(
+      resolve('src/components/training/TrainingHomeCoachCard.vue'),
+      'utf8'
+    )
+
+    expect(featureCard).toContain('feature-card__frame')
+    expect(featureCard).toContain('feature-card__screen-glow')
+    expect(featureCard).toContain('feature-card__poster-stripe')
+    expect(coachCard).toContain('coach-card__bubble-tail')
+    expect(coachCard).toContain('coach-card__speaker')
+    expect(coachCard).toContain('coach-card__avatar')
+  })
+
+  it('keeps the home header aligned with the playground language without oversizing it', () => {
+    const headerCard = readFileSync(
+      resolve('src/components/training/TrainingHomeHeader.vue'),
+      'utf8'
+    )
+    const questPanel = readFileSync(
+      resolve('src/components/training/TrainingHomeQuestPanel.vue'),
+      'utf8'
+    )
+
+    expect(headerCard).toContain('home-header__mini-tag')
+    expect(headerCard).toContain('home-header__bell-dot')
+    expect(headerCard).toContain("variant?: 'home' | 'compact'")
+    expect(headerCard).toContain('width: 88rpx;')
+    expect(headerCard).toContain('font-size: 46rpx;')
+    expect(headerCard).toContain('font-size: 18rpx;')
+    expect(questPanel).toContain('quest-panel__item-status')
+    expect(questPanel).toContain('quest-panel__item--done')
+    expect(questPanel).toContain('quest-panel__item--highlight')
+    expect(questPanel).toContain('EPIC')
+  })
+
+  it('uses the shared header in both home and playground while keeping the playground one size smaller', () => {
+    const headerCard = readFileSync(
+      resolve('src/components/training/TrainingHomeHeader.vue'),
+      'utf8'
+    )
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+    const selectionPage = readFileSync(
+      resolve('src/uni-app/pages/training/select.vue'),
+      'utf8'
+    )
+
+    expect(homePage).toContain('TrainingHomeHeader')
+    expect(homePage).toContain('variant="home"')
+    expect(selectionPage).toContain('TrainingHomeHeader')
+    expect(selectionPage).toContain('variant="compact"')
+    expect(headerCard).toContain('home-header--compact')
+    expect(headerCard).toContain('width: 76rpx;')
+    expect(headerCard).toContain('font-size: 40rpx;')
+  })
+
+  it('compresses the home header rhythm and promotes the active quest into a clearer main mission card', () => {
+    const headerCard = readFileSync(
+      resolve('src/components/training/TrainingHomeHeader.vue'),
+      'utf8'
+    )
+    const questPanel = readFileSync(
+      resolve('src/components/training/TrainingHomeQuestPanel.vue'),
+      'utf8'
+    )
+
+    expect(headerCard).toContain('home-header__headline')
+    expect(headerCard).toContain('home-header__hint-pill')
+    expect(headerCard).toContain('今天先完成主线任务')
+    expect(questPanel).toContain('quest-panel__item-kicker')
+    expect(questPanel).toContain('quest-panel__item-cta')
+    expect(questPanel).toContain('当前主线')
+    expect(questPanel).toContain('继续推进')
+  })
+
+  it('aligns the lower home sections and content pills with the playground typography system', () => {
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+    const featureCard = readFileSync(
+      resolve('src/components/training/TrainingHomeFeatureCard.vue'),
+      'utf8'
+    )
+    const coachCard = readFileSync(
+      resolve('src/components/training/TrainingHomeCoachCard.vue'),
+      'utf8'
+    )
+
+    expect(homePage).toContain('home-page__section-kicker')
+    expect(homePage).toContain('LEARN & PLAY')
+    expect(homePage).toContain("COACH'S CORNER")
+    expect(homePage).toContain('font-size: 52rpx;')
+    expect(featureCard).toContain('feature-card__eyebrow')
+    expect(featureCard).toContain('font-size: 18rpx;')
+    expect(featureCard).toContain('letter-spacing: 0.14em;')
+    expect(coachCard).toContain('coach-card__eyebrow')
+    expect(coachCard).toContain('font-size: 18rpx;')
+    expect(coachCard).toContain('letter-spacing: 0.14em;')
+  })
+
+  it('aligns the today quest heading block with the playground section title system', () => {
+    const questPanel = readFileSync(
+      resolve('src/components/training/TrainingHomeQuestPanel.vue'),
+      'utf8'
+    )
+
+    expect(questPanel).toContain('quest-panel__head-copy')
+    expect(questPanel).toContain("TODAY'S QUEST")
+    expect(questPanel).toContain('font-size: 52rpx;')
+    expect(questPanel).toContain('font-size: 20rpx;')
+    expect(questPanel).toContain('letter-spacing: 0.08em;')
+  })
+
+  it('aligns the home cta and quest status pills with the playground button language', () => {
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+    const questPanel = readFileSync(
+      resolve('src/components/training/TrainingHomeQuestPanel.vue'),
+      'utf8'
+    )
+
+    expect(homePage).toContain('font-size: 34rpx;')
+    expect(homePage).toContain('box-shadow:')
+    expect(homePage).toContain('0 12rpx 0 rgba(224, 111, 120, 0.9);')
+    expect(questPanel).toContain('min-height: 38rpx;')
+    expect(questPanel).toContain('padding: 8rpx 14rpx;')
+    expect(questPanel).toContain('font-size: 16rpx;')
+    expect(questPanel).toContain('letter-spacing: 0.14em;')
+  })
+
+  it('loosens the home page layout with a dedicated content stack instead of packing sections tightly', () => {
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
+
+    expect(homePage).toContain('class="home-page"')
+    expect(homePage).toContain('gap: 48rpx;')
+    expect(homePage).toContain('gap: 28rpx;')
+    expect(homePage).toContain('gap: 34rpx;')
+  })
+
 
   it('routes every rounded questionnaire option through the short check-in surface only', () => {
     const shortQuestionnaireForm = readFileSync(
@@ -542,12 +787,13 @@ describe('ui review fixes', () => {
     expect(accessShell).toContain('gap: 56rpx;')
     expect(uniAccessShell).toContain('padding: 56rpx 48rpx 120rpx;')
     expect(uniAccessShell).toContain('gap: 40rpx;')
-    expect(uniTrainingShell).toContain('padding: 56rpx 32rpx 96rpx;')
+    expect(uniTrainingShell).toContain('padding: 56rpx 32rpx 216rpx;')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
-    expect(uniGrowthShell).toContain('padding: 56rpx 32rpx 96rpx;')
+    expect(uniGrowthShell).toContain('padding: 56rpx 32rpx 216rpx;')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
+    expect(miniappHomePage).toContain('gap: 48rpx;')
     expect(miniappHomePage).toContain('gap: 28rpx;')
-    expect(miniappHomePage).toContain('margin-top: 44rpx;')
+    expect(miniappHomePage).toContain('gap: 34rpx;')
     expect(miniappGrowthPage).toContain('gap: 28rpx;')
     expect(miniappGrowthPage).toContain('padding: 40rpx;')
   })
