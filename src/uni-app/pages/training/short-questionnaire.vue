@@ -17,7 +17,7 @@ function submitResponse(payload: { energyLevel: number; confidence: number; enjo
 </script>
 
 <template>
-  <UniTrainingPageShell>
+  <UniTrainingPageShell :show-dock="false">
     <ShortQuestionnaireForm @submit="submitResponse" />
 
     <section v-if="latestResponse" class="card-shell p-18 text-14 text-slate-600">

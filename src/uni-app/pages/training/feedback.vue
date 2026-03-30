@@ -52,7 +52,7 @@ function goGrowthCenter() {
 </script>
 
 <template>
-  <UniTrainingPageShell>
+  <UniTrainingPageShell :show-dock="false">
     <SessionFeedbackCard
       :modality-label="modalityLabel"
       :quality-score="session?.analysis.qualityScore ?? 0"
