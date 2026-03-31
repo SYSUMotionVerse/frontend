@@ -1,30 +1,154 @@
 # Sport Snack Frontend
 
 ## Project Overview / 项目简介
-This is the **student-side frontend** of the Sport Snack mini-program prototype, built with `uni-app + Vue 3 + TypeScript`.
-It is designed to run as a **WeChat Mini Program**, providing core student-facing features.
 
-这是「运动零食」小程序原型的**学生端前端**，基于 `uni-app + Vue 3 + TypeScript` 开发，
-主要运行在**微信小程序**平台，为学生用户提供核心功能。
+This repository contains the student-side frontend for the Sport Snack mini-program prototype. The app is built with `uni-app + Vue 3 + TypeScript`, and the primary runtime target is the WeChat Mini Program platform.
 
-> **Note / 注意：** The primary build target is the WeChat Mini Program. / 主要构建目标为微信小程序。
+本仓库是 Sport Snack 学生端小程序原型的前端代码库。项目基于 `uni-app + Vue 3 + TypeScript` 开发，当前主要运行目标为微信小程序。
+
+The current product flow is organized around three feature areas:
+
+当前产品流程主要围绕三个业务域组织：
+
+- `access`: registration and onboarding questionnaires / 注册与接入问卷
+- `training`: daily training, mode selection, session feedback / 日常训练、模式选择与训练反馈
+- `growth`: adherence, achievements, metrics, and history / 坚持情况、成长徽章、体能指标与历史记录
 
 ## Tech Stack / 技术栈
-- **Framework**: uni-app, Vue 3
-- **Language**: TypeScript
-- **Package Manager**: pnpm
-- **Testing**: Vitest
-- **Styling**: UnoCSS
+
+- Framework / 框架: `uni-app`, `Vue 3`
+- Language / 语言: `TypeScript`
+- Build Tool / 构建工具: `Vite`, `@dcloudio/vite-plugin-uni`
+- Styling / 样式: `UnoCSS`
+- Testing / 测试: `Vitest`, `@vue/test-utils`, `jsdom`
+- Package Manager / 包管理: `pnpm`
 
 ## Prerequisites / 环境准备
-Before you start, make sure these tools are installed:
-开始前请确保已安装以下工具：
-- Node.js (v16.x or later)
-- pnpm (recommended package manager)
-- WeChat DevTools (for previewing the mini-program)
+
+Install the following tools before you start:
+
+开始前请准备以下工具：
+
+- `Node.js 18+`
+- `pnpm`
+- WeChat DevTools for previewing generated mini-program bundles / 用于预览生成后的小程序产物的微信开发者工具
+
+## Project Structure / 项目结构
+
+The repository uses a feature-oriented structure with a small platform bridge for uni-app:
+
+仓库采用面向功能的目录组织，并额外保留了一层 uni-app 平台桥接代码：
+
+- `src/pages/`: page-level screens grouped by `access`, `training`, and `growth` / 按 `access`、`training`、`growth` 分组的页面入口
+- `src/components/`: reusable UI components grouped by feature / 按业务域拆分的可复用组件
+- `src/features/`: feature-level presentation logic and styles / 贴近业务流程的特性层逻辑与样式
+- `src/domain/`: student-domain state, types, and data helpers / 学生端领域状态、类型与数据辅助逻辑
+- `src/composables/`: shared Vue composables / 通用 Vue 组合式逻辑
+- `src/uni-app/`: uni-app specific entry files, platform adapters, and runtime helpers / uni-app 平台相关入口、适配器与运行时辅助逻辑
+- `src/tests/`: Vitest test suite / Vitest 测试目录
+
+## Key Files / 关键文件
+
+- `package.json`: project scripts and dependency declarations / 项目脚本与依赖声明
+- `vite.config.ts`: Vite, uni-app, and Vitest configuration / Vite、uni-app 与 Vitest 配置
+- `src/main.ts`: shared app entry for local app assembly / 通用应用入口
+- `src/App.vue`: root app shell / 根应用壳层
+- `src/pages.json`: page routing and navigation titles / 页面路由与导航标题
+- `src/manifest.json`: mini-program manifest and `mp-weixin` settings / 小程序清单与 `mp-weixin` 配置
+- `src/uni-app/main.ts`: uni-app runtime entry / uni-app 运行时入口
+- `src/uni-app/platform/*.ts`: platform integrations such as sensors, reminders, and camera access / 传感器、提醒、摄像头等平台能力适配
 
 ## Install Dependencies / 安装依赖
-Install all required packages:
-安装项目所需依赖：
+
+Install project dependencies with:
+
+使用以下命令安装依赖：
+
 ```bash
 pnpm install
+```
+
+## Start Local Development / 本地开发
+
+Start the WeChat Mini Program target with:
+
+使用以下命令启动微信小程序目标：
+
+```bash
+pnpm dev
+```
+
+This command currently maps to:
+
+当前该命令对应：
+
+```bash
+uni -p mp-weixin
+```
+
+You can also run the target explicitly:
+
+你也可以显式执行同一目标：
+
+```bash
+pnpm dev:mp-weixin
+```
+
+The development bundle is emitted under `dist/dev/mp-weixin`. Open WeChat DevTools and import that directory for local preview.
+
+开发产物会输出到 `dist/dev/mp-weixin`。本地调试时请使用微信开发者工具导入该目录进行预览。
+
+## Run Tests / 运行测试
+
+Run the automated test suite with:
+
+使用以下命令运行自动化测试：
+
+```bash
+pnpm test
+```
+
+This command runs:
+
+对应脚本为：
+
+```bash
+vitest run
+```
+
+## Build The Mini-Program / 构建小程序
+
+Build the WeChat Mini Program bundle with:
+
+使用以下命令构建微信小程序产物：
+
+```bash
+pnpm build:mp-weixin
+```
+
+The production-ready bundle is written to `dist/build/mp-weixin`.
+
+构建产物会输出到 `dist/build/mp-weixin`。
+
+The shorter `pnpm build` script currently maps to the same target, but `pnpm build:mp-weixin` makes the platform explicit.
+
+较短的 `pnpm build` 当前也会指向同一目标，但 `pnpm build:mp-weixin` 能更明确地表达平台目标。
+
+After the build completes, open WeChat DevTools and import `dist/build/mp-weixin` to run or inspect the package.
+
+构建完成后，可在微信开发者工具中导入 `dist/build/mp-weixin` 进行运行或检查。
+
+## Delivery Notes / 交付说明
+
+This repository currently documents a local development and build workflow only. There is no checked-in CI/CD workflow, Docker deployment configuration, or hosted environment configuration in the repository at this time.
+
+当前仓库只包含本地开发和本地构建流程说明。仓库中暂未提交 CI/CD 工作流、Docker 部署配置或线上环境配置，因此文档也不对这些流程做臆测性说明。
+
+## Common Commands / 常用命令
+
+```bash
+pnpm install
+pnpm dev
+pnpm test
+pnpm build:mp-weixin
+```
