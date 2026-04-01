@@ -152,3 +152,29 @@ pnpm dev
 pnpm test
 pnpm build:mp-weixin
 ```
+
+## Agent Prompt / 给 Agent 的 Prompt
+
+Use the following prompt when you want another agent to continue development in this repository:
+
+如果你想让新的 agent 继续在这个仓库里开发，可以直接使用下面这段 prompt：
+
+```text
+你在 sport-snack 仓库中工作。请先阅读 README.md 和 docs/agent-development.md。
+
+这个项目是一个基于 uni-app + Vue 3 + TypeScript 的微信小程序前端，默认目标平台是 mp-weixin。开发时请遵守以下要求：
+1. 任何页面和交互都优先符合微信小程序规范，而不是 Web 站点习惯。
+2. 先使用仓库现有脚本和组件模式，不要擅自改动基础运行方式。
+3. 本地开发先执行 pnpm install，再执行 pnpm dev。
+4. 需要在微信开发者工具联调时，导入 dist/build/mp-weixin，而不是仓库根目录。
+5. 修改业务逻辑、页面结构、路由或组件后，至少运行 pnpm test 和 npx vue-tsc --noEmit。
+6. 如果需要真机预览或上传，请先检查 src/manifest.json 里的 mp-weixin.appid 是否仍为 touristappid。
+7. 输出结果时请说明修改文件、验证命令，以及是否还需要微信开发者工具确认。
+
+在开始实施前，先用一句话概括你的理解，再执行。
+```
+
+## Agent Guide / Agent 补充文档
+
+- [`docs/agent-development.md`](docs/agent-development.md)
+- [`AGENTS.md`](AGENTS.md)
