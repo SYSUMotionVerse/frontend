@@ -50,6 +50,29 @@ describe('student backend sync orchestration', () => {
     )
   })
 
+  it('keeps registration successful when the fallback survey record write fails', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const updateProfile = vi.fn().mockResolvedValue(undefined)
+    const createSurveyRecord = vi.fn().mockRejectedValue(new Error('Request failed with 400'))
+
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      updateProfile,
+      createSurveyRecord
+    })
+
+    await expect(sync.syncRegistration(createProfile())).resolves.toEqual({
+      synced: true
+    })
+
+    expect(ensureSession).toHaveBeenCalledTimes(1)
+    expect(updateProfile).toHaveBeenCalledTimes(1)
+    expect(createSurveyRecord).toHaveBeenCalledTimes(1)
+  })
+
   it('syncs a long questionnaire as a survey record', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 

@@ -69,6 +69,22 @@ describe('startup access bootstrap', () => {
     expect(profile.completed).toBe(false)
   })
 
+  it('treats decimal-string height and weight from the backend as complete profile fields', async () => {
+    const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
+
+    const profile = mapBackendCurrentUserToStudentProfile(
+      createBackendUser({
+        height: '160.00',
+        weight: '45.50'
+      }),
+      createSeedProfile()
+    )
+
+    expect(profile.completed).toBe(true)
+    expect(profile.heightCm).toBe(160)
+    expect(profile.weightKg).toBe(45.5)
+  })
+
   it('routes startup to register when profile is incomplete', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
