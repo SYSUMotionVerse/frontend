@@ -8,6 +8,7 @@ const avatarController = {
   uploadState: 'idle' as 'idle' | 'uploading' | 'success' | 'error',
   errorMessage: '',
   isWechatMiniProgram: true,
+  supportsWechatAvatarSelection: true,
   handleWechatAvatarChoice: vi.fn()
 }
 
@@ -44,6 +45,7 @@ describe('registration form', () => {
     avatarController.avatarSource = ''
     avatarController.uploadState = 'idle'
     avatarController.errorMessage = ''
+    avatarController.supportsWechatAvatarSelection = true
     avatarController.handleWechatAvatarChoice.mockReset()
   })
 
@@ -123,6 +125,25 @@ describe('registration form', () => {
           grade: '一年级',
           avatarUrl: 'https://cdn.example.com/avatar.png',
           avatarSource: 'wechat'
+        })
+      ]
+    ])
+  })
+
+  it('keeps submit available with a default avatar when chooseAvatar is unsupported', async () => {
+    avatarController.supportsWechatAvatarSelection = false
+    avatarController.errorMessage = '游客模式下暂不支持直接选择微信头像。'
+
+    const wrapper = mountForm()
+    await fillValidProfileFields(wrapper)
+
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.emitted('submit')).toEqual([
+      [
+        expect.objectContaining({
+          avatarUrl: expect.any(String),
+          avatarSource: ''
         })
       ]
     ])

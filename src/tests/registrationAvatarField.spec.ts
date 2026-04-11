@@ -9,7 +9,8 @@ describe('registration avatar field', () => {
         avatarUrl: '',
         uploadState: 'idle',
         errorMessage: '',
-        isWechatMiniProgram: true
+        isWechatMiniProgram: true,
+        supportsWechatAvatarSelection: true
       }
     })
 
@@ -37,13 +38,32 @@ describe('registration avatar field', () => {
     ])
   })
 
+  it('does not bind chooseAvatar when the runtime does not support it', () => {
+    const wrapper = mount(RegistrationAvatarField, {
+      props: {
+        avatarUrl: '',
+        uploadState: 'idle',
+        errorMessage: '游客模式下暂不支持直接选择微信头像。',
+        isWechatMiniProgram: true,
+        supportsWechatAvatarSelection: false
+      }
+    })
+
+    const trigger = wrapper.get('.avatar-field__trigger')
+
+    expect(trigger.attributes('open-type')).toBeUndefined()
+    expect(trigger.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('游客模式下暂不支持直接选择微信头像。')
+  })
+
   it('keeps the chooser centered with only the avatar circle visible', () => {
     const wrapper = mount(RegistrationAvatarField, {
       props: {
         avatarUrl: '',
         uploadState: 'idle',
         errorMessage: '',
-        isWechatMiniProgram: true
+        isWechatMiniProgram: true,
+        supportsWechatAvatarSelection: true
       }
     })
 

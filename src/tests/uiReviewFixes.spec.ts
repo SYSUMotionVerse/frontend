@@ -125,8 +125,8 @@ describe('ui review fixes', () => {
     )
 
     expect(registerPage).toContain('uni.redirectTo')
-    expect(questionnairePage).toContain('uni.navigateTo')
-    expect(resultPage).toContain('uni.redirectTo')
+    expect(questionnairePage).toContain('uni.redirectTo')
+    expect(resultPage).toContain('uni.reLaunch')
   })
 
   it('uses uni-app navigation semantics for the primary training flow', () => {

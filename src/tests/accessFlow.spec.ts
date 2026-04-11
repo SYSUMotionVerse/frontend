@@ -82,4 +82,37 @@ describe('student access flow', () => {
 
     expect(resolveNextPageFromSnapshot(state)).toBe('/questionnaires/week4')
   })
+
+  it('routes to registration from startup when backend profile is incomplete', async () => {
+    const { resolveStartupEntryRoute } = await loadResolver()
+
+    expect(
+      resolveStartupEntryRoute({
+        isProfileComplete: false,
+        hasCompletedBaselineQuestionnaire: false
+      })
+    ).toBe('/register')
+  })
+
+  it('routes to baseline questionnaire from startup when profile is complete but baseline is missing', async () => {
+    const { resolveStartupEntryRoute } = await loadResolver()
+
+    expect(
+      resolveStartupEntryRoute({
+        isProfileComplete: true,
+        hasCompletedBaselineQuestionnaire: false
+      })
+    ).toBe('/questionnaires/baseline')
+  })
+
+  it('routes to home from startup when profile and baseline are both completed', async () => {
+    const { resolveStartupEntryRoute } = await loadResolver()
+
+    expect(
+      resolveStartupEntryRoute({
+        isProfileComplete: true,
+        hasCompletedBaselineQuestionnaire: true
+      })
+    ).toBe('/home')
+  })
 })

@@ -6,6 +6,7 @@ const store = {
   setActiveCheckpoint: vi.fn(),
   submitLongQuestionnaire: vi.fn(),
   completeTrainingSession: vi.fn(),
+  refreshReminderEligibility: vi.fn(),
   state: {
     profile: {
       avatarUrl: '',
@@ -22,6 +23,9 @@ const store = {
 }
 
 const studentBackendSync = {
+  bootstrapAccess: vi.fn().mockResolvedValue({
+    targetPageUrl: '/pages/training/home'
+  }),
   syncRegistration: vi.fn().mockResolvedValue({ synced: true }),
   loadLongQuestionnaire: vi.fn().mockResolvedValue({
     scaleId: 1,
@@ -96,6 +100,7 @@ function currentUni() {
     uni: {
       redirectTo: ReturnType<typeof vi.fn>
       navigateTo: ReturnType<typeof vi.fn>
+      reLaunch: ReturnType<typeof vi.fn>
     }
   }).uni
 }
@@ -114,10 +119,73 @@ describe('page-level backend sync wiring', () => {
       value.mockResolvedValue({ synced: true })
     })
 
+    studentBackendSync.bootstrapAccess.mockResolvedValue({
+      targetPageUrl: '/pages/training/home'
+    })
+
     ;(globalThis as typeof globalThis & { uni: Record<string, ReturnType<typeof vi.fn>> }).uni = {
       redirectTo: vi.fn().mockResolvedValue(undefined),
-      navigateTo: vi.fn().mockResolvedValue(undefined)
+      navigateTo: vi.fn().mockResolvedValue(undefined),
+      reLaunch: vi.fn().mockResolvedValue(undefined)
     }
+  })
+
+  it('reLaunches to registration when bootstrap resolves that route', async () => {
+    studentBackendSync.bootstrapAccess.mockResolvedValue({
+      targetPageUrl: '/pages/access/register'
+    })
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    mount(StartupPage)
+    await flushPromises()
+
+    expect(studentBackendSync.bootstrapAccess).toHaveBeenCalledTimes(1)
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
+      url: '/pages/access/register'
+    })
+  })
+
+  it('reLaunches to baseline questionnaire when bootstrap resolves that route', async () => {
+    studentBackendSync.bootstrapAccess.mockResolvedValue({
+      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline'
+    })
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    mount(StartupPage)
+    await flushPromises()
+
+    expect(studentBackendSync.bootstrapAccess).toHaveBeenCalledTimes(1)
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
+      url: '/pages/access/questionnaire?checkpoint=baseline'
+    })
+  })
+
+  it('reLaunches to home when bootstrap resolves that route', async () => {
+    studentBackendSync.bootstrapAccess.mockResolvedValue({
+      targetPageUrl: '/pages/training/home'
+    })
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    mount(StartupPage)
+    await flushPromises()
+
+    expect(studentBackendSync.bootstrapAccess).toHaveBeenCalledTimes(1)
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
+      url: '/pages/training/home'
+    })
+  })
+
+  it('retries bootstrap once and then shows an error state', async () => {
+    studentBackendSync.bootstrapAccess.mockRejectedValue(new Error('network fail'))
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    const wrapper = mount(StartupPage)
+    await flushPromises()
+
+    expect(studentBackendSync.bootstrapAccess).toHaveBeenCalledTimes(2)
+    expect(currentUni().reLaunch).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('连接失败')
+    expect(wrapper.find('.retry-button').exists()).toBe(true)
   })
 
   it('syncs registration before moving into the questionnaire flow', async () => {
@@ -165,7 +233,7 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
-  it('syncs the long questionnaire payload while preserving the existing navigation flow', async () => {
+  it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
     studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
       synced: true,
       score: 6,
@@ -212,7 +280,36 @@ describe('page-level backend sync wiring', () => {
       }
     )
     expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 6, 60)
-    expect(currentUni().navigateTo).toHaveBeenCalled()
+    expect(currentUni().redirectTo).toHaveBeenCalledWith({
+      url: '/pages/access/questionnaire-result?checkpoint=baseline&score=6&percentage=60&submittedAt=2026-04-09T15%3A30%3A00.000Z'
+    })
+    expect(currentUni().navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('reLaunches from the questionnaire result into the training home page', async () => {
+    const ResultPage = (await import('../uni-app/pages/access/questionnaire-result.vue')).default
+    const wrapper = mount(ResultPage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: {
+            template: '<div><slot /></div>'
+          },
+          QuestionnaireResultCard: {
+            template: '<button class="continue-to-home" @click="$emit(\'continue\')">continue</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.continue-to-home').trigger('click')
+    await flushPromises()
+
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
+      url: '/pages/training/home'
+    })
+    expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
+      url: '/pages/training/home'
+    })
   })
 
   it('syncs visual sessions when the user completes the guided workout', async () => {
