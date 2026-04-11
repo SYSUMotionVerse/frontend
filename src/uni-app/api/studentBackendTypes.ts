@@ -19,8 +19,8 @@ export interface BackendCurrentUser {
   gender: 1 | 2 | null
   student_id: string | null
   major: string | null
-  height: number | null
-  weight: number | null
+  height: number | string | null
+  weight: number | string | null
   [key: string]: unknown
 }
 

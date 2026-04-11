@@ -164,8 +164,17 @@ function hasTextValue(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function hasPositiveNumber(value: number | null | undefined): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
+function toPositiveNumber(value: number | string | null | undefined) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+
+  return null
 }
 
 function resolveBackendGenderLabel(gender: BackendCurrentUser['gender']): StudentProfile['gender'] {
@@ -186,8 +195,8 @@ export function isBackendProfileComplete(user: BackendCurrentUser) {
     user.gender !== null &&
     hasTextValue(user.student_id) &&
     hasTextValue(user.major) &&
-    hasPositiveNumber(user.height) &&
-    hasPositiveNumber(user.weight)
+    toPositiveNumber(user.height) !== null &&
+    toPositiveNumber(user.weight) !== null
   )
 }
 
@@ -195,14 +204,17 @@ export function mapBackendCurrentUserToStudentProfile(
   user: BackendCurrentUser,
   seedProfile: StudentProfile
 ): StudentProfile {
+  const heightCm = toPositiveNumber(user.height)
+  const weightKg = toPositiveNumber(user.weight)
+
   return {
     ...seedProfile,
     studentId: hasTextValue(user.student_id) ? user.student_id.trim() : '',
     name: hasTextValue(user.name) ? user.name.trim() : '',
     gender: resolveBackendGenderLabel(user.gender),
     major: hasTextValue(user.major) ? user.major.trim() : '',
-    heightCm: hasPositiveNumber(user.height) ? user.height : 0,
-    weightKg: hasPositiveNumber(user.weight) ? user.weight : 0,
+    heightCm: heightCm ?? 0,
+    weightKg: weightKg ?? 0,
     completed: isBackendProfileComplete(user)
   }
 }
@@ -316,7 +328,11 @@ export function createStudentBackendSync(
       return runIfEnabled(dependencies.isEnabled(), async () => {
         await dependencies.ensureSession()
         await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(profile))
-        await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(profile))
+        try {
+          await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(profile))
+        } catch {
+          // Registration metadata fallback should not block the primary profile update flow.
+        }
       })
     },
     async syncLongQuestionnaire(input: LongQuestionnaireSyncInput) {
