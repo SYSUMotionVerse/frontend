@@ -75,7 +75,7 @@ async function handleSubmit(payload: {
       submittedAt: result.submittedAt
     })
 
-    void uni.navigateTo({
+    void uni.redirectTo({
       url: `/pages/access/questionnaire-result?${queryString}`
     })
   } catch (error) {

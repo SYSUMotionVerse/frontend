@@ -27,7 +27,7 @@ const submittedAtValue = computed(() => submittedAt.value)
 
 function handleContinue() {
   store.refreshReminderEligibility()
-  void uni.redirectTo({
+  void uni.reLaunch({
     url: '/pages/training/home'
   })
 }
