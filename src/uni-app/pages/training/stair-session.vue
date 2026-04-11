@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, shallowRef } from 'vue'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
+import { studentBackendSync } from '../../api/studentBackend'
+import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { createSensorSessionAnalysis } from '../../platform/sensors'
@@ -33,12 +35,25 @@ function clearTimer() {
   timerId = null
 }
 
-function finishSession() {
+async function finishSession() {
   clearTimer()
+  const durationSeconds = 30 - secondsLeft.value
+  const completedIntervals = durationSeconds > 0 ? 1 : 0
   const analysis = createSensorSessionAnalysis({
-    durationSeconds: 30 - secondsLeft.value,
-    completedIntervals: 1
+    durationSeconds,
+    completedIntervals
   })
+
+  try {
+    await studentBackendSync.syncStairSession({
+      durationSeconds,
+      completedIntervals,
+      qualityScore: analysis.qualityScore,
+      summary: analysis.summary
+    })
+  } catch (error) {
+    reportBackendSyncError('楼梯训练同步', error)
+  }
 
   store.completeTrainingSession({
     modality: 'stair',

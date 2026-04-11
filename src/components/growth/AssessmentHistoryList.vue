@@ -1,24 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { CheckpointKey, LongQuestionnaireState } from '../../types/student'
+import type { GrowthAssessmentHistoryItem } from '../../uni-app/api/studentBackendTypes'
 
-const props = defineProps<{
-  questionnaires: Record<CheckpointKey, LongQuestionnaireState>
+defineProps<{
+  assessments: GrowthAssessmentHistoryItem[]
 }>()
-
-const orderedHistory = computed(() => {
-  const order: CheckpointKey[] = ['baseline', 'week4', 'week8', 'week12']
-  return order.map(checkpoint => props.questionnaires[checkpoint])
-})
 </script>
 
 <template>
   <view class="assessment" aria-label="评估历史">
-    <view class="assessment__list">
-      <view v-for="checkpoint in orderedHistory" :key="checkpoint.checkpoint" class="assessment-item">
-        <text class="assessment-item__name block">{{ checkpoint.checkpoint.toUpperCase() }}</text>
+    <text v-if="assessments.length === 0" class="assessment__empty block">暂无已完成评估。</text>
+
+    <view v-else class="assessment__list">
+      <view v-for="assessment in assessments" :key="`${assessment.checkpoint}-${assessment.submittedAt}`" class="assessment-item">
+        <text class="assessment-item__name block">{{ assessment.title }}</text>
+        <text class="assessment-item__meta block">{{ assessment.checkpoint.toUpperCase() }}</text>
         <text class="assessment-item__result block">
-          {{ checkpoint.completed ? `得分 ${checkpoint.score} · ${checkpoint.percentage}%` : '尚未完成' }}
+          {{ `得分 ${assessment.score} · ${assessment.percentage}%` }}
         </text>
       </view>
     </view>
@@ -26,6 +23,17 @@ const orderedHistory = computed(() => {
 </template>
 
 <style scoped>
+.assessment__empty {
+  margin: 0;
+  padding: 40rpx;
+  border-radius: 48rpx;
+  border: 8rpx dashed rgba(255, 211, 132, 0.3);
+  color: #64748B;
+  font-weight: 600;
+  background: rgba(255, 211, 132, 0.06);
+  font-size: 28rpx;
+}
+
 .assessment__list {
   margin: 0;
   padding: 0;
@@ -56,5 +64,13 @@ const orderedHistory = computed(() => {
   font-size: 28rpx;
   color: #64748B;
   font-weight: 700;
+}
+
+.assessment-item__meta {
+  margin: 16rpx 0 0;
+  font-size: 24rpx;
+  color: #D97706;
+  font-weight: 900;
+  letter-spacing: 0.08em;
 }
 </style>

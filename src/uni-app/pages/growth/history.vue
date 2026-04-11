@@ -1,19 +1,62 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 import AssessmentHistoryList from '../../../components/growth/AssessmentHistoryList.vue'
 import TrainingHistoryList from '../../../components/growth/TrainingHistoryList.vue'
+import type {
+  GrowthAssessmentHistoryItem,
+  GrowthTrainingHistoryItem
+} from '../../api/studentBackendTypes'
+import { studentBackendSync } from '../../api/studentBackend'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { CHECKPOINT_LABELS } from '../../../features/access/questionnaire'
 
 const store = useStudentStore()
+const backendAssessments = shallowRef<GrowthAssessmentHistoryItem[]>([])
+const backendSessions = shallowRef<GrowthTrainingHistoryItem[]>([])
 
-const completedSessions = computed(() =>
+const localSessions = computed<GrowthTrainingHistoryItem[]>(() =>
   [...store.getSnapshot().sessions]
     .filter(session => session.completed)
     .sort((left, right) => right.date.localeCompare(left.date))
+    .map(session => ({
+      id: session.id,
+      modality: session.modality,
+      date: session.date,
+      summary: session.analysis.summary,
+      qualityScore: session.analysis.qualityScore
+    }))
 )
 
-const questionnaires = computed(() => store.getSnapshot().longQuestionnaires)
+const localAssessments = computed<GrowthAssessmentHistoryItem[]>(() =>
+  Object.values(store.getSnapshot().longQuestionnaires)
+    .filter(questionnaire => questionnaire.completed)
+    .map(questionnaire => ({
+      checkpoint: questionnaire.checkpoint,
+      title: `${CHECKPOINT_LABELS[questionnaire.checkpoint]} 长问卷`,
+      score: questionnaire.score ?? 0,
+      percentage: questionnaire.percentage ?? 0,
+      submittedAt: questionnaire.submittedAt
+    }))
+)
+
+const assessments = computed(() =>
+  backendAssessments.value.length > 0 ? backendAssessments.value : localAssessments.value
+)
+
+const sessions = computed(() =>
+  backendSessions.value.length > 0 ? backendSessions.value : localSessions.value
+)
+
+onMounted(async () => {
+  try {
+    const history = await studentBackendSync.loadGrowthHistory()
+    backendAssessments.value = history.assessments
+    backendSessions.value = history.trainingSessions
+  } catch (error) {
+    console.warn('[student-backend] 历史记录读取失败', error)
+  }
+})
 </script>
 
 <template>
@@ -23,12 +66,12 @@ const questionnaires = computed(() => store.getSnapshot().longQuestionnaires)
 
     <section class="detail-page__card">
       <h2 class="detail-page__heading">训练记录</h2>
-      <TrainingHistoryList :sessions="completedSessions" />
+      <TrainingHistoryList :sessions="sessions" />
     </section>
 
     <section class="detail-page__card">
       <h2 class="detail-page__heading">长问卷</h2>
-      <AssessmentHistoryList :questionnaires="questionnaires" />
+      <AssessmentHistoryList :assessments="assessments" />
     </section>
   </UniGrowthPageShell>
 </template>

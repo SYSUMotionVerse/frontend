@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import VisualTrainingPanel from '../../../components/training/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../../domain/student/types'
+import { studentBackendSync } from '../../api/studentBackend'
+import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../platform/camera'
@@ -18,11 +20,22 @@ onLoad((query) => {
 
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
 
-function finishSession() {
+async function finishSession() {
+  const durationSeconds = 30
+  const syncModality = modality.value === 'hiit' ? 'hiit' : 'wushu'
   const analysis = createCameraSessionAnalysis({
-    modality: modality.value === 'hiit' ? 'hiit' : 'wushu',
+    modality: syncModality,
     qualityScore: modality.value === 'hiit' ? 74 : 86
   })
+
+  try {
+    await studentBackendSync.syncVisualSession({
+      modality: syncModality,
+      durationSeconds
+    })
+  } catch (error) {
+    reportBackendSyncError('训练记录同步', error)
+  }
 
   store.completeTrainingSession({
     modality: modality.value,

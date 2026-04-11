@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPanel.vue'
 import { resolvePhysicalMetricsState } from '../../../domain/student/growth'
+import { studentBackendSync } from '../../api/studentBackend'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
 const metricsState = computed(() => resolvePhysicalMetricsState(store.getSnapshot()))
 const emptyStateHint = computed(() => metricsState.value.hasMetrics ? '' : metricsState.value.message)
+
+onMounted(async () => {
+  try {
+    const metrics = await studentBackendSync.loadPhysicalMetrics()
+    if (metrics.length > 0) {
+      store.setPhysicalMetrics(metrics)
+    }
+  } catch (error) {
+    console.warn('[student-backend] 体测趋势读取失败', error)
+  }
+})
 </script>
 
 <template>

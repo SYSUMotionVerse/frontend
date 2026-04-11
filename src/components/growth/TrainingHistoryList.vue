@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { SessionRecord } from '../../types/student'
+import type { GrowthTrainingHistoryItem } from '../../uni-app/api/studentBackendTypes'
 
 defineProps<{
-  sessions: SessionRecord[]
+  sessions: GrowthTrainingHistoryItem[]
 }>()
 </script>
 
@@ -15,8 +15,8 @@ defineProps<{
         <text class="history-item__headline block">
           {{ session.modality.toUpperCase() }} · {{ session.date }}
         </text>
-        <text class="history-item__subline block">{{ session.analysis.summary }}</text>
-        <text class="history-item__meta block">质量分：{{ session.analysis.qualityScore }}</text>
+        <text class="history-item__subline block">{{ session.summary }}</text>
+        <text class="history-item__meta block">质量分：{{ session.qualityScore }}</text>
       </view>
     </view>
   </view>

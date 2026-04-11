@@ -176,5 +176,6 @@ Use the following prompt when you want another agent to continue development in 
 
 ## Agent Guide / Agent 补充文档
 
+- [`docs/frontend-backend-collaboration.md`](docs/frontend-backend-collaboration.md)
 - [`docs/agent-development.md`](docs/agent-development.md)
 - [`AGENTS.md`](AGENTS.md)

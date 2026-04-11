@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import RegistrationForm from '../../../components/access/RegistrationForm.vue'
 import type { StudentProfile } from '../../../domain/student/types'
+import { studentBackendSync } from '../../api/studentBackend'
+import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
@@ -8,11 +10,19 @@ type RegistrationPayload = Omit<StudentProfile, 'completed'>
 
 const store = useStudentStore()
 
-function handleSubmit(payload: RegistrationPayload) {
-  store.completeProfile({
+async function handleSubmit(payload: RegistrationPayload) {
+  const completedProfile = {
     ...payload,
     completed: true
-  })
+  }
+
+  try {
+    await studentBackendSync.syncRegistration(completedProfile)
+  } catch (error) {
+    reportBackendSyncError('资料同步', error)
+  }
+
+  store.completeProfile(completedProfile)
   store.setActiveCheckpoint('baseline')
   void uni.redirectTo({
     url: '/pages/access/questionnaire?checkpoint=baseline'
