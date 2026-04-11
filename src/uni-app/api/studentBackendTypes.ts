@@ -13,6 +13,17 @@ export interface UserUpdatePayload {
   weight?: number
 }
 
+export interface BackendCurrentUser {
+  id: number
+  name: string | null
+  gender: 1 | 2 | null
+  student_id: string | null
+  major: string | null
+  height: number | null
+  weight: number | null
+  [key: string]: unknown
+}
+
 export interface SurveyRecordCreatePayload {
   survey_type: 1 | 2
   score?: number

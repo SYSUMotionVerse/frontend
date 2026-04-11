@@ -13,6 +13,11 @@ export type AccessStateSource = {
   activeCheckpoint: StudentAppState['activeCheckpoint']
 }
 
+export type StartupAccessStateSource = {
+  isProfileComplete: boolean
+  hasCompletedBaselineQuestionnaire: boolean
+}
+
 export function resolveEntryRoute(state: AccessStateSource): string {
   if (!state.profile.completed) {
     return '/register'
@@ -21,6 +26,18 @@ export function resolveEntryRoute(state: AccessStateSource): string {
   const activeCheckpoint = normalizeActiveCheckpoint(state.activeCheckpoint)
   if (!state.longQuestionnaires[activeCheckpoint].completed) {
     return `/questionnaires/${activeCheckpoint}`
+  }
+
+  return '/home'
+}
+
+export function resolveStartupEntryRoute(state: StartupAccessStateSource): string {
+  if (!state.isProfileComplete) {
+    return '/register'
+  }
+
+  if (!state.hasCompletedBaselineQuestionnaire) {
+    return '/questionnaires/baseline'
   }
 
   return '/home'

@@ -1,4 +1,7 @@
 import type { CheckpointKey, StudentProfile } from '../../types/student'
+import { resolveStartupEntryRoute } from '../../domain/student/access'
+import { useStudentStore } from '../composables/useStudentStore'
+import type { StudentAccessHydrationInput } from '../composables/useStudentStore'
 import { createBackendClient } from './backendClient'
 import {
   mapBackendScaleToQuestionnaire,
@@ -11,6 +14,7 @@ import {
   mapBackendTrainingHistory
 } from './growthBackendModels'
 import type {
+  BackendCurrentUser,
   BackendExerciseType,
   BackendSyncResult,
   LongQuestionnaireSyncResult,
@@ -23,6 +27,27 @@ import type {
   UserUpdatePayload,
   VisualSessionSyncInput
 } from './studentBackendTypes'
+
+type StartupTargetPage = 'register' | 'baselineQuestionnaire' | 'home'
+
+type StartupTargetPageUrl =
+  | '/pages/access/register'
+  | '/pages/access/questionnaire?checkpoint=baseline'
+  | '/pages/training/home'
+
+type StudentBackendAccessDependencies = StudentBackendSyncDependencies & {
+  getCurrentUser: () => Promise<BackendCurrentUser>
+}
+
+type StudentBackendBootstrapAccessOptions = {
+  resolveLocalProfile: () => StudentProfile
+  hydrateAccessState: (input: StudentAccessHydrationInput) => void
+}
+
+export type BootstrapAccessResult = {
+  targetPage: StartupTargetPage
+  targetPageUrl: StartupTargetPageUrl
+}
 
 function toJsonString(value: Record<string, unknown>) {
   return JSON.stringify(value)
@@ -114,14 +139,93 @@ export function buildStairsRecordPayload(input: StairSessionSyncInput): StairsRe
   }
 }
 
-function resolveDefaultDependencies(): StudentBackendSyncDependencies {
+function resolveDefaultDependencies(): StudentBackendAccessDependencies {
   return createBackendClient()
+}
+
+function resolveDefaultBootstrapAccessOptions(): StudentBackendBootstrapAccessOptions {
+  const store = useStudentStore()
+
+  return {
+    resolveLocalProfile: () => store.getSnapshot().profile,
+    hydrateAccessState: input => {
+      store.hydrateAccessState(input)
+    }
+  }
 }
 
 function hasQuestions(
   value: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>
 ): value is Extract<typeof value, { questions: unknown[] }> {
   return Array.isArray((value as { questions?: unknown[] }).questions)
+}
+
+function hasTextValue(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function hasPositiveNumber(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function resolveBackendGenderLabel(gender: BackendCurrentUser['gender']): StudentProfile['gender'] {
+  if (gender === 1) {
+    return '男'
+  }
+
+  if (gender === 2) {
+    return '女'
+  }
+
+  return ''
+}
+
+export function isBackendProfileComplete(user: BackendCurrentUser) {
+  return (
+    hasTextValue(user.name) &&
+    user.gender !== null &&
+    hasTextValue(user.student_id) &&
+    hasTextValue(user.major) &&
+    hasPositiveNumber(user.height) &&
+    hasPositiveNumber(user.weight)
+  )
+}
+
+export function mapBackendCurrentUserToStudentProfile(
+  user: BackendCurrentUser,
+  seedProfile: StudentProfile
+): StudentProfile {
+  return {
+    ...seedProfile,
+    studentId: hasTextValue(user.student_id) ? user.student_id.trim() : '',
+    name: hasTextValue(user.name) ? user.name.trim() : '',
+    gender: resolveBackendGenderLabel(user.gender),
+    major: hasTextValue(user.major) ? user.major.trim() : '',
+    heightCm: hasPositiveNumber(user.height) ? user.height : 0,
+    weightKg: hasPositiveNumber(user.weight) ? user.weight : 0,
+    completed: isBackendProfileComplete(user)
+  }
+}
+
+function buildBootstrapAccessResult(targetEntryRoute: string): BootstrapAccessResult {
+  if (targetEntryRoute === '/register') {
+    return {
+      targetPage: 'register',
+      targetPageUrl: '/pages/access/register'
+    }
+  }
+
+  if (targetEntryRoute === '/questionnaires/baseline') {
+    return {
+      targetPage: 'baselineQuestionnaire',
+      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline'
+    }
+  }
+
+  return {
+    targetPage: 'home',
+    targetPageUrl: '/pages/training/home'
+  }
 }
 
 async function runIfEnabled(
@@ -143,15 +247,51 @@ async function runIfEnabled(
 }
 
 export function createStudentBackendSync(
-  overrides: Partial<StudentBackendSyncDependencies> = {}
+  overrides: Partial<StudentBackendAccessDependencies> = {},
+  bootstrapAccessOverrides: Partial<StudentBackendBootstrapAccessOptions> = {}
 ) {
   const dependencies = {
     ...resolveDefaultDependencies(),
     ...overrides
-  } satisfies StudentBackendSyncDependencies
+  } satisfies StudentBackendAccessDependencies
 
   return {
     isEnabled: dependencies.isEnabled,
+    async bootstrapAccess() {
+      if (!dependencies.isEnabled()) {
+        return buildBootstrapAccessResult('/register')
+      }
+
+      await dependencies.ensureSession()
+
+      const [backendUser, psychologyRecords] = await Promise.all([
+        dependencies.getCurrentUser(),
+        dependencies.listPsychologyRecords()
+      ])
+
+      const bootstrapAccess = {
+        ...resolveDefaultBootstrapAccessOptions(),
+        ...bootstrapAccessOverrides
+      } satisfies StudentBackendBootstrapAccessOptions
+
+      const profile = mapBackendCurrentUserToStudentProfile(
+        backendUser,
+        bootstrapAccess.resolveLocalProfile()
+      )
+      const hasCompletedBaselineQuestionnaire = psychologyRecords.length > 0
+
+      bootstrapAccess.hydrateAccessState({
+        profile,
+        hasCompletedBaselineQuestionnaire
+      })
+
+      const targetEntryRoute = resolveStartupEntryRoute({
+        isProfileComplete: profile.completed,
+        hasCompletedBaselineQuestionnaire
+      })
+
+      return buildBootstrapAccessResult(targetEntryRoute)
+    },
     async loadLongQuestionnaire(preferredCheckpoint?: CheckpointKey) {
       if (!dependencies.isEnabled()) {
         return null

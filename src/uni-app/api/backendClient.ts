@@ -1,4 +1,5 @@
 import type {
+  BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseType,
   BackendPhysicalTrendResponse,
@@ -22,6 +23,8 @@ interface RequestOptions {
   headers?: Record<string, string>
 }
 
+const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
+
 function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, '')
 }
@@ -33,17 +36,48 @@ function resolveBaseUrl() {
 
 function resolveSetCookie(header: unknown) {
   if (!header || typeof header !== 'object') {
-    return ''
+    return []
   }
 
   const record = header as Record<string, unknown>
   const nextCookie = record['Set-Cookie'] ?? record['set-cookie']
 
   if (Array.isArray(nextCookie)) {
-    return nextCookie.filter(item => typeof item === 'string').join('; ')
+    return nextCookie.filter(item => typeof item === 'string')
   }
 
-  return typeof nextCookie === 'string' ? nextCookie : ''
+  return typeof nextCookie === 'string' ? [nextCookie] : []
+}
+
+function resolveResponseCookies(response: {
+  header?: unknown
+  cookies?: unknown
+}) {
+  if (Array.isArray(response.cookies)) {
+    const cookies = response.cookies.filter(item => typeof item === 'string')
+    if (cookies.length > 0) {
+      return cookies
+    }
+  }
+
+  return resolveSetCookie(response.header)
+}
+
+function resolveCookiePair(cookie: string) {
+  const pair = cookie.split(';', 1)[0]?.trim() ?? ''
+  if (!pair.includes('=')) {
+    return null
+  }
+
+  const separatorIndex = pair.indexOf('=')
+  const name = pair.slice(0, separatorIndex).trim()
+  const value = pair.slice(separatorIndex + 1).trim()
+
+  if (!name || !value) {
+    return null
+  }
+
+  return [name, value] as const
 }
 
 function resolveErrorMessage(payload: unknown, fallback: string) {
@@ -66,6 +100,7 @@ function resolveErrorMessage(payload: unknown, fallback: string) {
 export function createBackendClient(baseUrl = resolveBaseUrl()) {
   let sessionCookie = ''
   let hasAuthenticatedSession = false
+  const cookieJar = new Map<string, string>()
 
   function isEnabled() {
     return baseUrl.length > 0
@@ -102,20 +137,41 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       throw new Error('Network requests are not available in this environment.')
     }
 
+    const method = (options.method ?? 'GET') as RequestMethod
+    const csrfToken = cookieJar.get('csrftoken')
+
     return new Promise<T>((resolve, reject) => {
       uni.request({
         url: `${baseUrl}${path}`,
-        method: (options.method ?? 'GET') as UniApp.RequestOptions['method'],
+        method: method as UniApp.RequestOptions['method'],
         data: options.data ?? {},
         header: {
           'content-type': 'application/json',
           ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+          ...(csrfToken && methodsRequiringCsrf.has(method)
+            ? { 'X-CSRFToken': csrfToken }
+            : {}),
           ...options.headers
         },
         success(response) {
-          const nextCookie = resolveSetCookie(response.header)
-          if (nextCookie) {
-            sessionCookie = nextCookie
+          const nextCookies = resolveResponseCookies(response as {
+            header?: unknown
+            cookies?: unknown
+          })
+
+          nextCookies.forEach(cookie => {
+            const pair = resolveCookiePair(cookie)
+            if (!pair) {
+              return
+            }
+
+            cookieJar.set(pair[0], pair[1])
+          })
+
+          if (cookieJar.size > 0) {
+            sessionCookie = Array.from(cookieJar.entries())
+              .map(([name, value]) => `${name}=${value}`)
+              .join('; ')
           }
 
           if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -148,6 +204,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
   return {
     isEnabled,
     ensureSession,
+    getCurrentUser() {
+      return request<BackendCurrentUser>('/users/users/me/')
+    },
     updateProfile(payload: UserUpdatePayload) {
       return request('/users/users/update_profile/', {
         method: 'PATCH',
