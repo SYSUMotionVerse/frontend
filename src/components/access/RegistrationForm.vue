@@ -34,6 +34,7 @@ const currentAvatarSource = computed(() => unref(avatar.avatarSource) ?? '')
 const currentAvatarUploadState = computed(() => unref(avatar.uploadState) ?? 'idle')
 const currentAvatarErrorMessage = computed(() => unref(avatar.errorMessage) ?? '')
 const showWechatAvatarButton = computed(() => Boolean(unref(avatar.isWechatMiniProgram)))
+const supportsWechatAvatarSelection = computed(() => Boolean(unref(avatar.supportsWechatAvatarSelection)))
 const resolvedAvatarUrl = computed(() => currentAvatarUrl.value.trim() || DEFAULT_AVATAR_URL)
 
 const selectedGenderIndex = computed(() => {
@@ -143,6 +144,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
         :upload-state="currentAvatarUploadState"
         :error-message="currentAvatarErrorMessage"
         :is-wechat-mini-program="showWechatAvatarButton"
+        :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
         @choose-wechat-avatar="avatar.handleWechatAvatarChoice"
       />
       

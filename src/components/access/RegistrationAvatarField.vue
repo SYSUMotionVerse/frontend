@@ -8,6 +8,7 @@ const props = defineProps<{
   uploadState: AvatarUploadState
   errorMessage: string
   isWechatMiniProgram: boolean
+  supportsWechatAvatarSelection: boolean
 }>()
 
 const emit = defineEmits<{
@@ -15,12 +16,15 @@ const emit = defineEmits<{
 }>()
 
 const previewUrl = computed(() => props.avatarUrl.trim() || DEFAULT_AVATAR_URL)
+const canChooseWechatAvatar = computed(() =>
+  props.isWechatMiniProgram && props.supportsWechatAvatarSelection
+)
 </script>
 
 <template>
   <button
+    v-if="canChooseWechatAvatar"
     class="avatar-field__trigger"
-    :disabled="!props.isWechatMiniProgram"
     open-type="chooseAvatar"
     @chooseavatar="emit('chooseWechatAvatar', $event)"
   >
@@ -38,6 +42,30 @@ const previewUrl = computed(() => props.avatarUrl.trim() || DEFAULT_AVATAR_URL)
       </view>
     </view>
   </button>
+
+  <button
+    v-else
+    class="avatar-field__trigger"
+    disabled
+  >
+    <view class="avatar-field">
+      <view class="avatar-field__preview-shell">
+        <image
+          v-if="previewUrl"
+          class="avatar-field__preview-image"
+          :src="previewUrl"
+          mode="aspectFill"
+        />
+        <text v-if="props.uploadState === 'uploading'" class="avatar-field__preview-placeholder">
+          上传中
+        </text>
+      </view>
+    </view>
+  </button>
+
+  <text v-if="props.errorMessage" class="avatar-field__message block">
+    {{ props.errorMessage }}
+  </text>
 </template>
 
 <style scoped>
@@ -87,5 +115,14 @@ const previewUrl = computed(() => props.avatarUrl.trim() || DEFAULT_AVATAR_URL)
   line-height: 1.35;
   font-weight: 900;
   text-align: center;
+}
+
+.avatar-field__message {
+  margin-top: 16rpx;
+  color: #92400E;
+  font-size: 24rpx;
+  line-height: 1.45;
+  text-align: center;
+  font-weight: 700;
 }
 </style>

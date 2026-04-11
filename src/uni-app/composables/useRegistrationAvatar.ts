@@ -15,6 +15,31 @@ type UploadAvatarResult = {
 }
 
 const configuredUploadUrl = import.meta.env.VITE_AVATAR_UPLOAD_URL?.trim() ?? ''
+const UNSUPPORTED_WECHAT_AVATAR_MESSAGE = '游客模式下暂不支持直接选择微信头像。'
+
+function resolveSupportsWechatAvatarSelection() {
+  if (typeof globalThis === 'undefined' || !('wx' in globalThis)) {
+    return false
+  }
+
+  const runtime = globalThis as typeof globalThis & {
+    wx?: {
+      getAccountInfoSync?: () => {
+        miniProgram?: {
+          appId?: string
+        }
+      }
+    }
+  }
+
+  const appId = runtime.wx?.getAccountInfoSync?.()?.miniProgram?.appId?.trim()
+
+  if (!appId) {
+    return true
+  }
+
+  return appId !== 'touristappid'
+}
 
 function resolveUploadErrorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -96,6 +121,11 @@ export function useRegistrationAvatar() {
   const isWechatMiniProgram = shallowRef(
     typeof globalThis !== 'undefined' && 'wx' in globalThis
   )
+  const supportsWechatAvatarSelection = shallowRef(resolveSupportsWechatAvatarSelection())
+
+  if (isWechatMiniProgram.value && !supportsWechatAvatarSelection.value) {
+    errorMessage.value = UNSUPPORTED_WECHAT_AVATAR_MESSAGE
+  }
 
   async function persistAvatar(filePath: string, source: Exclude<AvatarSource, ''>) {
     uploadState.value = 'uploading'
@@ -133,6 +163,7 @@ export function useRegistrationAvatar() {
     uploadState,
     errorMessage,
     isWechatMiniProgram,
+    supportsWechatAvatarSelection,
     handleWechatAvatarChoice
   }
 }

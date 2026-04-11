@@ -30,6 +30,11 @@ type TrainingSessionInput = {
   capturedBy: SessionAnalysis['capturedBy']
 }
 
+export type StudentAccessHydrationInput = {
+  profile: StudentProfile
+  hasCompletedBaselineQuestionnaire: boolean
+}
+
 export function createStudentStore(initialState: StudentAppState = createInitialStudentState()) {
   const state = reactive(createStudentStateSnapshot(initialState))
 
@@ -39,6 +44,21 @@ export function createStudentStore(initialState: StudentAppState = createInitial
 
   function completeProfile(profile: StudentProfile) {
     Object.assign(state, completeStudentProfile(getSnapshot(), profile))
+  }
+
+  function hydrateAccessState(input: StudentAccessHydrationInput) {
+    const nextState = getSnapshot()
+    nextState.profile = { ...input.profile }
+    nextState.activeCheckpoint = 'baseline'
+    nextState.longQuestionnaires.baseline.completed = input.hasCompletedBaselineQuestionnaire
+
+    if (!input.hasCompletedBaselineQuestionnaire) {
+      nextState.longQuestionnaires.baseline.score = null
+      nextState.longQuestionnaires.baseline.percentage = null
+      nextState.longQuestionnaires.baseline.submittedAt = null
+    }
+
+    Object.assign(state, nextState)
   }
 
   function setActiveCheckpoint(checkpoint: CheckpointKey) {
@@ -88,6 +108,7 @@ export function createStudentStore(initialState: StudentAppState = createInitial
   return {
     state: readonly(state),
     completeProfile,
+    hydrateAccessState,
     setActiveCheckpoint,
     setReminderSource,
     replaceSessions,
