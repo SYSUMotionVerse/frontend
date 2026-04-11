@@ -23,6 +23,13 @@ interface RequestOptions {
   headers?: Record<string, string>
 }
 
+interface PaginatedResponse<T> {
+  count?: number
+  next?: string | null
+  previous?: string | null
+  results: T[]
+}
+
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 function normalizeBaseUrl(input: string) {
@@ -95,6 +102,19 @@ function resolveErrorMessage(payload: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function unwrapCollectionResponse<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[]
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return []
+  }
+
+  const record = payload as Partial<PaginatedResponse<T>>
+  return Array.isArray(record.results) ? record.results : []
 }
 
 export function createBackendClient(baseUrl = resolveBaseUrl()) {
@@ -220,7 +240,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       })
     },
     listExerciseVideos(exerciseType: BackendExerciseType) {
-      return request<ExerciseVideoSummary[]>(`/exercises/videos/?exercise_type=${exerciseType}`)
+      return request<ExerciseVideoSummary[] | PaginatedResponse<ExerciseVideoSummary>>(
+        `/exercises/videos/?exercise_type=${exerciseType}`
+      ).then(response => unwrapCollectionResponse<ExerciseVideoSummary>(response))
     },
     createExerciseRecord(payload: ExerciseRecordCreatePayload) {
       return request('/exercises/records/', {
@@ -235,7 +257,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       })
     },
     listPsychologyScales() {
-      return request<BackendPsychologyScale[]>('/psychology/scales/')
+      return request<BackendPsychologyScale[] | PaginatedResponse<BackendPsychologyScale>>(
+        '/psychology/scales/'
+      ).then(response => unwrapCollectionResponse<BackendPsychologyScale>(response))
     },
     getNextPsychologyScale() {
       return request<BackendPsychologyScale | { message: string }>('/psychology/scales/next_scale/')
@@ -247,13 +271,19 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       })
     },
     listPsychologyRecords() {
-      return request<BackendPsychologyRecord[]>('/psychology/records/my_records/')
+      return request<BackendPsychologyRecord[] | PaginatedResponse<BackendPsychologyRecord>>(
+        '/psychology/records/my_records/'
+      ).then(response => unwrapCollectionResponse<BackendPsychologyRecord>(response))
     },
     listExerciseRecords() {
-      return request<BackendExerciseRecord[]>('/exercises/records/my_records/')
+      return request<BackendExerciseRecord[] | PaginatedResponse<BackendExerciseRecord>>(
+        '/exercises/records/my_records/'
+      ).then(response => unwrapCollectionResponse<BackendExerciseRecord>(response))
     },
     listStairRecords() {
-      return request<BackendStairRecord[]>('/exercises/stairs/my_records/')
+      return request<BackendStairRecord[] | PaginatedResponse<BackendStairRecord>>(
+        '/exercises/stairs/my_records/'
+      ).then(response => unwrapCollectionResponse<BackendStairRecord>(response))
     },
     getPhysicalTestTrend() {
       return request<BackendPhysicalTrendResponse>('/physical-tests/trend/')
