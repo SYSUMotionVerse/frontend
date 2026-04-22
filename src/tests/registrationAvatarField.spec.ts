@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import RegistrationAvatarField from '../components/access/RegistrationAvatarField.vue'
 
 describe('registration avatar field', () => {
@@ -72,5 +72,48 @@ describe('registration avatar field', () => {
     expect(wrapper.find('.avatar-field__preview-image').exists()).toBe(true)
     expect(wrapper.find('.avatar-field__content').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('添加照片')
+  })
+})
+
+describe('useRegistrationAvatar', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    delete (globalThis as { wx?: unknown }).wx
+  })
+
+  it('uploads avatar via studentBackendSync.uploadAvatar and stores backend avatar url', async () => {
+    const uploadAvatar = vi.fn().mockResolvedValue({
+      avatarUrl: 'https://cdn.example.com/backend-avatar.png'
+    })
+
+    vi.doMock('../uni-app/api/studentBackend', () => ({
+      studentBackendSync: {
+        uploadAvatar
+      }
+    }))
+
+    ;(globalThis as { wx?: unknown }).wx = {
+      getAccountInfoSync: () => ({
+        miniProgram: {
+          appId: 'wx123'
+        }
+      })
+    }
+
+    const { useRegistrationAvatar } = await import('../uni-app/composables/useRegistrationAvatar')
+    const avatar = useRegistrationAvatar()
+
+    await avatar.handleWechatAvatarChoice({
+      detail: {
+        avatarUrl: 'wxfile://avatar.png'
+      }
+    })
+
+    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://avatar.png', 'wechat')
+    expect(avatar.uploadState.value).toBe('success')
+    expect(avatar.avatarUrl.value).toBe('https://cdn.example.com/backend-avatar.png')
+    expect(avatar.avatarSource.value).toBe('wechat')
+    expect(avatar.errorMessage.value).toBe('')
   })
 })

@@ -2,12 +2,7 @@ import { presetWeapp } from '@furinalu/unocss-preset-weapp'
 import { defineConfig, presetWind3, transformerVariantGroup } from 'unocss'
 
 export default defineConfig({
-  content: {
-    filesystem: [
-      'src/**/*.{html,ts,tsx,vue}',
-      'src/uni-app/**/*.{html,ts,tsx,vue}'
-    ]
-  },
+  blocklist: [/^display-name$/, /^\?$/],
   rules: [
     ['chunky-shadow', { 'box-shadow': '0 8px 0px rgba(0, 0, 0, 0.05)' }],
     ['chunky-shadow-sm', { 'box-shadow': '0 6px 0px rgba(0, 0, 0, 0.08)' }],
