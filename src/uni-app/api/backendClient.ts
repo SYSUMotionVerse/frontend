@@ -31,6 +31,7 @@ interface PaginatedResponse<T> {
 }
 
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
+const defaultApiBaseUrl = 'http://127.0.0.1:8000/api'
 
 function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, '')
@@ -38,7 +39,7 @@ function normalizeBaseUrl(input: string) {
 
 function resolveBaseUrl() {
   const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? ''
-  return configuredBaseUrl ? normalizeBaseUrl(configuredBaseUrl) : ''
+  return normalizeBaseUrl(configuredBaseUrl || defaultApiBaseUrl)
 }
 
 function resolveSetCookie(header: unknown) {

@@ -36,7 +36,35 @@ function createUniMock(responses: MockRequestResponse[]) {
 
 describe('backend client session handling', () => {
   afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
     delete (globalThis as { uni?: unknown }).uni
+  })
+
+  it('falls back to the local api base url when VITE_API_BASE_URL is missing', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '')
+
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          count: 0,
+          next: null,
+          previous: null,
+          results: []
+        }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+    const client = createBackendClient()
+
+    await client.listPsychologyScales()
+
+    expect(uniMock.request).toHaveBeenCalledTimes(1)
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe('http://127.0.0.1:8000/api/psychology/scales/')
   })
 
   it('reuses the session cookie exposed through response.cookies in mini-program requests', async () => {
@@ -121,7 +149,7 @@ describe('backend client session handling', () => {
       gender: 1,
       student_id: '20260003',
       major: '运动训练',
-      height: '172.00',
+      height: '..00',
       weight: '62.00'
     }
 
