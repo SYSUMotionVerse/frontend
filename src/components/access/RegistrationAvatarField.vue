@@ -7,12 +7,17 @@ const props = defineProps<{
   avatarUrl: string
   uploadState: AvatarUploadState
   errorMessage: string
+  isSourceChooserVisible: boolean
+  localAvatarChooserMessage: string
   isWechatMiniProgram: boolean
   supportsWechatAvatarSelection: boolean
 }>()
 
 const emit = defineEmits<{
+  openSourceChooser: []
+  closeSourceChooser: []
   chooseWechatAvatar: [event: { detail?: { avatarUrl?: string } }]
+  chooseLocalAvatar: []
 }>()
 
 const previewUrl = computed(() => props.avatarUrl.trim() || DEFAULT_AVATAR_URL)
@@ -23,10 +28,8 @@ const canChooseWechatAvatar = computed(() =>
 
 <template>
   <button
-    v-if="canChooseWechatAvatar"
     class="avatar-field__trigger"
-    open-type="chooseAvatar"
-    @chooseavatar="emit('chooseWechatAvatar', $event)"
+    @click="emit('openSourceChooser')"
   >
     <view class="avatar-field">
       <view class="avatar-field__preview-shell">
@@ -43,25 +46,32 @@ const canChooseWechatAvatar = computed(() =>
     </view>
   </button>
 
-  <button
-    v-else
-    class="avatar-field__trigger"
-    disabled
-  >
-    <view class="avatar-field">
-      <view class="avatar-field__preview-shell">
-        <image
-          v-if="previewUrl"
-          class="avatar-field__preview-image"
-          :src="previewUrl"
-          mode="aspectFill"
-        />
-        <text v-if="props.uploadState === 'uploading'" class="avatar-field__preview-placeholder">
-          上传中
-        </text>
-      </view>
-    </view>
-  </button>
+  <view v-if="props.isSourceChooserVisible" class="avatar-field__source-actions">
+    <button
+      v-if="canChooseWechatAvatar"
+      class="avatar-field__source-action avatar-field__source-action--wechat"
+      open-type="chooseAvatar"
+      @chooseavatar="emit('chooseWechatAvatar', $event)"
+    >
+      使用微信头像
+    </button>
+    <button
+      class="avatar-field__source-action avatar-field__source-action--upload"
+      @click="emit('chooseLocalAvatar')"
+    >
+      上传图片
+    </button>
+    <button
+      class="avatar-field__source-action avatar-field__source-action--cancel"
+      @click="emit('closeSourceChooser')"
+    >
+      取消
+    </button>
+  </view>
+
+  <text v-if="props.isSourceChooserVisible" class="avatar-field__hint block">
+    {{ props.localAvatarChooserMessage }}
+  </text>
 
   <text v-if="props.errorMessage" class="avatar-field__message block">
     {{ props.errorMessage }}
@@ -101,6 +111,54 @@ const canChooseWechatAvatar = computed(() =>
   background: #ffffff;
   border: 4rpx solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 10rpx 0 rgba(0, 0, 0, 0.05);
+}
+
+.avatar-field__source-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.avatar-field__source-action {
+  width: 100%;
+  border-radius: 9999px;
+  padding: 22rpx 28rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  background: #ffffff;
+  color: #1A202C;
+}
+
+.avatar-field__source-action::after {
+  border-radius: 9999px;
+  border: 2rpx solid rgba(15, 23, 42, 0.08);
+}
+
+.avatar-field__source-action--wechat {
+  background: #ECFCCB;
+  color: #166534;
+}
+
+.avatar-field__source-action--upload {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.avatar-field__source-action--cancel {
+  background: #F8FAFC;
+  color: #475569;
+}
+
+.avatar-field__hint {
+  margin-top: 16rpx;
+  color: #475569;
+  font-size: 24rpx;
+  line-height: 1.45;
+  text-align: center;
+  font-weight: 700;
 }
 
 .avatar-field__preview-image {

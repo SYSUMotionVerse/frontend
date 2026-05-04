@@ -33,6 +33,8 @@ const currentAvatarUrl = computed(() => unref(avatar.avatarUrl) ?? '')
 const currentAvatarSource = computed(() => unref(avatar.avatarSource) ?? '')
 const currentAvatarUploadState = computed(() => unref(avatar.uploadState) ?? 'idle')
 const currentAvatarErrorMessage = computed(() => unref(avatar.errorMessage) ?? '')
+const isAvatarSourceChooserVisible = computed(() => Boolean(unref(avatar.isSourceChooserVisible)))
+const localAvatarChooserMessage = computed(() => unref(avatar.localAvatarChooserMessage) ?? '')
 const showWechatAvatarButton = computed(() => Boolean(unref(avatar.isWechatMiniProgram)))
 const supportsWechatAvatarSelection = computed(() => Boolean(unref(avatar.supportsWechatAvatarSelection)))
 const resolvedAvatarUrl = computed(() => currentAvatarUrl.value.trim() || DEFAULT_AVATAR_URL)
@@ -143,9 +145,14 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
         :avatar-url="resolvedAvatarUrl"
         :upload-state="currentAvatarUploadState"
         :error-message="currentAvatarErrorMessage"
+        :is-source-chooser-visible="isAvatarSourceChooserVisible"
+        :local-avatar-chooser-message="localAvatarChooserMessage"
         :is-wechat-mini-program="showWechatAvatarButton"
         :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
+        @open-source-chooser="avatar.openSourceChooser"
+        @close-source-chooser="avatar.closeSourceChooser"
         @choose-wechat-avatar="avatar.handleWechatAvatarChoice"
+        @choose-local-avatar="avatar.handleLocalAvatarChoice"
       />
       
       <view class="form-stack-field">

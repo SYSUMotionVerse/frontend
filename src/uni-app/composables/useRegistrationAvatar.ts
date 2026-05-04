@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue'
 import type { StudentProfile } from '../../types/student'
+import { studentBackendSync } from '../api/studentBackend'
 
 export type AvatarSource = StudentProfile['avatarSource']
 export type AvatarUploadState = 'idle' | 'uploading' | 'success' | 'error'
@@ -13,9 +14,8 @@ type ChooseAvatarEvent = {
 type UploadAvatarResult = {
   avatarUrl: string
 }
-
-const configuredUploadUrl = import.meta.env.VITE_AVATAR_UPLOAD_URL?.trim() ?? ''
 const UNSUPPORTED_WECHAT_AVATAR_MESSAGE = '游客模式下暂不支持直接选择微信头像。'
+const LOCAL_AVATAR_CHOOSER_MESSAGE = '请选择微信头像或从相册上传。'
 
 function resolveSupportsWechatAvatarSelection() {
   if (typeof globalThis === 'undefined' || !('wx' in globalThis)) {
@@ -49,62 +49,24 @@ function resolveUploadErrorMessage(error: unknown) {
   return 'Avatar upload failed. Please try again.'
 }
 
-function resolveUploadedAvatarUrl(payload: unknown) {
-  if (!payload || typeof payload !== 'object') {
-    return ''
+async function chooseLocalAvatarFile() {
+  if (typeof uni === 'undefined') {
+    throw new Error('Local image selection is not available in this environment.')
   }
 
-  const directUrl = (payload as { avatarUrl?: unknown }).avatarUrl
-  if (typeof directUrl === 'string' && directUrl.trim().length > 0) {
-    return directUrl
-  }
-
-  const nestedData = (payload as { data?: unknown }).data
-  if (!nestedData || typeof nestedData !== 'object') {
-    return ''
-  }
-
-  const nestedUrl = (nestedData as { avatarUrl?: unknown }).avatarUrl
-  return typeof nestedUrl === 'string' ? nestedUrl : ''
-}
-
-function parseUploadResponse(data: unknown) {
-  if (typeof data === 'string') {
-    try {
-      return JSON.parse(data) as unknown
-    } catch {
-      return { avatarUrl: data }
-    }
-  }
-
-  return data
-}
-
-export function uploadAvatar(filePath: string): Promise<UploadAvatarResult> {
-  if (!configuredUploadUrl) {
-    return Promise.resolve({ avatarUrl: filePath })
-  }
-
-  return new Promise<UploadAvatarResult>((resolve, reject) => {
-    if (typeof uni === 'undefined') {
-      reject(new Error('Avatar upload is not available in this environment.'))
-      return
-    }
-
-    uni.uploadFile({
-      url: configuredUploadUrl,
-      filePath,
-      name: 'file',
+  return new Promise<string>((resolve, reject) => {
+    uni.chooseImage({
+      count: 1,
+      sizeType: ['compressed'],
+      sourceType: ['album'],
       success(result) {
-        const parsed = parseUploadResponse(result.data)
-        const avatarUrl = resolveUploadedAvatarUrl(parsed)
-
-        if (!avatarUrl) {
-          reject(new Error('Avatar upload response did not include avatarUrl.'))
+        const filePath = result.tempFilePaths?.[0]?.trim()
+        if (!filePath) {
+          reject(new Error('Image selection did not return a file.'))
           return
         }
 
-        resolve({ avatarUrl })
+        resolve(filePath)
       },
       fail(error) {
         reject(error)
@@ -118,6 +80,7 @@ export function useRegistrationAvatar() {
   const avatarSource = shallowRef<AvatarSource>('')
   const uploadState = shallowRef<AvatarUploadState>('idle')
   const errorMessage = shallowRef('')
+  const isSourceChooserVisible = shallowRef(false)
   const isWechatMiniProgram = shallowRef(
     typeof globalThis !== 'undefined' && 'wx' in globalThis
   )
@@ -130,9 +93,10 @@ export function useRegistrationAvatar() {
   async function persistAvatar(filePath: string, source: Exclude<AvatarSource, ''>) {
     uploadState.value = 'uploading'
     errorMessage.value = ''
+    isSourceChooserVisible.value = false
 
     try {
-      const result = await uploadAvatar(filePath)
+      const result = await studentBackendSync.uploadAvatar(filePath, source)
 
       avatarUrl.value = result.avatarUrl
       avatarSource.value = source
@@ -145,7 +109,20 @@ export function useRegistrationAvatar() {
     }
   }
 
-  async function handleWechatAvatarChoice(event: ChooseAvatarEvent) {
+  function openSourceChooser() {
+    if (uploadState.value === 'uploading') {
+      return
+    }
+
+    errorMessage.value = supportsWechatAvatarSelection.value ? '' : UNSUPPORTED_WECHAT_AVATAR_MESSAGE
+    isSourceChooserVisible.value = true
+  }
+
+  function closeSourceChooser() {
+    isSourceChooserVisible.value = false
+  }
+
+  function handleWechatAvatarChoice(event: ChooseAvatarEvent) {
     const filePath = event.detail?.avatarUrl?.trim()
 
     if (!filePath) {
@@ -154,7 +131,17 @@ export function useRegistrationAvatar() {
       return
     }
 
-    await persistAvatar(filePath, 'wechat')
+    void persistAvatar(filePath, 'wechat')
+  }
+
+  async function handleLocalAvatarChoice() {
+    try {
+      const filePath = await chooseLocalAvatarFile()
+      await persistAvatar(filePath, 'album')
+    } catch (error) {
+      uploadState.value = 'error'
+      errorMessage.value = resolveUploadErrorMessage(error)
+    }
   }
 
   return {
@@ -162,8 +149,13 @@ export function useRegistrationAvatar() {
     avatarSource,
     uploadState,
     errorMessage,
+    isSourceChooserVisible,
+    localAvatarChooserMessage: LOCAL_AVATAR_CHOOSER_MESSAGE,
     isWechatMiniProgram,
     supportsWechatAvatarSelection,
-    handleWechatAvatarChoice
+    openSourceChooser,
+    closeSourceChooser,
+    handleWechatAvatarChoice,
+    handleLocalAvatarChoice
   }
 }
