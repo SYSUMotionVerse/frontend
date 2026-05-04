@@ -14,17 +14,21 @@ import {
   mapBackendTrainingHistory
 } from './growthBackendModels'
 import type {
+  AvatarUploadResult,
   BackendCurrentUser,
+  BackendExerciseRecord,
   BackendExerciseType,
   BackendSyncResult,
   LongQuestionnaireSyncResult,
   LongQuestionnaireSyncInput,
+  ProfileAvatarSyncResult,
   RegistrationSyncInput,
   StairSessionSyncInput,
   StairsRecordCreatePayload,
   StudentBackendSyncDependencies,
   SurveyRecordCreatePayload,
   UserUpdatePayload,
+  VisualSessionSyncResult,
   VisualSessionSyncInput
 } from './studentBackendTypes'
 
@@ -189,6 +193,34 @@ function resolveBackendGenderLabel(gender: BackendCurrentUser['gender']): Studen
   return ''
 }
 
+function shouldUploadAvatar(profile: RegistrationSyncInput) {
+  return (
+    profile.avatarSource !== '' &&
+    profile.avatarUrl.trim().startsWith('wxfile://')
+  )
+}
+
+function resolveVisualSessionSummary(
+  fallback: {
+    qualityScore: number
+    summary: string
+  },
+  record: BackendExerciseRecord | undefined
+) {
+  if (!record) {
+    return fallback
+  }
+
+  const backendScore = toPositiveNumber(record.score)
+  const qualityScore = backendScore !== null ? Math.round(backendScore) : fallback.qualityScore
+  const summary = hasTextValue(record.comment) ? record.comment.trim() : fallback.summary
+
+  return {
+    qualityScore,
+    summary
+  }
+}
+
 export function isBackendProfileComplete(user: BackendCurrentUser) {
   return (
     hasTextValue(user.name) &&
@@ -206,9 +238,13 @@ export function mapBackendCurrentUserToStudentProfile(
 ): StudentProfile {
   const heightCm = toPositiveNumber(user.height)
   const weightKg = toPositiveNumber(user.weight)
+  const backendAvatarUrl = hasTextValue(user.avatar) ? user.avatar.trim() : ''
+  const hasBackendAvatar = backendAvatarUrl.length > 0
 
   return {
     ...seedProfile,
+    avatarUrl: hasBackendAvatar ? backendAvatarUrl : seedProfile.avatarUrl,
+    avatarSource: hasBackendAvatar ? '' : seedProfile.avatarSource,
     studentId: hasTextValue(user.student_id) ? user.student_id.trim() : '',
     name: hasTextValue(user.name) ? user.name.trim() : '',
     gender: resolveBackendGenderLabel(user.gender),
@@ -269,6 +305,48 @@ export function createStudentBackendSync(
 
   return {
     isEnabled: dependencies.isEnabled,
+    async uploadAvatar(
+      filePath: string,
+      source: Exclude<StudentProfile['avatarSource'], ''>
+    ): Promise<AvatarUploadResult> {
+      if (!dependencies.isEnabled()) {
+        return {
+          avatarUrl: filePath
+        }
+      }
+
+      await dependencies.ensureSession()
+      return dependencies.uploadAvatar(filePath, source)
+    },
+    async syncProfileAvatarChange(
+      filePath: string,
+      source: Exclude<StudentProfile['avatarSource'], ''>,
+      seedProfile: StudentProfile
+    ): Promise<ProfileAvatarSyncResult> {
+      if (!dependencies.isEnabled()) {
+        return {
+          avatarUrl: filePath,
+          profile: {
+            ...seedProfile,
+            avatarUrl: filePath,
+            avatarSource: source
+          }
+        }
+      }
+
+      await dependencies.ensureSession()
+      const uploadResult = await dependencies.uploadAvatar(filePath, source)
+      const profile = {
+        ...seedProfile,
+        avatarUrl: uploadResult.avatarUrl,
+        avatarSource: source
+      }
+
+      return {
+        avatarUrl: uploadResult.avatarUrl,
+        profile
+      }
+    },
     async bootstrapAccess() {
       if (!dependencies.isEnabled()) {
         return buildBootstrapAccessResult('/register')
@@ -327,9 +405,19 @@ export function createStudentBackendSync(
     async syncRegistration(profile: RegistrationSyncInput) {
       return runIfEnabled(dependencies.isEnabled(), async () => {
         await dependencies.ensureSession()
-        await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(profile))
+        let syncedProfile = profile
+
+        if (shouldUploadAvatar(profile)) {
+          const uploadResult = await dependencies.uploadAvatar(profile.avatarUrl, profile.avatarSource)
+          syncedProfile = {
+            ...profile,
+            avatarUrl: uploadResult.avatarUrl
+          }
+        }
+
+        await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(syncedProfile))
         try {
-          await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(profile))
+          await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(syncedProfile))
         } catch {
           // Registration metadata fallback should not block the primary profile update flow.
         }
@@ -357,23 +445,33 @@ export function createStudentBackendSync(
         submittedAt: summary.submittedAt
       } satisfies LongQuestionnaireSyncResult
     },
-    async syncVisualSession(input: VisualSessionSyncInput) {
-      return runIfEnabled(dependencies.isEnabled(), async () => {
-        await dependencies.ensureSession()
-
-        const exerciseType = resolveBackendExerciseType(input.modality)
-        const videos = await dependencies.listExerciseVideos(exerciseType)
-        const video = videos[0]
-
-        if (!video) {
-          throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+    async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
+      if (!dependencies.isEnabled()) {
+        return {
+          synced: false,
+          reason: 'disabled'
         }
+      }
 
-        await dependencies.createExerciseRecord({
-          video: video.id,
-          duration: input.durationSeconds
-        })
+      await dependencies.ensureSession()
+
+      const exerciseType = resolveBackendExerciseType(input.modality)
+      const videos = await dependencies.listExerciseVideos(exerciseType)
+      const video = videos[0]
+
+      if (!video) {
+        throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+      }
+
+      const record = await dependencies.createExerciseRecord({
+        video: video.id,
+        duration: input.durationSeconds
       })
+
+      return {
+        synced: true,
+        record
+      }
     },
     async syncStairSession(input: StairSessionSyncInput) {
       return runIfEnabled(dependencies.isEnabled(), async () => {

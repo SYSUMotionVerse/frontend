@@ -11,6 +11,7 @@ export interface UserUpdatePayload {
   major?: string
   height?: number
   weight?: number
+  avatar?: string
 }
 
 export interface BackendCurrentUser {
@@ -21,7 +22,17 @@ export interface BackendCurrentUser {
   major: string | null
   height: number | string | null
   weight: number | string | null
+  avatar?: string | null
   [key: string]: unknown
+}
+
+export interface AvatarUploadResult {
+  avatarUrl: string
+}
+
+export interface ProfileAvatarSyncResult {
+  avatarUrl: string
+  profile: StudentProfile
 }
 
 export interface SurveyRecordCreatePayload {
@@ -182,6 +193,10 @@ export interface BackendSyncResult {
   reason?: 'disabled'
 }
 
+export interface VisualSessionSyncResult extends BackendSyncResult {
+  record?: BackendExerciseRecord
+}
+
 export interface LongQuestionnaireSyncResult extends BackendSyncResult {
   score?: number
   percentage?: number
@@ -208,10 +223,15 @@ export interface GrowthAssessmentHistoryItem {
 export interface StudentBackendSyncDependencies {
   isEnabled: () => boolean
   ensureSession: () => Promise<void>
+  getCurrentUser: () => Promise<BackendCurrentUser>
+  uploadAvatar: (
+    filePath: string,
+    source: StudentProfile['avatarSource']
+  ) => Promise<AvatarUploadResult>
   updateProfile: (payload: UserUpdatePayload) => Promise<unknown>
   createSurveyRecord: (payload: SurveyRecordCreatePayload) => Promise<unknown>
   listExerciseVideos: (exerciseType: BackendExerciseType) => Promise<ExerciseVideoSummary[]>
-  createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<unknown>
+  createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<BackendExerciseRecord>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>
   listPsychologyScales: () => Promise<BackendPsychologyScale[]>
   getNextPsychologyScale: () => Promise<BackendPsychologyScale | { message: string }>
