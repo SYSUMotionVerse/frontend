@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, unref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeFeatureCard from '../../../components/training/TrainingHomeFeatureCard.vue'
@@ -7,10 +7,12 @@ import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.
 import TrainingHomeQuestPanel from '../../../components/training/TrainingHomeQuestPanel.vue'
 import { DEFAULT_AVATAR_URL } from '../../../constants/defaultAvatar'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
+import { useProfileAvatarEditor } from '../../composables/useProfileAvatarEditor'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { resolveReminderSource } from '../../platform/reminders'
 
 const store = useStudentStore()
+const avatarEditor = useProfileAvatarEditor()
 
 const profileAvatarUrl = computed(() =>
   store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
@@ -21,6 +23,10 @@ const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const reminderLabel = computed(() =>
   store.state.dailyAdherence.reminderEligible ? '今日提醒仍然开启' : '今天的提醒目标已完成'
 )
+const avatarUploadState = computed(() => unref(avatarEditor.uploadState) ?? 'idle')
+const avatarErrorMessage = computed(() => unref(avatarEditor.errorMessage) ?? '')
+const isWechatMiniProgram = computed(() => Boolean(unref(avatarEditor.isWechatMiniProgram)))
+const supportsWechatAvatarSelection = computed(() => Boolean(unref(avatarEditor.supportsWechatAvatarSelection)))
 
 const quests = computed(() => {
   const validCheckIns = store.state.dailyAdherence.validCheckIns
@@ -116,10 +122,15 @@ onShow(() => {
         :avatar-url="profileAvatarUrl"
         :display-name="displayName"
         :reminder-label="reminderLabel"
+        :avatar-upload-state="avatarUploadState"
+        :avatar-error-message="avatarErrorMessage"
+        :is-wechat-mini-program="isWechatMiniProgram"
+        :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
         mini-tag="TODAY'S QUEST"
         title="今天先完成主线任务"
         title-pill="训练首页"
         variant="home"
+        @choose-wechat-avatar="avatarEditor.handleWechatAvatarChoice"
       />
 
       <TrainingHomeQuestPanel
