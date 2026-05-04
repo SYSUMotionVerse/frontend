@@ -45,7 +45,8 @@ describe('student backend sync orchestration', () => {
     )
     expect(createSurveyRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        survey_type: 1
+        survey_type: 1,
+        analysis: expect.stringContaining('https://cdn.example.com/avatar.png')
       })
     )
   })
@@ -71,6 +72,97 @@ describe('student backend sync orchestration', () => {
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(updateProfile).toHaveBeenCalledTimes(1)
     expect(createSurveyRecord).toHaveBeenCalledTimes(1)
+  })
+
+  it('uploads local avatar files during registration before writing the survey record', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const uploadAvatar = vi.fn().mockResolvedValue({
+      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
+    })
+    const updateProfile = vi.fn().mockResolvedValue(undefined)
+    const createSurveyRecord = vi.fn().mockResolvedValue(undefined)
+
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      uploadAvatar,
+      updateProfile,
+      createSurveyRecord
+    })
+
+    await sync.syncRegistration(
+      createProfile({
+        avatarUrl: 'wxfile://avatar.png'
+      })
+    )
+
+    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://avatar.png', 'wechat')
+    expect(createSurveyRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        analysis: expect.stringContaining('https://api.example.com/media/avatars/avatar.png')
+      })
+    )
+  })
+
+  it('exposes avatar upload through the shared backend sync client', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const backendUploadAvatar = vi.fn().mockResolvedValue({
+      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
+    })
+
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      uploadAvatar: backendUploadAvatar
+    })
+
+    const result = await sync.uploadAvatar('wxfile://avatar.png', 'wechat')
+
+    expect(ensureSession).toHaveBeenCalledTimes(1)
+    expect(backendUploadAvatar).toHaveBeenCalledWith('wxfile://avatar.png', 'wechat')
+    expect(result).toEqual({
+      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
+    })
+  })
+
+  it('updates the logged-in profile avatar immediately after a direct avatar change', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const uploadAvatar = vi.fn().mockResolvedValue({
+      avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png'
+    })
+    const updateProfile = vi.fn().mockResolvedValue(undefined)
+
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      uploadAvatar,
+      updateProfile
+    })
+
+    const result = await sync.syncProfileAvatarChange(
+      'wxfile://header-avatar.png',
+      'wechat',
+      createProfile()
+    )
+
+    expect(ensureSession).toHaveBeenCalledTimes(1)
+    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://header-avatar.png', 'wechat')
+    expect(updateProfile).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png',
+      profile: expect.objectContaining({
+        avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png',
+        name: 'Lin',
+        studentId: '20260001',
+        avatarSource: 'wechat'
+      })
+    })
   })
 
   it('syncs a long questionnaire as a survey record', async () => {
@@ -160,7 +252,20 @@ describe('student backend sync orchestration', () => {
     const listExerciseVideos = vi.fn().mockResolvedValue([
       { id: 9, exercise_type: 'MARTIAL_ARTS', title: '马步冲拳' }
     ])
-    const createExerciseRecord = vi.fn().mockResolvedValue(undefined)
+    const createExerciseRecord = vi.fn().mockResolvedValue({
+      id: 12,
+      video: 9,
+      duration: 30,
+      score: '88.50',
+      comment: '动作基本标准，注意细节。',
+      status: 'COMPLETED',
+      created_at: '2026-05-04T10:00:00Z',
+      video_info: {
+        id: 9,
+        title: '马步冲拳',
+        exercise_type: 'MARTIAL_ARTS'
+      }
+    })
 
     const sync = createStudentBackendSync({
       isEnabled: () => true,
@@ -169,7 +274,7 @@ describe('student backend sync orchestration', () => {
       createExerciseRecord
     })
 
-    await sync.syncVisualSession({
+    const result = await sync.syncVisualSession({
       modality: 'wushu',
       durationSeconds: 30
     })
@@ -178,6 +283,15 @@ describe('student backend sync orchestration', () => {
     expect(createExerciseRecord).toHaveBeenCalledWith({
       video: 9,
       duration: 30
+    })
+    expect(result).toEqual({
+      synced: true,
+      record: expect.objectContaining({
+        id: 12,
+        score: '88.50',
+        comment: '动作基本标准，注意细节。',
+        status: 'COMPLETED'
+      })
     })
   })
 

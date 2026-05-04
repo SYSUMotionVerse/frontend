@@ -798,7 +798,7 @@ describe('ui review fixes', () => {
     expect(miniappGrowthPage).toContain('padding: 40rpx;')
   })
 
-  it('wires the register avatar flow to WeChat avatar and image upload APIs', () => {
+  it('wires the register avatar flow to WeChat avatar selection and shared backend upload', () => {
     const avatarField = readFileSync(
       resolve('src/components/access/RegistrationAvatarField.vue'),
       'utf8'
@@ -810,15 +810,15 @@ describe('ui review fixes', () => {
 
     expect(avatarField).toContain('avatar-field__trigger')
     expect(avatarField).toContain('justify-content: center;')
-    expect(avatarField).not.toContain('avatar-field__content')
-    expect(avatarField).not.toContain('avatar-field__picker-panel')
-    expect(avatarField).not.toContain('avatar-field__actions')
+    expect(avatarField).toContain('avatar-field__source-actions')
+    expect(avatarField).toContain('avatar-field__source-action--wechat')
+    expect(avatarField).toContain('avatar-field__source-action--upload')
     expect(avatarField).toContain('open-type="chooseAvatar"')
-    expect(avatarField).toContain('@chooseavatar=')
+    expect(avatarField).toContain("@chooseavatar=\"emit('chooseWechatAvatar', $event)\"")
     expect(avatarComposable).toContain('detail?.avatarUrl')
-    expect(avatarComposable).toContain('uni.uploadFile')
-    expect(avatarComposable).toContain("name: 'file'")
-    expect(avatarComposable).not.toContain('uni.chooseImage')
+    expect(avatarComposable).toContain('studentBackendSync.uploadAvatar')
+    expect(avatarComposable).toContain('uni.chooseImage')
+    expect(avatarComposable).toContain("sourceType: ['album']")
     expect(avatarComposable).not.toContain('selectImageSource')
   })
 })

@@ -50,7 +50,15 @@ const studentBackendSync = {
     analysis: '心理状态正常，建议保持规律运动。',
     submittedAt: '2026-04-09T15:30:00.000Z'
   }),
-  syncVisualSession: vi.fn().mockResolvedValue({ synced: true }),
+  syncVisualSession: vi.fn().mockResolvedValue({
+    synced: true,
+    record: {
+      id: 1,
+      score: '88.50',
+      comment: '动作基本标准，注意细节。',
+      status: 'COMPLETED'
+    }
+  }),
   syncStairSession: vi.fn().mockResolvedValue({ synced: true }),
   loadGrowthHistory: vi.fn().mockResolvedValue({
     assessments: [
@@ -313,6 +321,16 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('syncs visual sessions when the user completes the guided workout', async () => {
+    studentBackendSync.syncVisualSession.mockResolvedValue({
+      synced: true,
+      record: {
+        id: 1,
+        score: '88.50',
+        comment: '动作基本标准，注意细节。',
+        status: 'COMPLETED'
+      }
+    })
+
     const VisualSessionPage = (await import('../uni-app/pages/training/visual-session.vue')).default
     const wrapper = mount(VisualSessionPage, {
       global: {
@@ -334,7 +352,13 @@ describe('page-level backend sync wiring', () => {
       modality: 'wushu',
       durationSeconds: 30
     })
-    expect(store.completeTrainingSession).toHaveBeenCalled()
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modality: 'wushu',
+        qualityScore: 89,
+        summary: '动作基本标准，注意细节。'
+      })
+    )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/short-questionnaire'
     })

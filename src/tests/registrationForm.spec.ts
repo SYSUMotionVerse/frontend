@@ -9,7 +9,8 @@ const avatarController = {
   errorMessage: '',
   isWechatMiniProgram: true,
   supportsWechatAvatarSelection: true,
-  handleWechatAvatarChoice: vi.fn()
+  handleWechatAvatarChoice: vi.fn(),
+  handleLocalAvatarChoice: vi.fn()
 }
 
 vi.mock('../uni-app/composables/useRegistrationAvatar', () => ({
@@ -47,6 +48,7 @@ describe('registration form', () => {
     avatarController.errorMessage = ''
     avatarController.supportsWechatAvatarSelection = true
     avatarController.handleWechatAvatarChoice.mockReset()
+    avatarController.handleLocalAvatarChoice.mockReset()
   })
 
   it('emits submit with a default avatar when no upload has happened', async () => {

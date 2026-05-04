@@ -19,6 +19,7 @@ function createBackendUser(overrides: Partial<BackendCurrentUser> = {}): Backend
     major: 'Sports Science',
     height: 160,
     weight: 45,
+    avatar: null,
     ...overrides
   }
 }
@@ -28,7 +29,9 @@ describe('startup access bootstrap', () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
 
     const profile = mapBackendCurrentUserToStudentProfile(
-      createBackendUser(),
+      createBackendUser({
+        avatar: 'http://127.0.0.1:8000/media/avatars/backend-avatar.png'
+      }),
       createSeedProfile({
         avatarUrl: 'https://cdn.example.com/avatar.png',
         avatarSource: 'wechat',
@@ -46,14 +49,31 @@ describe('startup access bootstrap', () => {
         major: 'Sports Science',
         heightCm: 160,
         weightKg: 45,
-        avatarUrl: 'https://cdn.example.com/avatar.png',
-        avatarSource: 'wechat',
+        avatarUrl: 'http://127.0.0.1:8000/media/avatars/backend-avatar.png',
+        avatarSource: '',
         age: 15,
         grade: '高一',
         restingHeartRate: 68,
         completed: true
       })
     )
+  })
+
+  it('keeps local avatar values when the backend user has no avatar', async () => {
+    const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
+
+    const profile = mapBackendCurrentUserToStudentProfile(
+      createBackendUser({
+        avatar: null
+      }),
+      createSeedProfile({
+        avatarUrl: 'https://cdn.example.com/avatar.png',
+        avatarSource: 'wechat'
+      })
+    )
+
+    expect(profile.avatarUrl).toBe('https://cdn.example.com/avatar.png')
+    expect(profile.avatarSource).toBe('wechat')
   })
 
   it('marks profile incomplete when required backend fields are missing', async () => {
