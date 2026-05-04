@@ -27,20 +27,35 @@ async function finishSession() {
     modality: syncModality,
     qualityScore: modality.value === 'hiit' ? 74 : 86
   })
+  let resolvedAnalysis = {
+    qualityScore: analysis.qualityScore,
+    summary: analysis.summary
+  }
 
   try {
-    await studentBackendSync.syncVisualSession({
+    const result = await studentBackendSync.syncVisualSession({
       modality: syncModality,
       durationSeconds
     })
+
+    if (result.synced && result.record) {
+      resolvedAnalysis = {
+        qualityScore: typeof result.record.score === 'number'
+          ? Math.round(result.record.score)
+          : typeof result.record.score === 'string' && result.record.score.trim().length > 0
+            ? Math.round(Number(result.record.score))
+            : analysis.qualityScore,
+        summary: result.record.comment?.trim() || analysis.summary
+      }
+    }
   } catch (error) {
     reportBackendSyncError('训练记录同步', error)
   }
 
   store.completeTrainingSession({
     modality: modality.value,
-    qualityScore: analysis.qualityScore,
-    summary: analysis.summary,
+    qualityScore: resolvedAnalysis.qualityScore,
+    summary: resolvedAnalysis.summary,
     capturedBy: analysis.capturedBy
   })
 
