@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import VisualTrainingPanel from '../../../components/training/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../../domain/student/types'
@@ -8,9 +8,18 @@ import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../platform/camera'
+import PoseCamera from '../../components/pose/PoseCamera.vue'
 
 const store = useStudentStore()
 const modality = ref<TrainingModality>('wushu')
+const poseCamera = ref<any>(null)
+
+// Recording state
+const recording = ref(false)
+const recordSeconds = ref(0)
+const recordedVideoPath = ref('')
+let recordTimer: ReturnType<typeof setInterval> | null = null
+let cameraReady = false
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -18,10 +27,67 @@ onLoad((query) => {
   modality.value = nextModality === 'hiit' ? 'hiit' : 'wushu'
 })
 
+onMounted(async () => {
+  await nextTick()
+  // Activate the camera preview immediately on page mount
+  poseCamera.value?.startCamera()
+})
+
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
 
+async function toggleRecord() {
+  if (recording.value) {
+    // Stop recording
+    recording.value = false
+    if (recordTimer) {
+      clearInterval(recordTimer)
+      recordTimer = null
+    }
+    try {
+      const path = await poseCamera.value.stopRecord()
+      recordedVideoPath.value = path
+      console.log('[Session] Recorded video:', path)
+    } catch (err) {
+      console.warn('[Session] stopRecord failed:', err)
+    }
+  } else {
+    // Start recording
+    recordSeconds.value = 0
+    recordedVideoPath.value = ''
+    try {
+      await poseCamera.value.startRecord()
+      recording.value = true
+      recordTimer = setInterval(() => { recordSeconds.value++ }, 1000)
+    } catch (err) {
+      console.warn('[Session] startRecord failed:', err)
+    }
+  }
+}
+
+function onCameraStatus(evt: { type: string; detail?: string }) {
+  if (evt.type === 'cameraReady') {
+    cameraReady = true
+  }
+}
+
 async function finishSession() {
-  const durationSeconds = 30
+  // Stop recording if active
+  if (recording.value) {
+    recording.value = false
+    if (recordTimer) {
+      clearInterval(recordTimer)
+      recordTimer = null
+    }
+    try {
+      const path = await poseCamera.value.stopRecord()
+      recordedVideoPath.value = path
+      console.log('[Session] Recorded video:', path)
+    } catch (err) {
+      console.warn('[Session] stopRecord on finish failed:', err)
+    }
+  }
+
+  const durationSeconds = Math.max(recordSeconds.value, 30)
   const syncModality = modality.value === 'hiit' ? 'hiit' : 'wushu'
   const analysis = createCameraSessionAnalysis({
     modality: syncModality,
@@ -65,6 +131,14 @@ async function finishSession() {
 }
 
 function interruptSession() {
+  if (recording.value) {
+    recording.value = false
+    if (recordTimer) {
+      clearInterval(recordTimer)
+      recordTimer = null
+    }
+    poseCamera.value?.stopRecord().catch(() => {})
+  }
   void uni.redirectTo({
     url: '/pages/training/select'
   })
@@ -79,6 +153,33 @@ function interruptSession() {
       :title="title"
       @complete="finishSession"
       @interrupt="interruptSession"
-    />
+    >
+      <view class="mt-[28rpx] rounded-[40rpx] overflow-hidden h-[440rpx] bg-brand-teal/15 relative">
+        <PoseCamera
+          ref="poseCamera"
+          :on-frame="() => {}"
+          :on-status="onCameraStatus"
+          :show-overlay="false"
+        />
+        <!-- Recording control overlay -->
+        <view class="absolute inset-x-0 bottom-0 flex items-center justify-center p-[12rpx]"
+          :class="recording ? 'bg-red-500/60' : 'bg-black/40'">
+          <button
+            class="min-w-[160rpx] rounded-full border-none text-[24rpx] font-800 py-[8rpx] px-[24rpx] flex items-center justify-center gap-[8rpx]"
+            :class="recording ? 'bg-red-500 text-white' : 'bg-white text-slate-800'"
+            @click="toggleRecord"
+          >
+            <text v-if="recording" class="text-[28rpx]">⬤</text>
+            <text v-else class="text-[28rpx]">●</text>
+            <text>{{ recording ? '停止 ' + recordSeconds + 's' : '开始录制' }}</text>
+          </button>
+        </view>
+        <!-- Recorded indicator -->
+        <view v-if="recordedVideoPath && !recording"
+          class="absolute top-[12rpx] right-[12rpx] bg-green-500/80 text-white text-[20rpx] font-700 px-[12rpx] py-[4rpx] rounded-full">
+          ✅ {{ recordSeconds }}s 已录制
+        </view>
+      </view>
+    </VisualTrainingPanel>
   </UniTrainingPageShell>
 </template>

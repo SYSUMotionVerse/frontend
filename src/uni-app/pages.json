@@ -37,6 +37,12 @@
       }
     },
     {
+      "path": "pages/training/pose-spike",
+      "style": {
+        "navigationBarTitleText": "BlazePose 测试"
+      }
+    },
+    {
       "path": "pages/training/stair-session",
       "style": {
         "navigationBarTitleText": "阶梯训练"

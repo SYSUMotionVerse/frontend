@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlazePose-Lite WeChat 小程序 Spike 报告</title>
+<style>
+  :root {
+    --bg: #f4efe6;
+    --paper: #fbf8f2;
+    --ink: #1e2520;
+    --muted: #5d675e;
+    --line: rgba(34, 42, 36, 0.16);
+    --line-strong: rgba(34, 42, 36, 0.3);
+    --accent: #b24a2b;
+    --accent-deep: #7f3017;
+    --teal: #1e6b67;
+    --teal-soft: rgba(30, 107, 103, 0.1);
+    --ok: #1d6f42;
+    --ok-soft: rgba(29, 111, 66, 0.1);
+    --warn: #9f5b0d;
+    --warn-soft: rgba(159, 91, 13, 0.12);
+    --danger: #9b2f2f;
+    --danger-soft: rgba(155, 47, 47, 0.1);
+    --shadow: 0 24px 60px rgba(53, 43, 26, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    background:
+      radial-gradient(circle at top left, rgba(178, 74, 43, 0.08), transparent 30%),
+      radial-gradient(circle at top right, rgba(30, 107, 103, 0.08), transparent 34%),
+      var(--bg);
+  }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    width: min(1120px, calc(100vw - 32px));
+    margin: 24px auto 56px;
+    background: color-mix(in srgb, var(--paper) 94%, white 6%);
+    border: 1px solid rgba(60, 54, 46, 0.08);
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .page::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 10px;
+    background: linear-gradient(90deg, var(--accent) 0%, #d08d44 28%, var(--teal) 78%, #274e4a 100%);
+  }
+
+  .shell {
+    padding: 34px clamp(22px, 4vw, 44px) 48px;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(178, 74, 43, 0.24);
+    background: rgba(178, 74, 43, 0.08);
+    color: var(--accent-deep);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+    gap: 28px;
+    padding-top: 18px;
+    align-items: end;
+  }
+
+  .title {
+    margin: 14px 0 10px;
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-size: clamp(34px, 5vw, 62px);
+    line-height: 0.96;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+    max-width: 12ch;
+  }
+
+  .deck {
+    max-width: 58ch;
+    font-size: 17px;
+    color: var(--muted);
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .meta-card {
+    border-top: 1px solid var(--line-strong);
+    padding-top: 14px;
+  }
+
+  .meta-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+
+  .meta-value {
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .section {
+    margin-top: 38px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 18px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+    margin-bottom: 18px;
+  }
+
+  .section-title {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-size: 28px;
+    line-height: 1.02;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .section-note {
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 34ch;
+    text-align: right;
+  }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(260px, 0.85fr);
+    gap: 20px;
+    background: linear-gradient(135deg, rgba(30, 107, 103, 0.08), rgba(178, 74, 43, 0.06));
+    border: 1px solid rgba(30, 107, 103, 0.18);
+    padding: 22px;
+  }
+
+  .verdict-mark {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 10px;
+  }
+
+  .verdict-main {
+    font-size: 20px;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .verdict-side {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .side-pill {
+    padding: 12px 14px;
+    border: 1px solid rgba(34, 42, 36, 0.12);
+    background: rgba(255,255,255,0.55);
+    font-size: 14px;
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .metric {
+    background: #fffdfa;
+    border: 1px solid rgba(34, 42, 36, 0.1);
+    padding: 18px 16px 16px;
+    min-height: 158px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .metric-tag {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .metric-value {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-size: clamp(34px, 4vw, 46px);
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    margin: 12px 0 8px;
+  }
+
+  .metric-sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .metric--accent { border-top: 5px solid var(--accent); }
+  .metric--teal { border-top: 5px solid var(--teal); }
+  .metric--ok { border-top: 5px solid var(--ok); }
+  .metric--warn { border-top: 5px solid var(--warn); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 800;
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  td {
+    padding: 14px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  td code, p code, li code {
+    background: rgba(34, 42, 36, 0.06);
+    padding: 0.14em 0.38em;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+  }
+
+  .status::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .status-ok { color: var(--ok); }
+  .status-bad { color: var(--danger); }
+
+  .callout-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .callout {
+    padding: 18px;
+    border: 1px solid rgba(34, 42, 36, 0.1);
+    background: #fffdfa;
+  }
+
+  .callout h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .callout p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .dead-ends {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .dead-end {
+    padding: 16px;
+    background: linear-gradient(180deg, rgba(155, 47, 47, 0.06), rgba(155, 47, 47, 0.02));
+    border: 1px solid rgba(155, 47, 47, 0.16);
+    min-height: 128px;
+  }
+
+  .dead-end-index {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: var(--danger);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 800;
+  }
+
+  .dead-end strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 16px;
+  }
+
+  pre {
+    margin: 0;
+    padding: 18px;
+    overflow-x: auto;
+    background: #1f2422;
+    color: #edf3ec;
+    border: 1px solid rgba(31, 36, 34, 0.8);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .steps {
+    display: grid;
+    gap: 10px;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .step:last-child { border-bottom: 0; }
+
+  .step-no {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(30, 107, 103, 0.1);
+    color: var(--teal);
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .step-title {
+    font-size: 17px;
+    margin: 0 0 4px;
+  }
+
+  .step-copy {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .footer {
+    margin-top: 34px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 980px) {
+    .hero,
+    .verdict,
+    .metrics,
+    .callout-grid,
+    .dead-ends {
+      grid-template-columns: 1fr;
+    }
+
+    .meta-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .section-head {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .section-note {
+      text-align: left;
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .page {
+      width: min(100vw - 16px, 1120px);
+      margin: 8px auto 24px;
+    }
+
+    .shell {
+      padding: 22px 16px 28px;
+    }
+
+    .title {
+      max-width: none;
+    }
+
+    table {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <div class="shell">
+      <span class="eyebrow">BlazePose-Lite · WeChat Spike</span>
+
+      <section class="hero">
+        <div>
+          <h1 class="title">模型侧已经跑通，但 Camera 端到端还没验完。</h1>
+          <p class="deck">
+            这份 spike 报告回答的是一个很具体的问题：<strong>BlazePose-Lite 能不能在微信小程序运行时里真正跑起来，以及它大概有多慢。</strong>
+            当前证据已经覆盖 TFJS WebGL 初始化、模型加载、warmup 和 synthetic benchmark；还没有覆盖真实摄像头端到端链路。
+          </p>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Date</div>
+            <div class="meta-value">2026-05-08</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Machine</div>
+            <div class="meta-value">MacBook Air</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Runtime</div>
+            <div class="meta-value">WeChat DevTools 2.01.2510280 · TFJS 4.22.0 · WebGL backend</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Current Limitation</div>
+            <div class="meta-value"><code>start:fail camera is not found</code></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Final Verdict</h2>
+          <p class="section-note">这部分只陈述当前证据能支持的结论，不扩写到还没验证的端到端能力。</p>
+        </div>
+
+        <div class="verdict">
+          <div>
+            <div class="verdict-mark">Evidence-backed conclusion</div>
+            <p class="verdict-main">
+              <strong>BlazePose-Lite 已在 mp-weixin WebGL 运行时完成模型侧可运行性验证。</strong>
+              稳定单帧纯推理成本约 <strong>40–50ms</strong>（p50–p95），这说明 <strong>10fps 目标在预算上具备可行性</strong>。
+              但当前结论仍然是 <strong>synthetic benchmark</strong>，不是 live camera E2E；本机 DevTools 环境没有可用 camera device，因此真实摄像头链路仍需真机补证。
+            </p>
+          </div>
+
+          <div class="verdict-side">
+            <div class="side-pill"><strong>可确认：</strong>模型加载、WebGL、warmup、推理 benchmark 已过。</div>
+            <div class="side-pill"><strong>未确认：</strong>真实相机帧输入、预处理抖动、设备热衰减、端到端 FPS。</div>
+            <div class="side-pill"><strong>适合回答的问题：</strong>“模型侧能不能跑”和“推理预算大概多少”。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Validated Layers</h2>
+          <p class="section-note">把“已经被证明的层”与“仍然空缺的层”拆开，避免把 warmup 说成 live inference。</p>
+        </div>
+
+        <table>
+          <tr>
+            <th>Layer</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+          <tr>
+            <td>TFJS + WebGL init</td>
+            <td><span class="status status-ok">Passed</span></td>
+            <td><code>wx.createOffscreenCanvas({ type: 'webgl' })</code> + <code>setupWechatPlatform</code></td>
+          </tr>
+          <tr>
+            <td>Model loading</td>
+            <td><span class="status status-ok">Passed</span></td>
+            <td><code>detectorModelUrl</code> / <code>landmarkModelUrl</code> via HTTP (dev: localhost)</td>
+          </tr>
+          <tr>
+            <td>Warmup inference</td>
+            <td><span class="status status-ok">Passed</span></td>
+            <td><code>tf.tensor3d</code> 1×1×3 → <code>estimatePoses</code></td>
+          </tr>
+          <tr>
+            <td>Synthetic benchmark</td>
+            <td><span class="status status-ok">Passed</span></td>
+            <td>224×224×3 and 480×640×3, 50 iterations each</td>
+          </tr>
+          <tr>
+            <td>Live camera inference</td>
+            <td><span class="status status-bad">Not verified</span></td>
+            <td>Current macOS DevTools environment has no camera device: <code>start:fail camera is not found</code></td>
+          </tr>
+        </table>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Latency Snapshot</h2>
+          <p class="section-note">读这组数时，以 p50 / p95 为主，不要被单个 outlier 拉偏。</p>
+        </div>
+
+        <div class="metrics">
+          <article class="metric metric--accent">
+            <div>
+              <div class="metric-tag">Load</div>
+              <div class="metric-value">77ms</div>
+            </div>
+            <div class="metric-sub">平台初始化 + detector 创建</div>
+          </article>
+
+          <article class="metric metric--warn">
+            <div>
+              <div class="metric-tag">Warmup</div>
+              <div class="metric-value">539ms</div>
+            </div>
+            <div class="metric-sub">一次性 WebGL shader JIT 成本</div>
+          </article>
+
+          <article class="metric metric--ok">
+            <div>
+              <div class="metric-tag">Steady p50</div>
+              <div class="metric-value">37–38ms</div>
+            </div>
+            <div class="metric-sub">模型稳定区间的中位数</div>
+          </article>
+
+          <article class="metric metric--teal">
+            <div>
+              <div class="metric-tag">Steady p95</div>
+              <div class="metric-value">48–49ms</div>
+            </div>
+            <div class="metric-sub">更接近预算上沿的稳定值</div>
+          </article>
+        </div>
+
+        <table>
+          <tr>
+            <th>Input</th>
+            <th>avg</th>
+            <th>p50</th>
+            <th>p95</th>
+            <th>min</th>
+            <th>max</th>
+            <th>Interpretation</th>
+          </tr>
+          <tr>
+            <td>224×224×3</td>
+            <td>46.5ms</td>
+            <td>37ms</td>
+            <td>48ms</td>
+            <td>27ms</td>
+            <td>510ms</td>
+            <td>avg 被单次 outlier 明显拉高，不能把 46.5ms 当稳态代表值。</td>
+          </tr>
+          <tr>
+            <td>640×480×3</td>
+            <td>39.2ms</td>
+            <td>38ms</td>
+            <td>49ms</td>
+            <td>31ms</td>
+            <td>52ms</td>
+            <td>分布更紧，能更好反映这轮 benchmark 的稳定推理区间。</td>
+          </tr>
+        </table>
+
+        <div class="callout-grid" style="margin-top: 16px;">
+          <article class="callout">
+            <h3>What this supports</h3>
+            <p>从模型侧预算看，10fps 是可讨论的目标，因为每帧 100ms 预算里，纯推理部分大约消耗 40–50ms。</p>
+          </article>
+          <article class="callout">
+            <h3>What this does not support yet</h3>
+            <p>它还不能证明真实摄像头链路在端到端上也能稳定维持 10fps，因为预处理、绘制、调度和热衰减都尚未计入。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Working Path</h2>
+          <p class="section-note">这里只保留最终跑通的路径，不再混入已经死掉的尝试。</p>
+        </div>
+
+        <div class="callout-grid">
+          <article class="callout">
+            <h3>Model Loading</h3>
+            <p>开发期通过 <code>wx.request</code> 走本地 HTTP server 读取模型；生产期需要替换为正式 OSS / CDN 托管，而不是继续依赖 localhost。</p>
+          </article>
+          <article class="callout">
+            <h3>Warmup</h3>
+            <p>真实 tensor warmup 可行；fake ImageData 在微信运行时里不可靠，因为缺少浏览器构造器语义。</p>
+          </article>
+        </div>
+
+        <div style="margin-top: 16px; border: 1px solid rgba(34,42,36,0.1);">
+<pre>const rgbaTensor = tf.tensor3d(frame.data, [H, W, 4]);
+const rgbTensor = tf.slice(rgbaTensor, [0, 0, 0], [H, W, 3]);
+rgbaTensor.dispose();
+await detector.estimatePoses(rgbTensor, { flipHorizontal: false });
+rgbTensor.dispose();</pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Dead Ends We Eliminated</h2>
+          <p class="section-note">这部分保留下来，是为了让后续人不要再重复走同样的路。</p>
+        </div>
+
+        <div class="dead-ends">
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 01</span>
+            <strong><code>wx.getFileSystemManager().readFile</code></strong>
+            Permission denied。代码包文件不能按这里假设的方式直接读出来喂给模型。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 02</span>
+            <strong><code>wx.request</code> local path</strong>
+            Invalid URL。<code>wx.request</code> 只接受 HTTP/HTTPS，不接受这种本地路径幻想。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 03</span>
+            <strong>TF Hub built-in URLs</strong>
+            302 跳转到 Kaggle，拿回来的不是原始 TFJS JSON，而是 HTML 页面。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 04</span>
+            <strong>Embedded base64 constants</strong>
+            11.8MB 体积直接撞上微信单包约束，不是一个可部署思路。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 05</span>
+            <strong>Dynamic <code>import()</code></strong>
+            uni-app mp-weixin 编译器把这条路降坏了，结果不是我们想要的代码分割模块。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 06</span>
+            <strong><code>fromPixels({ data: Uint8Array })</code></strong>
+            TFJS 在这里期待的是浏览器原生对象或不同像素打包形式，微信环境下不成立。
+          </article>
+          <article class="dead-end">
+            <span class="dead-end-index">Dead end 07</span>
+            <strong>Fake ImageData warmup</strong>
+            在没有真实 <code>ImageData</code> 构造器语义的运行时里，这条就是 plain object，最终会炸。
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Next Moves</h2>
+          <p class="section-note">下一步不该继续在这台没有 camera device 的 DevTools 上空转，而是补真正能推进结论的环境与动作。</p>
+        </div>
+
+        <div class="steps">
+          <article class="step">
+            <div class="step-no">1</div>
+            <div>
+              <h3 class="step-title">真机 camera E2E</h3>
+              <p class="step-copy">用带可用 camera device 的真机或合适调试环境，验证真实摄像头帧输入、推理、overlay 和端到端 FPS。</p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-no">2</div>
+            <div>
+              <h3 class="step-title">模型生产托管</h3>
+              <p class="step-copy">把模型文件迁移到正式 OSS / CDN，并设置缓存头；localhost 只适合开发 spike，不适合被当成部署方案。</p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-no">3</div>
+            <div>
+              <h3 class="step-title">帧率与预算调优</h3>
+              <p class="step-copy">围绕 40–50ms 的模型侧预算，评估 10fps 左右的输入节流、分辨率和 overlay 更新策略。</p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-no">4</div>
+            <div>
+              <h3 class="step-title">如果仍然太慢</h3>
+              <p class="step-copy">优先考虑更轻模型、更低输入分辨率、降帧率或非端侧方案。不要误把 Heavy 当成优化方向，它只会更慢。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        Generated from the WeChat BlazePose-Lite spike in sport-snack · conclusions reviewed to separate model-side evidence from live camera E2E claims.
+      </footer>
+    </div>
+  </main>
+</body>
+</html>

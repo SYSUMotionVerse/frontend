@@ -3,7 +3,7 @@ import FloatingDock from '../navigation/FloatingDock.vue'
 
 type DockTab = 'home' | 'playground' | 'growth'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   dockTab?: DockTab
   showDock?: boolean
 }>(), {
@@ -13,13 +13,23 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-  <view class="training-shell">
+  <view
+    class="training-shell"
+    :class="{
+      'training-shell--no-dock': !props.showDock
+    }"
+  >
     <view class="training-shell__halo training-shell__halo--coral" />
     <view class="training-shell__halo training-shell__halo--teal" />
-    <view class="training-shell__inner">
+    <view
+      class="training-shell__inner"
+      :class="{
+        'training-shell__inner--no-dock': !props.showDock
+      }"
+    >
       <slot />
     </view>
-    <FloatingDock v-if="showDock" :active-tab="dockTab" />
+    <FloatingDock v-if="props.showDock" :active-tab="props.dockTab" />
   </view>
 </template>
 
@@ -30,6 +40,10 @@ withDefaults(defineProps<{
   overflow: hidden;
   background: #FCF7F0;
   padding: 56rpx 32rpx 216rpx;
+}
+
+.training-shell--no-dock {
+  padding: 24rpx 0 0;
 }
 
 .training-shell__halo {
@@ -62,5 +76,12 @@ withDefaults(defineProps<{
   max-width: 840px;
   flex-direction: column;
   gap: 36rpx;
+}
+
+.training-shell__inner--no-dock {
+  height: calc(100vh - 24rpx);
+  max-width: none;
+  gap: 0;
+  overflow: hidden;
 }
 </style>
