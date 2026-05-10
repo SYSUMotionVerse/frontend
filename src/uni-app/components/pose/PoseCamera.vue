@@ -66,6 +66,8 @@ const props = defineProps<{
 const state = reactive({
   canvasW: 0,
   canvasH: 0,
+  canvasDisplayW: 0,
+  canvasDisplayH: 0,
   isActive: false,
   cameraError: '',
   frameCount: 0,
@@ -82,9 +84,11 @@ onMounted(async () => {
   // Overlay canvas is optional — only needed when BlazePose keypoints are rendered.
   // Wrap in try/catch so camera still works even when canvas is hidden (v-show=false).
   try {
-    const [{ node: canvasNode }] = await getNode<HTMLCanvasElement>('#pose-canvas', instance);
+    const [{ node: canvasNode, width, height }] = await getNode<HTMLCanvasElement>('#pose-canvas', instance);
     overlayCanvas = canvasNode as HTMLCanvasElement;
     canvasCtx = overlayCanvas.getContext('2d') as CanvasRenderingContext2D;
+    state.canvasDisplayW = width
+    state.canvasDisplayH = height
   } catch {
     // Canvas not available (e.g. visual-session uses showOverlay=false) — camera still works
     overlayCanvas = null;
@@ -137,13 +141,17 @@ function stopCamera() {
 
 /** Take a still photo from the camera — independent of the frame listener. */
 function takePhoto(): Promise<{ tempImagePath: string; width: number; height: number }> {
+  return takePhotoWithQuality('high')
+}
+
+function takePhotoWithQuality(quality: 'high' | 'normal' | 'low'): Promise<{ tempImagePath: string; width: number; height: number }> {
   return new Promise((resolve, reject) => {
     if (!cameraContext) {
       reject(new Error('cameraContext not ready'));
       return;
     }
     cameraContext.takePhoto({
-      quality: 'high',
+      quality,
       success: (res: any) => {
         wx.getImageInfo({
           src: res.tempImagePath,
@@ -154,6 +162,17 @@ function takePhoto(): Promise<{ tempImagePath: string; width: number; height: nu
       fail: (err: any) => reject(new Error(err?.errMsg ?? 'takePhoto failed')),
     });
   });
+}
+
+function setOverlayFrame(width: number, height: number) {
+  if (!overlayCanvas) return
+  overlayCanvas.width = width
+  overlayCanvas.height = height
+  state.canvasW = width
+  state.canvasH = height
+  if (canvasCtx) {
+    canvasCtx.clearRect(0, 0, width, height)
+  }
 }
 
 /** Start recording video. */
@@ -191,6 +210,8 @@ function drawFrame(frame: Frame) {
   overlayCanvas.height = frame.height;
   state.canvasW = frame.width;
   state.canvasH = frame.height;
+  state.canvasDisplayW = frame.width;
+  state.canvasDisplayH = frame.height;
   const imageData = canvasCtx.createImageData(frame.width, frame.height);
   imageData.data.set(frame.data);
   canvasCtx.putImageData(imageData, 0, 0);
@@ -225,7 +246,7 @@ function onCameraError(e: any) {
   props.onStatus?.({ type: 'cameraInitError', detail: e.detail?.errMsg ?? 'camera init failed' });
 }
 
-defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, startRecord, stopRecord });
+defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, startRecord, stopRecord, setOverlayFrame, takePhotoWithQuality });
 </script>
 
 <template>
@@ -245,7 +266,10 @@ defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, sta
       id="pose-canvas"
       class="overlay-canvas"
       type="2d"
-      :style="{ width: state.canvasW + 'px', height: state.canvasH + 'px' }"
+      :style="{
+        width: state.canvasDisplayW ? state.canvasDisplayW + 'px' : '100%',
+        height: state.canvasDisplayH ? state.canvasDisplayH + 'px' : '100%'
+      }"
     />
   </view>
 </template>
