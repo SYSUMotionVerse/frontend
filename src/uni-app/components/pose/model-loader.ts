@@ -2,8 +2,8 @@
  * model-loader — BlazePose IOHandler factory.
  *
  * Uses tf.io.fromMemory() to create IOHandlers that bypass the filesystem and
- * network entirely.  Model data (JSON topology + base64 weights) is embedded
- * in a dynamically-imported chunk (code-split away from the main bundle).
+ * network entirely. Model data (JSON topology + base64 weights) is embedded
+ * directly in the mini-program bundle.
  *
  * Pattern:
  *   const handler = await createModelHandler('detector');
@@ -15,34 +15,35 @@
  *   } as any);
  */
 import * as tf from '@tensorflow/tfjs-core';
+import {
+  DETECTOR_MODEL_JSON_CHUNKS,
+  DETECTOR_WEIGHT_BASE64_CHUNKS,
+  LANDMARK_LITE_MODEL_JSON_CHUNKS,
+  LANDMARK_LITE_WEIGHT_BASE64_CHUNKS,
+} from './model-data.gen'
 
 // ---------------------------------------------------------------------------
-// Types for the dynamically-imported model data
+// Types for the embedded model data
 // ---------------------------------------------------------------------------
-interface ModelData {
-  DETECTOR_MODEL_TOPOLOGY: tf.io.ModelArtifacts['modelTopology'];
-  DETECTOR_WEIGHT_BASE64: string;
-  LANDMARK_LITE_MODEL_TOPOLOGY: tf.io.ModelArtifacts['modelTopology'];
-  LANDMARK_LITE_WEIGHT_BASE64: string;
+type ModelData = {
+  DETECTOR_MODEL_JSON_CHUNKS: string[];
+  DETECTOR_WEIGHT_BASE64_CHUNKS: string[];
+  LANDMARK_LITE_MODEL_JSON_CHUNKS: string[];
+  LANDMARK_LITE_WEIGHT_BASE64_CHUNKS: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Cached model data (loaded once via dynamic import)
-// ---------------------------------------------------------------------------
-let modelData: ModelData | null = null;
+type ModelKind = 'detector' | 'landmark-lite'
 
-/**
- * Lazily load the embedded model data chunk.
- * The large base64 strings are code-split into a separate JS file that is
- * only loaded when the pose-spike page is accessed.
- */
-async function loadModelData(): Promise<ModelData> {
-  if (modelData) return modelData;
+const modelData: ModelData = {
+  DETECTOR_MODEL_JSON_CHUNKS,
+  DETECTOR_WEIGHT_BASE64_CHUNKS,
+  LANDMARK_LITE_MODEL_JSON_CHUNKS,
+  LANDMARK_LITE_WEIGHT_BASE64_CHUNKS,
+}
 
-  // Dynamic import — code-split point.  The 11.8 MB model-data.gen.ts becomes
-  // a separate JS chunk that vite/uni-app emits alongside the main bundle.
-  modelData = (await import('./model-data.gen')) as ModelData;
-  return modelData;
+const artifactLogState: Record<ModelKind, boolean> = {
+  detector: false,
+  'landmark-lite': false,
 }
 
 /**
@@ -51,32 +52,26 @@ async function loadModelData(): Promise<ModelData> {
  * embedded base64 data — no filesystem or network access needed.
  */
 export async function createDetectorHandler(): Promise<tf.io.IOHandler> {
-  const data = await loadModelData();
-  const weightData = base64ToArrayBuffer(data.DETECTOR_WEIGHT_BASE64);
-
-  return tf.io.fromMemory({
-    modelTopology: data.DETECTOR_MODEL_TOPOLOGY,
-    weightSpecs: extractWeightSpecs(
-      data.DETECTOR_MODEL_TOPOLOGY as any,
+  return tf.io.fromMemory(
+    toModelArtifacts(
+      'detector',
+      JSON.parse(modelData.DETECTOR_MODEL_JSON_CHUNKS.join('')),
+      modelData.DETECTOR_WEIGHT_BASE64_CHUNKS.join(''),
     ),
-    weightData,
-  });
+  )
 }
 
 /**
  * Create a tf.io.IOHandler for a BlazePose landmark-lite model.
  */
 export async function createLandmarkLiteHandler(): Promise<tf.io.IOHandler> {
-  const data = await loadModelData();
-  const weightData = base64ToArrayBuffer(data.LANDMARK_LITE_WEIGHT_BASE64);
-
-  return tf.io.fromMemory({
-    modelTopology: data.LANDMARK_LITE_MODEL_TOPOLOGY,
-    weightSpecs: extractWeightSpecs(
-      data.LANDMARK_LITE_MODEL_TOPOLOGY as any,
+  return tf.io.fromMemory(
+    toModelArtifacts(
+      'landmark-lite',
+      JSON.parse(modelData.LANDMARK_LITE_MODEL_JSON_CHUNKS.join('')),
+      modelData.LANDMARK_LITE_WEIGHT_BASE64_CHUNKS.join(''),
     ),
-    weightData,
-  });
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -85,37 +80,117 @@ export async function createLandmarkLiteHandler(): Promise<tf.io.IOHandler> {
 
 /** Decode a base64 string to ArrayBuffer. */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryStr = typeof atob === 'function' ? atob(base64) : '';
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
+  if (typeof atob !== 'function') {
+    return new ArrayBuffer(0)
   }
-  return bytes.buffer;
-}
 
-/**
- * Extract weight specs from model topology's weightsManifest.
- *
- * The weightsManifest is an array of groups.  Each group has:
- *   - paths: string[] — shard file names (not used for fromMemory)
- *   - weights: Array<{ name: string; shape: number[]; dtype: string }>
- *
- * fromMemory expects a flat list of { name, shape, dtype } entries in the
- * same order as the concatenated weight data.
- */
-function extractWeightSpecs(topology: any): tf.io.WeightsManifestEntry[] {
-  const manifest = topology?.weightsManifest;
-  if (!manifest || !Array.isArray(manifest)) return [];
+  // WeChat can truncate extremely large atob() calls, so decode in chunks.
+  const chunkChars = 32768
+  const bytes = new Uint8Array(Math.floor((base64.length * 3) / 4))
+  let byteOffset = 0
 
-  const specs: tf.io.WeightsManifestEntry[] = [];
-  for (const group of manifest) {
-    for (const w of group.weights ?? []) {
-      specs.push({
-        name: w.name as string,
-        shape: w.shape as number[],
-        dtype: w.dtype as any,
-      });
+  for (let offset = 0; offset < base64.length; offset += chunkChars) {
+    const binaryStr = atob(base64.slice(offset, offset + chunkChars))
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[byteOffset++] = binaryStr.charCodeAt(i)
     }
   }
-  return specs;
+
+  return bytes.buffer.slice(0, byteOffset)
+}
+
+function toModelArtifacts(
+  modelKind: ModelKind,
+  modelJson: tf.io.ModelJSON,
+  weightBase64: string,
+): tf.io.ModelArtifacts {
+  const weightSpecs = tf.io.getWeightSpecs(modelJson.weightsManifest)
+  validateWeightSpecs(modelKind, weightSpecs)
+
+  const artifacts = tf.io.getModelArtifactsForJSONSync(
+    modelJson,
+    weightSpecs,
+    base64ToArrayBuffer(weightBase64),
+  )
+
+  logModelArtifactsSummary(modelKind, modelJson, artifacts)
+
+  return artifacts
+}
+
+function validateWeightSpecs(
+  modelKind: ModelKind,
+  weightSpecs: tf.io.WeightsManifestEntry[],
+): void {
+  if (!weightSpecs.length) {
+    throw new Error(`[pose] ${modelKind} model has no weight specs`)
+  }
+
+  for (const spec of weightSpecs) {
+    if (!spec?.name || !spec?.dtype || !Array.isArray(spec?.shape)) {
+      throw new Error(
+        `[pose] ${modelKind} weight spec is malformed: ${JSON.stringify({
+          name: spec?.name,
+          dtype: spec?.dtype,
+          shape: spec?.shape,
+          quantization: spec?.quantization,
+        })}`,
+      )
+    }
+  }
+}
+
+function logModelArtifactsSummary(
+  modelKind: ModelKind,
+  modelJson: tf.io.ModelJSON,
+  artifacts: tf.io.ModelArtifacts,
+): void {
+  if (artifactLogState[modelKind]) {
+    return
+  }
+
+  artifactLogState[modelKind] = true
+
+  const specs = artifacts.weightSpecs ?? []
+  const firstSpec = specs[0]
+  const lastSpec = specs[specs.length - 1]
+
+  try {
+    console.info('[pose] model artifacts ready', {
+      modelKind,
+      jsonKeys: Object.keys(modelJson),
+      weightSpecCount: specs.length,
+      firstWeight: firstSpec
+        ? {
+            name: firstSpec.name,
+            dtype: firstSpec.dtype,
+            shape: firstSpec.shape,
+            quantization: firstSpec.quantization,
+          }
+        : null,
+      lastWeight: lastSpec
+        ? {
+            name: lastSpec.name,
+            dtype: lastSpec.dtype,
+            shape: lastSpec.shape,
+            quantization: lastSpec.quantization,
+          }
+        : null,
+      weightDataBytes: getWeightDataBytes(artifacts.weightData),
+    })
+  } catch {
+    // Logging must never block model loading in constrained runtimes.
+  }
+}
+
+function getWeightDataBytes(weightData: tf.io.WeightData | undefined): number {
+  if (!weightData) {
+    return 0
+  }
+
+  if (Array.isArray(weightData)) {
+    return weightData.reduce((total, buffer) => total + buffer.byteLength, 0)
+  }
+
+  return weightData.byteLength
 }
