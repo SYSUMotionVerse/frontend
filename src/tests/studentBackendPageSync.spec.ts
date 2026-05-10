@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 
 const store = {
   completeProfile: vi.fn(),
@@ -101,6 +102,20 @@ vi.mock('../uni-app/composables/useStudentStore', () => ({
 
 vi.mock('../uni-app/api/studentBackend', () => ({
   studentBackendSync
+}))
+
+vi.mock('../uni-app/components/pose/PoseDetectionView.vue', () => ({
+  default: defineComponent({
+    setup(_props, { expose }) {
+      expose({
+        startDetect() {},
+        startRecord: async () => undefined,
+        stopRecord: async () => ''
+      })
+
+      return () => h('div', { class: 'pose-detection-view-stub' })
+    }
+  })
 }))
 
 function currentUni() {

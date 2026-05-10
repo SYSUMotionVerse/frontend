@@ -29,6 +29,10 @@ const props = defineProps<{
   onStats: (stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) => void;
 }>();
 
+const SAMPLING_FALLBACK_INTERVAL_MS = 600
+const SAMPLING_FALLBACK_MAX_SIDE = 256
+const SAMPLING_FALLBACK_CAPTURE_QUALITY: 'low' = 'low'
+
 const poseCamera = ref<any>(null);
 let detector: PoseDetector | null = null;
 
@@ -40,6 +44,7 @@ const cameraError = ref('');
 const firstFrameReceived = ref(false);
 const firstPoseEstimated = ref(false);
 const showOverlay = computed(() => firstFrameReceived.value || firstPoseEstimated.value);
+const overlayEnabled = computed(() => showOverlay.value && !usingSamplingFallback)
 
 // Single-shot analysis
 const analyzing = ref(false);
@@ -47,6 +52,7 @@ const countdown = ref(0);
 const analyzeMs = ref(0);
 const analyzeKeypoints = ref<any[]>([]);
 const analyzeKeypointCount = computed(() => analyzeKeypoints.value.length);
+const isDebugMode = computed(() => props.mode === 'debug');
 
 // Runtime stats (non-reactive internal counters)
 let loadMs = 0;
@@ -55,6 +61,9 @@ let inferMs = 0;
 let frameCount = 0;
 let lastFrameTime = 0;
 let fps = 0;
+let liveInferenceInFlight = false;
+let samplingFallbackTimer: ReturnType<typeof setInterval> | null = null
+let usingSamplingFallback = false
 
 // ───────────────────────────────────────────
 //  Detector lifecycle
@@ -90,6 +99,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  stopSamplingFallback()
   detector = null;
   poseCamera.value?.stopCamera();
 });
@@ -147,47 +157,151 @@ async function inferFromCanvas(
   return { poses, inferMs: ms };
 }
 
+function scaleFrameSize(width: number, height: number, maxSide: number) {
+  const longestSide = Math.max(width, height)
+  if (!longestSide || longestSide <= maxSide) {
+    return { width, height }
+  }
+
+  const scale = maxSide / longestSide
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  }
+}
+
+async function runPhotoInference() {
+  if (!detector || !poseCamera.value) return
+
+  const photo = await poseCamera.value.takePhotoWithQuality?.(SAMPLING_FALLBACK_CAPTURE_QUALITY)
+    ?? await poseCamera.value.takePhoto()
+  if (!photo.width || !photo.height) {
+    return
+  }
+
+  const scaled = scaleFrameSize(photo.width, photo.height, SAMPLING_FALLBACK_MAX_SIDE)
+  const offCanvas = wx.createOffscreenCanvas({ type: '2d', width: scaled.width, height: scaled.height })
+  const offCtx = offCanvas.getContext('2d') as CanvasRenderingContext2D
+  const img = offCanvas.createImage()
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = (err: any) => reject(new Error(err?.errMsg ?? 'photo decode failed'))
+    img.src = photo.tempImagePath
+  })
+
+  offCtx.drawImage(img as any, 0, 0, scaled.width, scaled.height)
+  const { poses, inferMs: sampleInferMs } = await inferFromCanvas(offCanvas, scaled.width, scaled.height)
+  inferMs = sampleInferMs
+  if (!usingSamplingFallback && poses.length > 0 && poses[0].keypoints) {
+    poseCamera.value.setOverlayFrame?.(scaled.width, scaled.height)
+    firstFrameReceived.value = true
+    firstPoseEstimated.value = true
+    poseCamera.value.drawKeypoints(poses[0].keypoints)
+  }
+
+  if (poses.length > 0 && poses[0].keypoints) {
+    props.onResult({ pose: poses[0], inferMs, ts: new Date() })
+  }
+}
+
+function startSamplingFallback(reason?: string) {
+  if (samplingFallbackTimer || usingSamplingFallback) {
+    return
+  }
+
+  usingSamplingFallback = true
+  console.warn('[pose] realtime camera frames unavailable, switching to sampled inference', reason ?? '')
+
+  samplingFallbackTimer = setInterval(() => {
+    void sampleFallbackFrame()
+  }, SAMPLING_FALLBACK_INTERVAL_MS)
+
+  emitStats('sampling-fallback')
+}
+
+function stopSamplingFallback() {
+  if (samplingFallbackTimer) {
+    clearInterval(samplingFallbackTimer)
+    samplingFallbackTimer = null
+  }
+
+  usingSamplingFallback = false
+}
+
+async function sampleFallbackFrame() {
+  if (analyzing.value || liveInferenceInFlight || !detector || !poseCamera.value) {
+    return
+  }
+
+  liveInferenceInFlight = true
+  const startedAt = Date.now()
+
+  try {
+    await runPhotoInference()
+
+    frameCount++
+    if (lastFrameTime === 0) lastFrameTime = startedAt
+    const elapsed = startedAt - lastFrameTime
+    if (elapsed >= 1000) {
+      fps = Math.round((frameCount * 1000) / elapsed)
+      frameCount = 0
+      lastFrameTime = startedAt
+    }
+
+    emitStats('sampling')
+  } catch (err: any) {
+    console.warn('[pose] sampled inference failed:', err?.message ?? err)
+  } finally {
+    liveInferenceInFlight = false
+  }
+}
+
 // ───────────────────────────────────────────
 //  Camera frame pump (live listener path)
 // ───────────────────────────────────────────
 
 /** Called by PoseCamera for every camera frame (throttled to ~10 fps). */
 async function onFrame(frame: Frame) {
-  if (!detector) return;
+  if (!detector || liveInferenceInFlight) return;
+  liveInferenceInFlight = true;
   const t = Date.now();
+  try {
+    // RGBA → RGB tensor (manual extraction, no tf.slice)
+    const data = frame.data;
+    const pxCount = (data.length / 4) | 0;
+    const rgb = new Uint8Array(pxCount * 3);
+    for (let i = 0, j = 0; i < data.length; i += 4) {
+      rgb[j++] = data[i];
+      rgb[j++] = data[i + 1];
+      rgb[j++] = data[i + 2];
+    }
+    const rgbTensor = tf.tensor3d(rgb, [frame.height, frame.width, 3]);
 
-  // RGBA → RGB tensor (manual extraction, no tf.slice)
-  const data = frame.data;
-  const pxCount = (data.length / 4) | 0;
-  const rgb = new Uint8Array(pxCount * 3);
-  for (let i = 0, j = 0; i < data.length; i += 4) {
-    rgb[j++] = data[i];
-    rgb[j++] = data[i + 1];
-    rgb[j++] = data[i + 2];
+    const poses = await detector.estimatePoses(rgbTensor, { flipHorizontal: false });
+    rgbTensor.dispose();
+    inferMs = Date.now() - t;
+
+    // Rolling FPS
+    frameCount++;
+    if (lastFrameTime === 0) lastFrameTime = t;
+    const elapsed = t - lastFrameTime;
+    if (elapsed >= 1000) {
+      fps = Math.round((frameCount * 1000) / elapsed);
+      frameCount = 0;
+      lastFrameTime = t;
+    }
+
+    if (poses && poses.length > 0) {
+      if (!firstPoseEstimated.value) firstPoseEstimated.value = true;
+      poseCamera.value?.drawFrame(frame);
+      poseCamera.value?.drawKeypoints(poses[0].keypoints);
+      props.onResult({ pose: poses[0], inferMs, ts: new Date() });
+    }
+    emitStats('detecting');
+  } finally {
+    liveInferenceInFlight = false;
   }
-  const rgbTensor = tf.tensor3d(rgb, [frame.height, frame.width, 3]);
-
-  const poses = await detector.estimatePoses(rgbTensor, { flipHorizontal: false });
-  rgbTensor.dispose();
-  inferMs = Date.now() - t;
-
-  // Rolling FPS
-  frameCount++;
-  if (lastFrameTime === 0) lastFrameTime = t;
-  const elapsed = t - lastFrameTime;
-  if (elapsed >= 1000) {
-    fps = Math.round((frameCount * 1000) / elapsed);
-    frameCount = 0;
-    lastFrameTime = t;
-  }
-
-  if (poses && poses.length > 0) {
-    if (!firstPoseEstimated.value) firstPoseEstimated.value = true;
-    poseCamera.value?.drawFrame(frame);
-    poseCamera.value?.drawKeypoints(poses[0].keypoints);
-    props.onResult({ pose: poses[0], inferMs, ts: new Date() });
-  }
-  emitStats('detecting');
 }
 
 // ───────────────────────────────────────────
@@ -203,49 +317,9 @@ async function analyzeFrame() {
     await new Promise<void>(resolve => setTimeout(resolve, 1000));
     countdown.value = 0;
 
-    // Take photo
-    const photo = await poseCamera.value.takePhoto();
-
-    // Decode to offscreen canvas
-    const offCanvas = wx.createOffscreenCanvas({ type: '2d', width: photo.width, height: photo.height });
-    const offCtx = offCanvas.getContext('2d') as CanvasRenderingContext2D;
-    const img = offCanvas.createImage();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = (err: any) => reject(new Error(err?.errMsg ?? 'photo decode failed'));
-      img.src = photo.tempImagePath;
-    });
-    offCtx.drawImage(img as any, 0, 0, photo.width, photo.height);
-    const imageData = offCtx.getImageData(0, 0, photo.width, photo.height);
-
-    // Run inference
-    const { poses, inferMs: analyzeInferMs } = await inferFromCanvas(offCanvas, photo.width, photo.height);
-    analyzeMs.value = analyzeInferMs;
-
-    // Draw frame + keypoints
-    if (poses.length > 0 && poses[0].keypoints) {
-      const kps = poses[0].keypoints;
-      analyzeKeypoints.value = kps;
-      const frame: Frame = {
-        data: new Uint8Array(imageData.data.buffer),
-        width: photo.width,
-        height: photo.height,
-      };
-      poseCamera.value.drawFrame(frame);
-      poseCamera.value.drawKeypoints(kps);
-      firstFrameReceived.value = true;
-      firstPoseEstimated.value = true;
-      props.onResult({ pose: poses[0], inferMs: analyzeMs.value, ts: new Date() });
-    } else {
-      const frame: Frame = {
-        data: new Uint8Array(imageData.data.buffer),
-        width: photo.width,
-        height: photo.height,
-      };
-      poseCamera.value.drawFrame(frame);
-      firstFrameReceived.value = true;
-      analyzeKeypoints.value = [];
-    }
+    const before = Date.now()
+    await runPhotoInference()
+    analyzeMs.value = Date.now() - before
   } catch (err: any) {
     console.warn('[Analyze] failed:', err?.message ?? err);
   } finally {
@@ -265,8 +339,10 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
     case 'cameraInitError':
     case 'cameraFail':
       cameraError.value = evt.detail ?? '';
+      startSamplingFallback(evt.detail)
       break;
     case 'firstFrame':
+      stopSamplingFallback()
       firstFrameReceived.value = true;
       break;
   }
@@ -276,7 +352,12 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
 //  Controls
 // ───────────────────────────────────────────
 
-defineExpose({ startDetect: () => poseCamera.value?.startCamera(), stopDetect: () => poseCamera.value?.stopCamera() });
+defineExpose({
+  startDetect: () => poseCamera.value?.startCamera(),
+  stopDetect: () => poseCamera.value?.stopCamera(),
+  startRecord: () => poseCamera.value?.startRecord?.(),
+  stopRecord: () => poseCamera.value?.stopRecord?.()
+});
 </script>
 
 <template>
@@ -285,11 +366,11 @@ defineExpose({ startDetect: () => poseCamera.value?.startCamera(), stopDetect: (
     ref="poseCamera"
     :on-frame="onFrame"
     :on-status="onCameraStatus"
-    :show-overlay="showOverlay"
+    :show-overlay="overlayEnabled"
   />
 
   <!-- Analyze button — single-shot capture -->
-  <view v-if="cameraReady" class="analyze-bar">
+  <view v-if="cameraReady && props.mode === 'debug'" class="analyze-bar">
     <button class="analyze-btn" :disabled="analyzing" @click="analyzeFrame">
       {{ countdown > 0 ? '⏳ ' + countdown + 's...' : analyzing ? '⏳ Analyzing...' : '📸 Analyze' }}
     </button>

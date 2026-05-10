@@ -9,8 +9,10 @@ describe('PoseDetectionView analyze latency', () => {
       'utf8'
     )
 
-    expect(source).toMatch(/const\s+\{\s*poses,\s*inferMs:\s*analyzeInferMs\s*\}\s*=\s*await inferFromCanvas/)
-    expect(source).toMatch(/analyzeMs\.value\s*=\s*analyzeInferMs/)
+    expect(source).toContain('async function runPhotoInference()')
+    expect(source).toMatch(/const\s+\{\s*poses,\s*inferMs:\s*sampleInferMs\s*\}\s*=\s*await inferFromCanvas/)
+    expect(source).toContain('inferMs = sampleInferMs')
+    expect(source).toContain('await runPhotoInference()')
     expect(source).not.toContain('analyzeMs.value = inferMs')
   })
 })
