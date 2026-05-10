@@ -8,7 +8,8 @@ import { reportBackendSyncError } from '../../uni-app/api/reportBackendSyncError
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../uni-app/composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../uni-app/platform/camera'
-import PoseCamera from '../../uni-app/components/pose/PoseCamera.vue'
+import PoseDetectionView from '../../uni-app/components/pose/PoseDetectionView.vue'
+import type { DetectResult } from '../../uni-app/components/pose/PoseDetectModel'
 
 const store = useStudentStore()
 const modality = ref<TrainingModality>('wushu')
@@ -18,6 +19,8 @@ const recording = ref(false)
 const recordSeconds = ref(0)
 const recordedVideoPath = ref('')
 let recordTimer: ReturnType<typeof setInterval> | null = null
+const lastDetectResult = ref<DetectResult | null>(null)
+const livePoseFps = ref(0)
 
 const pageWidth = ref(375)
 const pageHeight = ref(667)
@@ -46,7 +49,7 @@ onLoad((query) => {
 
 onMounted(async () => {
   await nextTick()
-  poseCamera.value?.startCamera()
+  poseCamera.value?.startDetect?.()
 })
 
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
@@ -157,8 +160,14 @@ async function toggleRecord() {
   }
 }
 
-function onCameraStatus(_evt: { type: string; detail?: string }) {
-  // Reserved for future runtime state surfaces.
+function onPoseResult(result: DetectResult) {
+  lastDetectResult.value = result
+}
+
+function onPoseStats(stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) {
+  if (stats.fps > 0) {
+    livePoseFps.value = stats.fps
+  }
 }
 
 async function finishSession() {
@@ -258,12 +267,15 @@ function interruptSession() {
 
       <view class="session-stage-card" :style="{ height: cameraCardHeight + 'px' }">
         <view class="session-stage-card__video">
-          <PoseCamera
+          <PoseDetectionView
             ref="poseCamera"
-            :on-frame="() => {}"
-            :on-status="onCameraStatus"
-            :show-overlay="false"
+            :mode="'production'"
+            :on-result="onPoseResult"
+            :on-stats="onPoseStats"
           />
+          <view v-if="livePoseFps > 0" class="session-stage-card__pose-badge">
+            {{ livePoseFps }} FPS 实时识别
+          </view>
         </view>
         <view class="session-stage-card__wash" />
 
@@ -486,6 +498,20 @@ function interruptSession() {
   position: absolute;
   inset: 0;
   z-index: 0;
+}
+
+.session-stage-card__pose-badge {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  z-index: 4;
+  border-radius: 9999rpx;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 6rpx 14rpx;
+  color: #fff;
+  font-size: 20rpx;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
 }
 
 .session-stage-card__video .pose-camera,

@@ -8,7 +8,8 @@ import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../platform/camera'
-import PoseCamera from '../../components/pose/PoseCamera.vue'
+import PoseDetectionView from '../../components/pose/PoseDetectionView.vue'
+import type { DetectResult } from '../../components/pose/PoseDetectModel'
 
 const store = useStudentStore()
 const modality = ref<TrainingModality>('wushu')
@@ -19,7 +20,9 @@ const recording = ref(false)
 const recordSeconds = ref(0)
 const recordedVideoPath = ref('')
 let recordTimer: ReturnType<typeof setInterval> | null = null
-let cameraReady = false
+const lastDetectResult = ref<DetectResult | null>(null)
+const livePoseFps = ref(0)
+const poseFallbackSampling = ref(false)
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -30,7 +33,7 @@ onLoad((query) => {
 onMounted(async () => {
   await nextTick()
   // Activate the camera preview immediately on page mount
-  poseCamera.value?.startCamera()
+  poseCamera.value?.startDetect?.()
 })
 
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
@@ -64,9 +67,14 @@ async function toggleRecord() {
   }
 }
 
-function onCameraStatus(evt: { type: string; detail?: string }) {
-  if (evt.type === 'cameraReady') {
-    cameraReady = true
+function onPoseResult(result: DetectResult) {
+  lastDetectResult.value = result
+}
+
+function onPoseStats(stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) {
+  poseFallbackSampling.value = stats.status === 'sampling' || stats.status === 'sampling-fallback'
+  if (stats.fps > 0) {
+    livePoseFps.value = stats.fps
   }
 }
 
@@ -155,12 +163,15 @@ function interruptSession() {
       @interrupt="interruptSession"
     >
       <view class="mt-[28rpx] rounded-[40rpx] overflow-hidden h-[440rpx] bg-brand-teal/15 relative">
-        <PoseCamera
+        <PoseDetectionView
           ref="poseCamera"
-          :on-frame="() => {}"
-          :on-status="onCameraStatus"
-          :show-overlay="false"
+          :mode="'production'"
+          :on-result="onPoseResult"
+          :on-stats="onPoseStats"
         />
+        <view v-if="livePoseFps > 0 && !poseFallbackSampling" class="absolute left-[16rpx] top-[16rpx] rounded-full bg-black/45 px-[14rpx] py-[6rpx] text-[20rpx] text-white">
+          {{ livePoseFps }} FPS 实时识别
+        </view>
         <!-- Recording control overlay -->
         <view class="absolute inset-x-0 bottom-0 flex items-center justify-center p-[12rpx]"
           :class="recording ? 'bg-red-500/60' : 'bg-black/40'">
