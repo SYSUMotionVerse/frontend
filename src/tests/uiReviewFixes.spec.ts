@@ -223,7 +223,8 @@ describe('ui review fixes', () => {
     expect(trainingSelectPage).toContain('dock-tab="playground"')
     expect(growthIndexPage).toContain('dock-tab="growth"')
     expect(shortQuestionnairePage).toContain(':show-dock="false"')
-    expect(feedbackPage).toContain(':show-dock="false"')
+    expect(feedbackPage).toContain('UniAccessPageShell')
+    expect(feedbackPage).not.toContain('UniTrainingPageShell')
   })
 
   it('rebuilds the training home page as a quest and content feed', () => {

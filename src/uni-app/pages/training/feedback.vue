@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import SessionFeedbackCard from '../../../components/training/SessionFeedbackCard.vue'
-import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
+import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
@@ -52,7 +52,11 @@ function goGrowthCenter() {
 </script>
 
 <template>
-  <UniTrainingPageShell :show-dock="false">
+  <UniAccessPageShell
+    chip="T3"
+    title="训练反馈"
+    subtitle="本次训练质量评估已生成，请查看结果并继续成长任务。"
+  >
     <SessionFeedbackCard
       :modality-label="modalityLabel"
       :quality-score="session?.analysis.qualityScore ?? 0"
@@ -75,7 +79,7 @@ function goGrowthCenter() {
         <text>成长中心</text>
       </button>
     </view>
-  </UniTrainingPageShell>
+  </UniAccessPageShell>
 </template>
 
 <style scoped>
