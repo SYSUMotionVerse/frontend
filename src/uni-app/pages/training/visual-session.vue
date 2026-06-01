@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import VisualTrainingPanel from '../../../components/training/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../../domain/student/types'
 import { studentBackendSync } from '../../api/studentBackend'
+import { buildVisualPoseAnalysisPayload } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../platform/camera'
 import PoseDetectionView from '../../components/pose/PoseDetectionView.vue'
 import type { DetectResult } from '../../components/pose/PoseDetectModel'
+import type { PoseAngleFrame } from '../../components/pose/poseAnalysis'
 
 const store = useStudentStore()
 const modality = ref<TrainingModality>('wushu')
@@ -21,8 +23,11 @@ const recordSeconds = ref(0)
 const recordedVideoPath = ref('')
 let recordTimer: ReturnType<typeof setInterval> | null = null
 const lastDetectResult = ref<DetectResult | null>(null)
+const poseAngleFrames = ref<PoseAngleFrame[]>([])
 const livePoseFps = ref(0)
 const poseFallbackSampling = ref(false)
+const recognitionEnabled = ref(false)
+const recognitionFps = ref<5 | 10>(5)
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -30,15 +35,21 @@ onLoad((query) => {
   modality.value = nextModality === 'hiit' ? 'hiit' : 'wushu'
 })
 
-onMounted(async () => {
-  await nextTick()
-  // Activate the camera preview immediately on page mount
-  poseCamera.value?.startDetect?.()
-})
-
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
 
+function startRecognition(fps: 5 | 10) {
+  recognitionFps.value = fps
+  livePoseFps.value = 0
+  poseFallbackSampling.value = false
+  recognitionEnabled.value = true
+}
+
 async function toggleRecord() {
+  if (!recognitionEnabled.value || !poseCamera.value) {
+    console.warn('[Session] recognition is not started; recording is disabled.')
+    return
+  }
+
   if (recording.value) {
     // Stop recording
     recording.value = false
@@ -69,6 +80,9 @@ async function toggleRecord() {
 
 function onPoseResult(result: DetectResult) {
   lastDetectResult.value = result
+  if (result.angleFrame) {
+    poseAngleFrames.value.push(result.angleFrame)
+  }
 }
 
 function onPoseStats(stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) {
@@ -107,9 +121,11 @@ async function finishSession() {
   }
 
   try {
+    const poseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
     const result = await studentBackendSync.syncVisualSession({
       modality: syncModality,
-      durationSeconds
+      durationSeconds,
+      ...(poseAnalysis ? { poseAnalysis } : {})
     })
 
     if (result.synced && result.record) {
@@ -164,11 +180,28 @@ function interruptSession() {
     >
       <view class="mt-[28rpx] rounded-[40rpx] overflow-hidden h-[440rpx] bg-brand-teal/15 relative">
         <PoseDetectionView
+          v-if="recognitionEnabled"
+          :key="recognitionFps"
           ref="poseCamera"
           :mode="'production'"
+          :initial-fps="recognitionFps"
           :on-result="onPoseResult"
           :on-stats="onPoseStats"
         />
+        <camera
+          v-else
+          class="absolute inset-0 h-full w-full"
+          frame-size="small"
+          device-position="front"
+        />
+        <view v-if="!recognitionEnabled" class="absolute left-[16rpx] top-[16rpx] flex gap-[10rpx]">
+          <button class="rounded-full bg-white/90 px-[18rpx] py-[8rpx] text-[22rpx] font-800 text-slate-800" @click="startRecognition(5)">
+            启动 5fps 识别
+          </button>
+          <button class="rounded-full bg-white/90 px-[18rpx] py-[8rpx] text-[22rpx] font-800 text-slate-800" @click="startRecognition(10)">
+            启动 10fps 识别
+          </button>
+        </view>
         <view v-if="livePoseFps > 0 && !poseFallbackSampling" class="absolute left-[16rpx] top-[16rpx] rounded-full bg-black/45 px-[14rpx] py-[6rpx] text-[20rpx] text-white">
           {{ livePoseFps }} FPS 实时识别
         </view>
@@ -178,11 +211,12 @@ function interruptSession() {
           <button
             class="min-w-[160rpx] rounded-full border-none text-[24rpx] font-800 py-[8rpx] px-[24rpx] flex items-center justify-center gap-[8rpx]"
             :class="recording ? 'bg-red-500 text-white' : 'bg-white text-slate-800'"
+            :disabled="!recognitionEnabled"
             @click="toggleRecord"
           >
             <text v-if="recording" class="text-[28rpx]">⬤</text>
             <text v-else class="text-[28rpx]">●</text>
-            <text>{{ recording ? '停止 ' + recordSeconds + 's' : '开始录制' }}</text>
+            <text>{{ recording ? '停止 ' + recordSeconds + 's' : recognitionEnabled ? '开始录制' : '先启动识别' }}</text>
           </button>
         </view>
         <!-- Recorded indicator -->

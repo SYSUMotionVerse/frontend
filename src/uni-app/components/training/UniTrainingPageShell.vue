@@ -6,9 +6,11 @@ type DockTab = 'home' | 'playground' | 'growth'
 const props = withDefaults(defineProps<{
   dockTab?: DockTab
   showDock?: boolean
+  fitViewport?: boolean
 }>(), {
   dockTab: 'playground',
-  showDock: true
+  showDock: true,
+  fitViewport: false
 })
 </script>
 
@@ -16,7 +18,8 @@ const props = withDefaults(defineProps<{
   <view
     class="training-shell"
     :class="{
-      'training-shell--no-dock': !props.showDock
+      'training-shell--no-dock': !props.showDock,
+      'training-shell--fit-viewport': props.fitViewport
     }"
   >
     <view class="training-shell__halo training-shell__halo--coral" />
@@ -24,7 +27,8 @@ const props = withDefaults(defineProps<{
     <view
       class="training-shell__inner"
       :class="{
-        'training-shell__inner--no-dock': !props.showDock
+        'training-shell__inner--no-dock': !props.showDock,
+        'training-shell__inner--fit-viewport': props.fitViewport
       }"
     >
       <slot />
@@ -44,6 +48,11 @@ const props = withDefaults(defineProps<{
 
 .training-shell--no-dock {
   padding: 24rpx 0 0;
+}
+
+.training-shell--fit-viewport {
+  height: 100vh;
+  box-sizing: border-box;
 }
 
 .training-shell__halo {
@@ -76,6 +85,11 @@ const props = withDefaults(defineProps<{
   max-width: 840px;
   flex-direction: column;
   gap: 36rpx;
+}
+
+.training-shell__inner--fit-viewport {
+  height: 100%;
+  gap: 0;
 }
 
 .training-shell__inner--no-dock {

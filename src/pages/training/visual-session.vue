@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import type { TrainingModality } from '../../domain/student/types'
 import { createVisualSessionLayout } from '../../features/training/visualSessionLayout'
 import { studentBackendSync } from '../../uni-app/api/studentBackend'
+import { buildVisualPoseAnalysisPayload } from '../../uni-app/api/studentBackend'
 import { reportBackendSyncError } from '../../uni-app/api/reportBackendSyncError'
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../uni-app/composables/useStudentStore'
 import { createCameraSessionAnalysis } from '../../uni-app/platform/camera'
 import PoseDetectionView from '../../uni-app/components/pose/PoseDetectionView.vue'
 import type { DetectResult } from '../../uni-app/components/pose/PoseDetectModel'
+import type { PoseAngleFrame } from '../../uni-app/components/pose/poseAnalysis'
 
 const store = useStudentStore()
 const modality = ref<TrainingModality>('wushu')
@@ -20,7 +22,10 @@ const recordSeconds = ref(0)
 const recordedVideoPath = ref('')
 let recordTimer: ReturnType<typeof setInterval> | null = null
 const lastDetectResult = ref<DetectResult | null>(null)
+const poseAngleFrames = ref<PoseAngleFrame[]>([])
 const livePoseFps = ref(0)
+const recognitionEnabled = ref(false)
+const recognitionFps = ref<5 | 10>(5)
 
 const pageWidth = ref(375)
 const pageHeight = ref(667)
@@ -45,11 +50,6 @@ onLoad((query) => {
     pageWidth.value = 375
     pageHeight.value = 667
   }
-})
-
-onMounted(async () => {
-  await nextTick()
-  poseCamera.value?.startDetect?.()
 })
 
 const title = computed(() => (modality.value === 'hiit' ? 'HIIT 引导训练' : '武术引导训练'))
@@ -82,6 +82,12 @@ const guideCollapsedText = computed(() => (
 
 function toggleGuide() {
   guideCollapsed.value = !guideCollapsed.value
+}
+
+function startRecognition(fps: 5 | 10) {
+  recognitionFps.value = fps
+  livePoseFps.value = 0
+  recognitionEnabled.value = true
 }
 
 const timerDisplay = computed(() => {
@@ -132,6 +138,11 @@ function handleFloatChange(event: { detail?: { x?: number; y?: number } }) {
 }
 
 async function toggleRecord() {
+  if (!recognitionEnabled.value || !poseCamera.value) {
+    console.warn('[Session] recognition is not started; recording is disabled.')
+    return
+  }
+
   if (recording.value) {
     recording.value = false
     if (recordTimer) {
@@ -162,6 +173,9 @@ async function toggleRecord() {
 
 function onPoseResult(result: DetectResult) {
   lastDetectResult.value = result
+  if (result.angleFrame) {
+    poseAngleFrames.value.push(result.angleFrame)
+  }
 }
 
 function onPoseStats(stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) {
@@ -197,9 +211,11 @@ async function finishSession() {
   }
 
   try {
+    const poseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
     const result = await studentBackendSync.syncVisualSession({
       modality: syncModality,
-      durationSeconds
+      durationSeconds,
+      ...(poseAnalysis ? { poseAnalysis } : {})
     })
     if (result.synced && result.record) {
       resolvedAnalysis = {
@@ -268,11 +284,28 @@ function interruptSession() {
       <view class="session-stage-card" :style="{ height: cameraCardHeight + 'px' }">
         <view class="session-stage-card__video">
           <PoseDetectionView
+            v-if="recognitionEnabled"
+            :key="recognitionFps"
             ref="poseCamera"
             :mode="'production'"
+            :initial-fps="recognitionFps"
             :on-result="onPoseResult"
             :on-stats="onPoseStats"
           />
+          <camera
+            v-else
+            class="session-stage-card__raw-camera"
+            frame-size="small"
+            device-position="front"
+          />
+          <view v-if="!recognitionEnabled" class="session-stage-card__recognition-controls">
+            <button class="session-stage-card__recognition-button" @click="startRecognition(5)">
+              启动 5fps 识别
+            </button>
+            <button class="session-stage-card__recognition-button" @click="startRecognition(10)">
+              启动 10fps 识别
+            </button>
+          </view>
           <view v-if="livePoseFps > 0" class="session-stage-card__pose-badge">
             {{ livePoseFps }} FPS 实时识别
           </view>
@@ -340,7 +373,7 @@ function interruptSession() {
           <text class="session-dock__label">退出</text>
         </button>
 
-        <button class="session-dock__record-action" @click="toggleRecord">
+        <button class="session-dock__record-action" :disabled="!recognitionEnabled" @click="toggleRecord">
           <view
             class="session-dock__record-ring"
             :class="{
@@ -351,7 +384,7 @@ function interruptSession() {
             <view v-if="recording" class="session-dock__record-stop" />
             <view v-else class="session-dock__record-dot" />
           </view>
-          <text class="session-dock__record-label">{{ recording ? '录制中' : '开始录制' }}</text>
+          <text class="session-dock__record-label">{{ recording ? '录制中' : recognitionEnabled ? '开始录制' : '先启动识别' }}</text>
         </button>
 
         <button class="session-dock__side-action" @click="finishSession">
@@ -515,9 +548,34 @@ function interruptSession() {
 }
 
 .session-stage-card__video .pose-camera,
-.session-stage-card__video .camera-layer {
+.session-stage-card__video .camera-layer,
+.session-stage-card__raw-camera {
   width: 100% !important;
   height: 100% !important;
+}
+
+.session-stage-card__raw-camera {
+  display: block;
+}
+
+.session-stage-card__recognition-controls {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  z-index: 6;
+  display: flex;
+  gap: 10rpx;
+  max-width: calc(100% - 32rpx);
+}
+
+.session-stage-card__recognition-button {
+  border-radius: 9999rpx;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f3253;
+  font-size: 20rpx;
+  font-weight: 900;
+  line-height: 1.2;
+  padding: 8rpx 16rpx;
 }
 
 .session-stage-card__wash {
