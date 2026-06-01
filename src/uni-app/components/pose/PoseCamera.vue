@@ -12,7 +12,7 @@
  *   - CameraListener must be explicitly start()/stop() per-page lifecycle;
  *     it does NOT automatically stop on page exit.
  */
-import { getCurrentInstance, nextTick, onMounted, onUnmounted, reactive } from 'vue';
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, reactive } from 'vue';
 import type { Frame } from './PoseDetectModel';
 import { getNode } from './utils';
 
@@ -21,11 +21,11 @@ const instance = getCurrentInstance();
 // FrameAdapter — throttles camera frames to avoid flooding the detector.
 class FrameAdapter {
   private processCb?: (frame: Frame) => void;
-  private frameGap: number;
+  private getFrameGap: () => number;
   private lastProcessTime = 0;
 
-  constructor(frameGap = 3) {
-    this.frameGap = frameGap;
+  constructor(getFrameGap: () => number = () => 3) {
+    this.getFrameGap = getFrameGap;
   }
 
   onProcessFrame(cb: (frame: Frame) => void) {
@@ -49,7 +49,7 @@ class FrameAdapter {
     }
     // Throttle: only process every `frameGap` frames
     const elapsed = now - this.lastProcessTime;
-    const minGap = (1000 / 30) * this.frameGap; // ~100ms per frame at 3-gap
+    const minGap = (1000 / 30) * this.getFrameGap(); // ~100ms per frame at 3-gap
     if (elapsed >= minGap) {
       this.lastProcessTime = now;
       this.processCb(f);
@@ -61,6 +61,7 @@ const props = defineProps<{
   onFrame: (frame: Frame) => void;
   onStatus?: (evt: { type: string; detail?: string }) => void;
   showOverlay?: boolean;
+  targetFps?: number;
 }>();
 
 const state = reactive({
@@ -73,7 +74,9 @@ const state = reactive({
   frameCount: 0,
 });
 
-const frameAdapter = new FrameAdapter(3);
+const targetFps = computed(() => Math.max(1, Math.round(props.targetFps ?? 5)))
+const frameGap = computed(() => Math.max(1, Math.round(30 / targetFps.value)))
+const frameAdapter = new FrameAdapter(() => frameGap.value);
 let cameraContext: any = null;
 let cameraListener: any = null;
 let canvasCtx: CanvasRenderingContext2D | null = null;
@@ -251,10 +254,10 @@ defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, sta
 
 <template>
   <view class="pose-camera">
-    <!-- WeChat camera — frame-size="medium" keeps data at 480p max -->
+    <!-- WeChat camera — small frame keeps live recognition stable on iPhone preview. -->
     <camera
       class="camera-layer"
-      frame-size="medium"
+      frame-size="small"
       device-position="front"
       @initdone="onCameraInitDone"
       @error="onCameraError"

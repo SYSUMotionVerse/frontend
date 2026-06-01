@@ -20,11 +20,13 @@ import { BLAZEPOSE_MODEL_NAME, createBlazePoseModelConfig } from './PoseDetectMo
 import { setupWechatPlatform } from './wechat_platform';
 import { fetchFunc } from './fetch';
 import type { DetectResult, Frame } from './PoseDetectModel';
+import { buildPoseAngleFrame } from './poseAnalysis'
 import PoseCamera from './PoseCamera.vue';
 
 const props = defineProps<{
   /** Runtime mode: 'production' (default) for training page, 'debug' for spike diagnostics. */
   mode?: 'production' | 'debug';
+  initialFps?: 5 | 10;
   onResult: (result: DetectResult) => void;
   onStats: (stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) => void;
 }>();
@@ -39,6 +41,8 @@ let detector: PoseDetector | null = null;
 // Camera lifecycle state
 const cameraReady = ref(false);
 const cameraError = ref('');
+const detectorError = ref('');
+const cameraErrorBanner = computed(() => cameraError.value || detectorError.value);
 
 // Overlay canvas visibility — stays hidden until first frame or pose
 const firstFrameReceived = ref(false);
@@ -53,6 +57,7 @@ const analyzeMs = ref(0);
 const analyzeKeypoints = ref<any[]>([]);
 const analyzeKeypointCount = computed(() => analyzeKeypoints.value.length);
 const isDebugMode = computed(() => props.mode === 'debug');
+const samplingFps = ref<5 | 10>(props.initialFps ?? 5)
 
 // Runtime stats (non-reactive internal counters)
 let loadMs = 0;
@@ -62,6 +67,7 @@ let frameCount = 0;
 let lastFrameTime = 0;
 let fps = 0;
 let liveInferenceInFlight = false;
+let emittedFrameIndex = 0
 let samplingFallbackTimer: ReturnType<typeof setInterval> | null = null
 let usingSamplingFallback = false
 
@@ -72,30 +78,36 @@ let usingSamplingFallback = false
 onMounted(async () => {
   const t0 = Date.now();
 
-  // 1. Initialise TFJS + WeChat WebGL
-  const offscreenCanvas = wx.createOffscreenCanvas({
-    type: 'webgl',
-    width: 192,
-    height: 192,
-  });
-  setupWechatPlatform({ fetchFunc, tf, webgl, canvas: offscreenCanvas });
-  await tf.ready();
+  try {
+    // 1. Initialise TFJS + WeChat WebGL
+    const offscreenCanvas = wx.createOffscreenCanvas({
+      type: 'webgl',
+      width: 192,
+      height: 192,
+    });
+    setupWechatPlatform({ fetchFunc, tf, webgl, canvas: offscreenCanvas });
+    await tf.ready();
 
-  // 2. Load detector
-  const config = await createBlazePoseModelConfig();
-  detector = await createDetector(BLAZEPOSE_MODEL_NAME as any, config as any);
-  loadMs = Date.now() - t0;
+    // 2. Load detector
+    const config = await createBlazePoseModelConfig();
+    detector = await createDetector(BLAZEPOSE_MODEL_NAME as any, config as any);
+    loadMs = Date.now() - t0;
 
-  // 3. Warm-up — JIT-compile WebGL shaders
-  const t1 = Date.now();
-  const warmupTensor = tf.tensor3d(new Float32Array([0, 0, 0]), [1, 1, 3]);
-  await detector.estimatePoses(warmupTensor);
-  warmupTensor.dispose();
-  warmMs = Date.now() - t1;
+    // 3. Warm-up — JIT-compile WebGL shaders
+    const t1 = Date.now();
+    const warmupTensor = tf.tensor3d(new Float32Array([0, 0, 0]), [1, 1, 3]);
+    await detector.estimatePoses(warmupTensor);
+    warmupTensor.dispose();
+    warmMs = Date.now() - t1;
 
-  // 4. Start camera
-  poseCamera.value?.startCamera();
-  emitStats('ready');
+    // 4. Start camera
+    poseCamera.value?.startCamera();
+    emitStats('ready');
+  } catch (err: any) {
+    detectorError.value = err?.message ?? 'detector load failed';
+    console.warn('[pose] detector load failed:', detectorError.value);
+    emitStats('failed');
+  }
 });
 
 onUnmounted(() => {
@@ -201,7 +213,14 @@ async function runPhotoInference() {
   }
 
   if (poses.length > 0 && poses[0].keypoints) {
-    props.onResult({ pose: poses[0], inferMs, ts: new Date() })
+    const tsMs = Date.now()
+    props.onResult({
+      pose: poses[0],
+      inferMs,
+      tsMs,
+      frameIndex: emittedFrameIndex++,
+      angleFrame: buildPoseAngleFrame(poses[0], tsMs)
+    })
   }
 }
 
@@ -294,9 +313,16 @@ async function onFrame(frame: Frame) {
 
     if (poses && poses.length > 0) {
       if (!firstPoseEstimated.value) firstPoseEstimated.value = true;
-      poseCamera.value?.drawFrame(frame);
+      poseCamera.value?.setOverlayFrame(frame.width, frame.height);
       poseCamera.value?.drawKeypoints(poses[0].keypoints);
-      props.onResult({ pose: poses[0], inferMs, ts: new Date() });
+      const tsMs = Date.now()
+      props.onResult({
+        pose: poses[0],
+        inferMs,
+        tsMs,
+        frameIndex: emittedFrameIndex++,
+        angleFrame: buildPoseAngleFrame(poses[0], tsMs)
+      });
     }
     emitStats('detecting');
   } finally {
@@ -367,10 +393,15 @@ defineExpose({
     :on-frame="onFrame"
     :on-status="onCameraStatus"
     :show-overlay="overlayEnabled"
+    :target-fps="samplingFps"
   />
 
   <!-- Analyze button — single-shot capture -->
   <view v-if="cameraReady && props.mode === 'debug'" class="analyze-bar">
+    <view class="sampling-toggle">
+      <button class="sampling-toggle-btn" :class="{ active: samplingFps === 5 }" @click="samplingFps = 5">5 fps</button>
+      <button class="sampling-toggle-btn" :class="{ active: samplingFps === 10 }" @click="samplingFps = 10">10 fps</button>
+    </view>
     <button class="analyze-btn" :disabled="analyzing" @click="analyzeFrame">
       {{ countdown > 0 ? '⏳ ' + countdown + 's...' : analyzing ? '⏳ Analyzing...' : '📸 Analyze' }}
     </button>
@@ -381,7 +412,7 @@ defineExpose({
   </view>
 
   <!-- Error indicator -->
-  <view v-if="cameraError" class="camera-error">{{ cameraError }}</view>
+  <view v-if="cameraErrorBanner" class="camera-error">{{ cameraErrorBanner }}</view>
 </template>
 
 <script lang="ts">
@@ -402,6 +433,22 @@ export default {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+}
+.sampling-toggle {
+  display: flex;
+  gap: 6px;
+}
+.sampling-toggle-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+}
+.sampling-toggle-btn.active {
+  background: rgba(74, 222, 128, 0.85);
+  color: #000;
 }
 .analyze-btn {
   padding: 10px 24px;
