@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createInitialStudentState } from '../domain/student/state'
 
 describe('student growth summaries', () => {
@@ -63,6 +65,82 @@ describe('student growth summaries', () => {
       '势头建立者',
       '评估探索者'
     ])
+    expect(summary.sessionBadges).toEqual([
+      {
+        id: 'session-1-badge',
+        level: 'gold',
+        title: '动作稳定星',
+        description: '本次质量考评 86 分，动作控制和完成度都很稳定。',
+        scoreLabel: '86 分',
+        sessionDate: '2026-03-18',
+        modalityLabel: '武术训练',
+        svgName: 'stable-star',
+        shareTitle: '我在 Sport Snack 获得了「动作稳定星」',
+        sharePath: '/pages/training/feedback?sessionId=session-1'
+      }
+    ])
+  })
+
+  it('keeps the latest earned training badges visible in growth summaries', async () => {
+    const { buildGrowthSummary } = await loadGrowthModule()
+    const state = createInitialStudentState()
+    state.sessions = [
+      {
+        id: 'session-low',
+        modality: 'stair',
+        date: '2026-03-17',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 58,
+          summary: 'Slow down',
+          capturedBy: 'sensor'
+        }
+      },
+      {
+        id: 'session-top',
+        modality: 'hiit',
+        date: '2026-03-19',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 94,
+          summary: 'Great control',
+          capturedBy: 'camera'
+        }
+      }
+    ]
+
+    const summary = buildGrowthSummary(state)
+
+    expect(summary.sessionBadges.map(badge => badge.id)).toEqual([
+      'session-top-badge',
+      'session-low-badge'
+    ])
+    expect(summary.sessionBadges[0]).toMatchObject({
+      level: 'platinum',
+      title: '满格表现章',
+      scoreLabel: '94 分',
+      modalityLabel: 'HIIT 训练',
+      svgName: 'full-power',
+      shareTitle: '我在 Sport Snack 获得了「满格表现章」',
+      sharePath: '/pages/training/feedback?sessionId=session-top'
+    })
+  })
+
+  it('places shareable training badges directly after the adherence heatmap on the growth page', () => {
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/pages/growth/index.vue'),
+      'utf8'
+    )
+
+    expect(pageSource).toContain('SessionBadgeList')
+    expect(pageSource).toContain(':badges="summary.sessionBadges"')
+    expect(pageSource.indexOf('<AdherenceHeatmap')).toBeLessThan(pageSource.indexOf('<SessionBadgeList'))
   })
 
   it('returns an empty-state model when physical metrics are unavailable', async () => {

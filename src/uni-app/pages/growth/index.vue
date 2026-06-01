@@ -4,6 +4,7 @@ import AchievementBadgeList from '../../../components/growth/AchievementBadgeLis
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import GrowthSummaryCards from '../../../components/growth/GrowthSummaryCards.vue'
 import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPanel.vue'
+import SessionBadgeList from '../../../components/growth/SessionBadgeList.vue'
 import { buildGrowthSummary, resolvePhysicalMetricsState } from '../../../domain/student/growth'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
@@ -46,6 +47,7 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
         </button>
       </view>
       <AdherenceHeatmap :days="summary.adherenceCalendar" />
+      <SessionBadgeList :badges="summary.sessionBadges" />
     </view>
 
     <view class="growth-page__section growth-page__section-shell">

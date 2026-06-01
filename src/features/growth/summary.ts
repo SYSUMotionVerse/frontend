@@ -11,3 +11,4 @@ export type {
   GrowthSummaryModel,
   PhysicalMetricsState
 } from '../../domain/student/growth'
+export type { SessionBadge, SessionBadgeLevel, SessionBadgeSvgName } from '../../domain/student/sessionBadges'

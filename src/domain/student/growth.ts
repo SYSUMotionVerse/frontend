@@ -6,6 +6,7 @@ import type {
   SessionRecord,
   WeeklyAdherenceState
 } from './types'
+import { buildSessionBadges, type SessionBadge } from './sessionBadges'
 
 export interface GrowthSummaryCard {
   key: 'completed-sessions' | 'valid-checkins' | 'current-streak' | 'weekly-goal'
@@ -44,6 +45,7 @@ export interface GrowthSummaryModel {
   summaryCards: GrowthSummaryCard[]
   adherenceCalendar: GrowthCalendarDay[]
   achievements: GrowthAchievement[]
+  sessionBadges: SessionBadge[]
 }
 
 export type PhysicalMetricsState =
@@ -113,7 +115,8 @@ export function buildGrowthSummary(state: GrowthStateSource): GrowthSummaryModel
       }
     ],
     adherenceCalendar: buildAdherenceCalendar(completedSessions),
-    achievements: buildAchievements(completedCount, streak, latestAssessment)
+    achievements: buildAchievements(completedCount, streak, latestAssessment),
+    sessionBadges: buildSessionBadges(completedSessions)
   }
 }
 
