@@ -2,6 +2,7 @@ import type {
   AvatarUploadResult,
   BackendCurrentUser,
   BackendExerciseRecord,
+  BackendExerciseScoreTrendResponse,
   BackendExerciseType,
   BackendPhysicalTrendResponse,
   BackendPsychologyRecord,
@@ -404,6 +405,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         method: 'POST',
         data: payload
       })
+    },
+    getExerciseScoreTrend() {
+      return request<BackendExerciseScoreTrendResponse>('/exercises/records/score_trend/')
     },
     createStairsRecord(payload: StairsRecordCreatePayload) {
       return request('/exercises/stairs/', {

@@ -2,11 +2,13 @@ import type { PhysicalMetricTrend, TrainingModality } from '../../domain/student
 import { mapPsychologyRecordSummary } from './psychologyModels'
 import type {
   BackendExerciseRecord,
+  BackendExerciseScoreTrendResponse,
   BackendPhysicalTrendResponse,
   BackendPsychologyRecord,
   BackendStairRecord,
   GrowthAssessmentHistoryItem,
-  GrowthTrainingHistoryItem
+  GrowthTrainingHistoryItem,
+  GrowthVisualScoreTrendModel
 } from './studentBackendTypes'
 
 function toNumber(value: unknown) {
@@ -42,7 +44,8 @@ export function mapBackendTrainingHistory(
       modality: resolveExerciseModality(record),
       date: formatDate(record.created_at),
       summary: record.comment || record.video_info?.title || '已完成训练。',
-      qualityScore: Math.round(toNumber(record.score))
+      qualityScore: Math.round(toNumber(record.score)),
+      scoreDetails: record.scoreDetails ?? record.poseAnalysis?.scoreDetails ?? null
     }))
 
   const stairSessions = stairRecords.map(record => ({
@@ -60,6 +63,28 @@ export function mapBackendTrainingHistory(
     .sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))
     .map(({ createdAt: _createdAt, ...session }) => session)
+}
+
+export function mapBackendVisualScoreTrend(
+  response: BackendExerciseScoreTrendResponse
+): GrowthVisualScoreTrendModel {
+  return {
+    trend: response.trend.map(point => ({
+      recordId: point.recordId,
+      date: point.date,
+      overallScore: toNumber(point.overallScore)
+    })),
+    dimensions: response.dimensions.map(dimension => ({
+      key: dimension.key,
+      label: dimension.label,
+      values: dimension.values.map(value => toNumber(value))
+    })),
+    summary: {
+      sessionCount: response.summary.sessionCount,
+      latestOverallScore: toNumber(response.summary.latestOverallScore),
+      bestOverallScore: toNumber(response.summary.bestOverallScore)
+    }
+  }
 }
 
 export function mapBackendAssessmentHistory(

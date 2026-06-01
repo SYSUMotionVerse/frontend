@@ -3,6 +3,16 @@ import type { PhysicalMetricTrend } from '../../domain/student/types'
 
 export type BackendExerciseType = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'
 export type BackendQuestionType = 'SINGLE' | 'MULTIPLE' | 'TEXT'
+export type VisualPoseAngleName =
+  | 'left_elbow'
+  | 'right_elbow'
+  | 'left_shoulder'
+  | 'right_shoulder'
+  | 'left_hip'
+  | 'right_hip'
+  | 'left_knee'
+  | 'right_knee'
+  | 'torso_rotation'
 
 export interface UserUpdatePayload {
   name?: string
@@ -113,16 +123,47 @@ export interface LongQuestionnaireSyncInput {
   title: string
 }
 
+export interface VisualPoseAnalysisSequenceFrame {
+  frame_index: number
+  time: number
+  values: Array<number | null>
+}
+
+export interface VisualPoseAnalysisPayload {
+  schema_version: '0.1'
+  sequence_id: string
+  source: 'student'
+  fps: number
+  angle_unit: 'radian'
+  angle_names: VisualPoseAngleName[]
+  frames: VisualPoseAnalysisSequenceFrame[]
+}
+
 export interface VisualSessionSyncInput {
   modality: Exclude<TrainingModality, 'stair'>
   durationSeconds: number
+  poseAnalysis?: VisualPoseAnalysisPayload
+}
+
+export interface StairSessionSummary {
+  summaryText?: string
+  estimatedStepCount?: number
+  activeClimbSeconds?: number
+  cadenceSpmAvg?: number
+  cadenceSpmPeak?: number
+  cadenceStability?: number
+  estimatedVerticalSpeedMps?: number
+  estimatedFloorsPerMin?: number
+  pauseCount?: number
+  confidence?: number
+  calories?: number
 }
 
 export interface StairSessionSyncInput {
   durationSeconds: number
   completedIntervals: number
   qualityScore: number
-  summary: string
+  summary: string | StairSessionSummary
 }
 
 export interface ExerciseVideoSummary {
@@ -131,12 +172,41 @@ export interface ExerciseVideoSummary {
   exercise_type: BackendExerciseType
 }
 
+export interface ExerciseScoreDimension {
+  key: string
+  label: string
+  score: number
+}
+
+export interface ExerciseScoreRadarPoint {
+  key: string
+  label: string
+  score: number
+}
+
+export interface ExerciseScoreChartSnapshot {
+  radar?: ExerciseScoreRadarPoint[]
+}
+
+export interface ExerciseScoreDetails {
+  overallScore: number
+  summary: string
+  dimensions: ExerciseScoreDimension[]
+  highlights: string[]
+  warnings: string[]
+  chartSnapshot?: ExerciseScoreChartSnapshot
+}
+
 export interface BackendExerciseRecord {
   id: number
   video?: number
   duration: number
   score: number | string | null
   comment: string
+  poseAnalysis?: VisualPoseAnalysisPayload & {
+    scoreDetails?: ExerciseScoreDetails
+  }
+  scoreDetails?: ExerciseScoreDetails | null
   status?: string
   created_at: string
   video_info?: {
@@ -175,9 +245,32 @@ export interface BackendPhysicalTrendResponse {
   total_tests: number
 }
 
+export interface BackendExerciseScoreTrendPoint {
+  recordId: number
+  date: string
+  overallScore: number
+}
+
+export interface BackendExerciseScoreTrendDimension {
+  key: string
+  label: string
+  values: number[]
+}
+
+export interface BackendExerciseScoreTrendResponse {
+  trend: BackendExerciseScoreTrendPoint[]
+  dimensions: BackendExerciseScoreTrendDimension[]
+  summary: {
+    sessionCount: number
+    latestOverallScore: number
+    bestOverallScore: number
+  }
+}
+
 export interface ExerciseRecordCreatePayload {
   video: number
   duration: number
+  poseAnalysis?: VisualPoseAnalysisPayload
 }
 
 export interface StairsRecordCreatePayload {
@@ -210,6 +303,13 @@ export interface GrowthTrainingHistoryItem {
   date: string
   summary: string
   qualityScore: number
+  scoreDetails?: ExerciseScoreDetails | null
+}
+
+export interface GrowthVisualScoreTrendModel {
+  trend: BackendExerciseScoreTrendPoint[]
+  dimensions: BackendExerciseScoreTrendDimension[]
+  summary: BackendExerciseScoreTrendResponse['summary']
 }
 
 export interface GrowthAssessmentHistoryItem {
@@ -232,6 +332,7 @@ export interface StudentBackendSyncDependencies {
   createSurveyRecord: (payload: SurveyRecordCreatePayload) => Promise<unknown>
   listExerciseVideos: (exerciseType: BackendExerciseType) => Promise<ExerciseVideoSummary[]>
   createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<BackendExerciseRecord>
+  getExerciseScoreTrend: () => Promise<BackendExerciseScoreTrendResponse>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>
   listPsychologyScales: () => Promise<BackendPsychologyScale[]>
   getNextPsychologyScale: () => Promise<BackendPsychologyScale | { message: string }>

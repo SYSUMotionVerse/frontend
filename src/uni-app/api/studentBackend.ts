@@ -13,6 +13,7 @@ import {
   mapBackendPhysicalMetrics,
   mapBackendTrainingHistory
 } from './growthBackendModels'
+import { DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD, type PoseAngleFrame } from '../components/pose/poseAnalysis'
 import type {
   AvatarUploadResult,
   BackendCurrentUser,
@@ -23,13 +24,15 @@ import type {
   LongQuestionnaireSyncInput,
   ProfileAvatarSyncResult,
   RegistrationSyncInput,
+  StairSessionSummary,
   StairSessionSyncInput,
   StairsRecordCreatePayload,
   StudentBackendSyncDependencies,
   SurveyRecordCreatePayload,
   UserUpdatePayload,
   VisualSessionSyncResult,
-  VisualSessionSyncInput
+  VisualSessionSyncInput,
+  VisualPoseAnalysisPayload
 } from './studentBackendTypes'
 
 type StartupTargetPage = 'register' | 'baselineQuestionnaire' | 'home'
@@ -62,6 +65,30 @@ function omitUndefined<T extends Record<string, unknown>>(value: T) {
     Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
   ) as T
 }
+
+const visualPoseAngleNames = [
+  'left_elbow',
+  'right_elbow',
+  'left_shoulder',
+  'right_shoulder',
+  'left_hip',
+  'right_hip',
+  'left_knee',
+  'right_knee',
+  'torso_rotation'
+] as const satisfies VisualPoseAnalysisPayload['angle_names']
+
+const poseAngleValueResolvers = [
+  (frame: PoseAngleFrame) => frame.angles.leftElbow ?? null,
+  (frame: PoseAngleFrame) => frame.angles.rightElbow ?? null,
+  (frame: PoseAngleFrame) => frame.angles.leftShoulder ?? null,
+  (frame: PoseAngleFrame) => frame.angles.rightShoulder ?? null,
+  (frame: PoseAngleFrame) => frame.angles.leftHip ?? null,
+  (frame: PoseAngleFrame) => frame.angles.rightHip ?? null,
+  (frame: PoseAngleFrame) => frame.angles.leftKnee ?? null,
+  (frame: PoseAngleFrame) => frame.angles.rightKnee ?? null,
+  (frame: PoseAngleFrame) => frame.bodyRotationRad ?? null
+] as const
 
 function resolveGenderValue(gender: StudentProfile['gender']) {
   if (gender === '男') {
@@ -128,18 +155,78 @@ export function resolveBackendExerciseType(
   return modality === 'hiit' ? 'HIIT' : 'MARTIAL_ARTS'
 }
 
+function toFiniteNumberOrUndefined(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeStairSessionSummary(summary: StairSessionSyncInput['summary']): StairSessionSummary {
+  if (typeof summary === 'string') {
+    return {
+      summaryText: summary
+    }
+  }
+
+  return summary
+}
+
 export function buildStairsRecordPayload(input: StairSessionSyncInput): StairsRecordCreatePayload {
+  const summary = normalizeStairSessionSummary(input.summary)
+
   return {
     duration: input.durationSeconds,
-    speed_data: {
-      completedIntervals: input.completedIntervals
-    },
-    acceleration_data: {
+    speed_data: omitUndefined({
+      completedIntervals: input.completedIntervals,
+      activeClimbSeconds: toFiniteNumberOrUndefined(summary.activeClimbSeconds),
+      cadenceSpmAvg: toFiniteNumberOrUndefined(summary.cadenceSpmAvg),
+      cadenceSpmPeak: toFiniteNumberOrUndefined(summary.cadenceSpmPeak),
+      cadenceStability: toFiniteNumberOrUndefined(summary.cadenceStability),
+      estimatedVerticalSpeedMps: toFiniteNumberOrUndefined(summary.estimatedVerticalSpeedMps),
+      estimatedFloorsPerMin: toFiniteNumberOrUndefined(summary.estimatedFloorsPerMin),
+      pauseCount: toFiniteNumberOrUndefined(summary.pauseCount),
+      confidence: toFiniteNumberOrUndefined(summary.confidence)
+    }),
+    acceleration_data: omitUndefined({
       qualityScore: input.qualityScore,
-      summary: input.summary
-    },
-    steps_count: null,
-    calories: null
+      summaryText: summary.summaryText,
+      confidence: toFiniteNumberOrUndefined(summary.confidence),
+      cadenceStability: toFiniteNumberOrUndefined(summary.cadenceStability),
+      pauseCount: toFiniteNumberOrUndefined(summary.pauseCount)
+    }),
+    steps_count: toFiniteNumberOrUndefined(summary.estimatedStepCount) ?? null,
+    calories: toFiniteNumberOrUndefined(summary.calories) ?? null
+  }
+}
+
+export function buildVisualPoseAnalysisPayload(
+  angleFrames: Array<PoseAngleFrame | null | undefined>,
+  confidenceThreshold = DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD
+): VisualPoseAnalysisPayload | undefined {
+  const compactFrames = angleFrames.filter((frame): frame is PoseAngleFrame => frame != null)
+
+  if (compactFrames.length === 0) {
+    return undefined
+  }
+
+  const firstTsMs = compactFrames[0].tsMs
+  const lastTsMs = compactFrames[compactFrames.length - 1].tsMs
+  const elapsedMs = lastTsMs - firstTsMs
+  const fps =
+    compactFrames.length > 1 && elapsedMs > 0
+      ? Math.max(1, Math.round(((compactFrames.length - 1) * 1000) / elapsedMs))
+      : 10
+
+  return {
+    schema_version: '0.1',
+    sequence_id: `student_${firstTsMs}`,
+    source: 'student',
+    fps,
+    angle_unit: 'radian',
+    angle_names: [...visualPoseAngleNames],
+    frames: compactFrames.map((frame, index) => ({
+      frame_index: index,
+      time: Number(((frame.tsMs - firstTsMs) / 1000).toFixed(3)),
+      values: poseAngleValueResolvers.map(resolveValue => resolveValue(frame))
+    }))
   }
 }
 
@@ -465,7 +552,8 @@ export function createStudentBackendSync(
 
       const record = await dependencies.createExerciseRecord({
         video: video.id,
-        duration: input.durationSeconds
+        duration: input.durationSeconds,
+        ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {})
       })
 
       return {
