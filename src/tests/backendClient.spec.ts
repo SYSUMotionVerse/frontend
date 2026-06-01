@@ -206,6 +206,49 @@ describe('backend client session handling', () => {
     })
   })
 
+  it('loads visual score trend from the exercise records trend endpoint', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          trend: [
+            { recordId: 11, date: '2026-04-10', overallScore: 82.5 },
+            { recordId: 12, date: '2026-04-11', overallScore: 91 }
+          ],
+          dimensions: [
+            { key: 'stability', label: '稳定性', values: [84, 90] }
+          ],
+          summary: {
+            sessionCount: 2,
+            latestOverallScore: 91,
+            bestOverallScore: 91
+          }
+        }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    const trend = await client.getExerciseScoreTrend()
+
+    expect(trend).toEqual({
+      trend: [
+        { recordId: 11, date: '2026-04-10', overallScore: 82.5 },
+        { recordId: 12, date: '2026-04-11', overallScore: 91 }
+      ],
+      dimensions: [
+        { key: 'stability', label: '稳定性', values: [84, 90] }
+      ],
+      summary: {
+        sessionCount: 2,
+        latestOverallScore: 91,
+        bestOverallScore: 91
+      }
+    })
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe('http://api.example.com/exercises/records/score_trend/')
+  })
+
   it('normalizes relative avatar urls without relying on the URL constructor in mini-program runtimes', async () => {
     const originalUrl = (globalThis as { URL?: unknown }).URL
     ;(globalThis as { URL?: unknown }).URL = undefined

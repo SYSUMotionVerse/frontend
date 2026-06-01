@@ -276,13 +276,63 @@ describe('student backend sync orchestration', () => {
 
     const result = await sync.syncVisualSession({
       modality: 'wushu',
-      durationSeconds: 30
+      durationSeconds: 30,
+      poseAnalysis: {
+        schema_version: '0.1',
+        sequence_id: 'student_123',
+        source: 'student',
+        fps: 10,
+        angle_unit: 'radian',
+        angle_names: [
+          'left_elbow',
+          'right_elbow',
+          'left_shoulder',
+          'right_shoulder',
+          'left_hip',
+          'right_hip',
+          'left_knee',
+          'right_knee',
+          'torso_rotation'
+        ],
+        frames: [
+          {
+            frame_index: 0,
+            time: 0,
+            values: [null, null, null, null, null, null, Math.PI / 2, null, 0.1]
+          }
+        ]
+      }
     })
 
     expect(listExerciseVideos).toHaveBeenCalledWith('MARTIAL_ARTS')
     expect(createExerciseRecord).toHaveBeenCalledWith({
       video: 9,
-      duration: 30
+      duration: 30,
+      poseAnalysis: {
+        schema_version: '0.1',
+        sequence_id: 'student_123',
+        source: 'student',
+        fps: 10,
+        angle_unit: 'radian',
+        angle_names: [
+          'left_elbow',
+          'right_elbow',
+          'left_shoulder',
+          'right_shoulder',
+          'left_hip',
+          'right_hip',
+          'left_knee',
+          'right_knee',
+          'torso_rotation'
+        ],
+        frames: [
+          {
+            frame_index: 0,
+            time: 0,
+            values: [null, null, null, null, null, null, Math.PI / 2, null, 0.1]
+          }
+        ]
+      }
     })
     expect(result).toEqual({
       synced: true,

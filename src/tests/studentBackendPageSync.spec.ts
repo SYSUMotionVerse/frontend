@@ -90,6 +90,14 @@ const studentBackendSync = {
   ])
 }
 
+const stairSensorCaptureSession = {
+  getSnapshot: vi.fn(),
+  stop: vi.fn()
+}
+
+const startStairSensorCapture = vi.fn()
+const notifyTrainingComplete = vi.fn()
+
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
   onShow: vi.fn(),
@@ -101,19 +109,95 @@ vi.mock('../uni-app/composables/useStudentStore', () => ({
 }))
 
 vi.mock('../uni-app/api/studentBackend', () => ({
-  studentBackendSync
+  studentBackendSync,
+  buildVisualPoseAnalysisPayload: (frames: unknown[]) => ({
+    schema_version: '0.1',
+    sequence_id: 'student_123',
+    source: 'student',
+    fps: 10,
+    angle_unit: 'radian',
+    angle_names: [
+      'left_elbow',
+      'right_elbow',
+      'left_shoulder',
+      'right_shoulder',
+      'left_hip',
+      'right_hip',
+      'left_knee',
+      'right_knee',
+      'torso_rotation'
+    ],
+    frames: (frames as Array<{ tsMs: number; angles: Record<string, number>; bodyRotationRad?: number }>).map(
+      (frame, index) => ({
+        frame_index: index,
+        time: 0,
+        values: [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          frame.angles.leftKnee ?? null,
+          null,
+          frame.bodyRotationRad ?? null
+        ]
+      })
+    )
+  })
+}))
+
+vi.mock('../uni-app/platform/sensors', async () => {
+  const actual = await vi.importActual<typeof import('../uni-app/platform/sensors')>('../uni-app/platform/sensors')
+
+  return {
+    ...actual,
+    startStairSensorCapture
+  }
+})
+
+vi.mock('../uni-app/platform/trainingFeedback', () => ({
+  notifyTrainingComplete
 }))
 
 vi.mock('../uni-app/components/pose/PoseDetectionView.vue', () => ({
   default: defineComponent({
-    setup(_props, { expose }) {
+    name: 'PoseDetectionView',
+    props: {
+      onResult: {
+        type: Function,
+        required: false
+      },
+      onStats: {
+        type: Function,
+        required: false
+      }
+    },
+    setup(props, { expose }) {
+      const emitPoseResult = () => props.onResult?.({
+        pose: {
+          keypoints: []
+        },
+        inferMs: 16,
+        tsMs: 123,
+        angleFrame: {
+          tsMs: 123,
+          angles: {
+            leftKnee: Math.PI / 2
+          },
+          bodyRotationRad: 0.25
+        }
+      })
+
       expose({
-        startDetect() {},
+        startDetect() {
+          emitPoseResult()
+        },
         startRecord: async () => undefined,
         stopRecord: async () => ''
       })
 
-      return () => h('div', { class: 'pose-detection-view-stub' })
+      return () => h('button', { class: 'pose-detection-view-stub', onClick: emitPoseResult }, 'pose')
     }
   })
 }))
@@ -141,6 +225,57 @@ describe('page-level backend sync wiring', () => {
       value.mockReset()
       value.mockResolvedValue({ synced: true })
     })
+
+    stairSensorCaptureSession.getSnapshot.mockReset()
+    stairSensorCaptureSession.stop.mockReset()
+    stairSensorCaptureSession.getSnapshot.mockReturnValue({
+      samples: [],
+      latestGyroscope: null,
+      analysis: {
+        qualityScore: 0,
+        summary: '等待采样',
+        capturedBy: 'sensor',
+        estimatedStepCount: 0,
+        activeClimbSeconds: 0,
+        cadenceSpmAvg: 0,
+        cadenceSpmPeak: 0,
+        cadenceStability: 0,
+        estimatedVerticalSpeedMps: 0,
+        estimatedFloorsPerMin: 0,
+        pauseCount: 0,
+        confidence: 0,
+        completedIntervals: 0,
+        durationSeconds: 0
+      }
+    })
+    stairSensorCaptureSession.stop.mockResolvedValue({
+      samples: [
+        {
+          timestampMs: 1000,
+          acceleration: { x: 13.4, y: 0, z: 0 }
+        }
+      ],
+      analysis: {
+        qualityScore: 88,
+        summary: '本次楼梯训练节奏稳定，全程几乎没有停顿，完成度较好。本次识别把握较高。',
+        capturedBy: 'sensor',
+        estimatedStepCount: 64,
+        activeClimbSeconds: 26.4,
+        cadenceSpmAvg: 128,
+        cadenceSpmPeak: 144,
+        cadenceStability: 0.84,
+        estimatedVerticalSpeedMps: 0.41,
+        estimatedFloorsPerMin: 2.73,
+        pauseCount: 0,
+        confidence: 0.88,
+        completedIntervals: 1,
+        durationSeconds: 30
+      }
+    })
+    startStairSensorCapture.mockReset()
+    startStairSensorCapture.mockResolvedValue(stairSensorCaptureSession)
+    notifyTrainingComplete.mockReset()
+    notifyTrainingComplete.mockResolvedValue(undefined)
 
     studentBackendSync.bootstrapAccess.mockResolvedValue({
       targetPageUrl: '/pages/training/home'
@@ -209,6 +344,16 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().reLaunch).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('连接失败')
     expect(wrapper.find('.retry-button').exists()).toBe(true)
+  })
+
+  it('does not expose a test-only visual session shortcut when startup backend bootstrap fails', async () => {
+    studentBackendSync.bootstrapAccess.mockRejectedValue(new Error('request:fail url not in domain list'))
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    const wrapper = mount(StartupPage)
+    await flushPromises()
+
+    expect(wrapper.find('.fps-test-button').exists()).toBe(false)
   })
 
   it('syncs registration before moving into the questionnaire flow', async () => {
@@ -354,18 +499,51 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            template: '<button class="complete-visual-session" @click="$emit(\'complete\')">complete</button>'
+            template: '<div><slot /><button class="complete-visual-session" @click="$emit(\'complete\')">complete</button></div>'
           }
         }
       }
     })
 
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === '启动 5fps 识别')!
+      .trigger('click')
+    await flushPromises()
+    await wrapper.get('.pose-detection-view-stub').trigger('click')
+    await flushPromises()
     await wrapper.get('.complete-visual-session').trigger('click')
     await flushPromises()
 
     expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith({
       modality: 'wushu',
-      durationSeconds: 30
+      durationSeconds: 30,
+      poseAnalysis: {
+        schema_version: '0.1',
+        sequence_id: 'student_123',
+        source: 'student',
+        fps: 10,
+        angle_unit: 'radian',
+        angle_names: [
+          'left_elbow',
+          'right_elbow',
+          'left_shoulder',
+          'right_shoulder',
+          'left_hip',
+          'right_hip',
+          'left_knee',
+          'right_knee',
+          'torso_rotation'
+        ],
+        frames: [
+          {
+            frame_index: 0,
+            time: 0,
+            values: [null, null, null, null, null, null, Math.PI / 2, null, 0.25]
+          }
+        ]
+      }
     })
     expect(store.completeTrainingSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -379,7 +557,7 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
-  it('syncs stair sessions using the measured duration before redirecting', async () => {
+  it('auto-completes stair sessions after 30 seconds and prevents duplicate starts before redirecting', async () => {
     vi.useFakeTimers()
 
     const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
@@ -393,24 +571,43 @@ describe('page-level backend sync wiring', () => {
             template: `
               <div>
                 <button class="start-stair-session" @click="$emit('start')">start</button>
-                <button class="complete-stair-session" @click="$emit('complete')">complete</button>
+                <button class="interrupt-stair-session" @click="$emit('interrupt')">interrupt</button>
+                <div class="cadence">{{ cadenceSpm }}</div>
+                <div class="sensor-status">{{ sensorStatus }}</div>
               </div>
-            `
+            `,
+            props: [
+              'cadenceSpm',
+              'sensorStatus'
+            ]
           }
         }
       }
     })
 
     await wrapper.get('.start-stair-session').trigger('click')
-    vi.advanceTimersByTime(3000)
-    await wrapper.get('.complete-stair-session').trigger('click')
+    await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
 
+    expect(startStairSensorCapture).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('0')
+
+    vi.advanceTimersByTime(30000)
+    await flushPromises()
+
+    expect(stairSensorCaptureSession.stop).toHaveBeenCalledTimes(1)
+    expect(notifyTrainingComplete).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        durationSeconds: 3
+        durationSeconds: 30,
+        summary: expect.objectContaining({
+          estimatedStepCount: 64,
+          cadenceSpmAvg: 128,
+          estimatedVerticalSpeedMps: 0.41
+        })
       })
     )
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
     expect(store.completeTrainingSession).toHaveBeenCalled()
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/short-questionnaire'

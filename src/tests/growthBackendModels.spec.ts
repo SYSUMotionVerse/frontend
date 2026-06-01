@@ -13,6 +13,22 @@ describe('growth backend read models', () => {
             duration: 30,
             score: 88.5,
             comment: '动作基本标准，注意细节。',
+            scoreDetails: {
+              overallScore: 88.5,
+              summary: '整体动作完成度较稳。',
+              dimensions: [
+                { key: 'stability', label: '稳定性', score: 89 },
+                { key: 'power', label: '发力', score: 86 }
+              ],
+              highlights: ['下盘稳定'],
+              warnings: ['发力峰值偏晚'],
+              chartSnapshot: {
+                radar: [
+                  { key: 'stability', label: '稳定性', score: 89 },
+                  { key: 'power', label: '发力', score: 86 }
+                ]
+              }
+            },
             status: 'COMPLETED',
             created_at: '2026-04-11T10:00:00Z',
             video_info: {
@@ -50,9 +66,61 @@ describe('growth backend read models', () => {
         modality: 'wushu',
         date: '2026-04-11',
         summary: '动作基本标准，注意细节。',
-        qualityScore: 89
+        qualityScore: 89,
+        scoreDetails: {
+          overallScore: 88.5,
+          summary: '整体动作完成度较稳。',
+          dimensions: [
+            { key: 'stability', label: '稳定性', score: 89 },
+            { key: 'power', label: '发力', score: 86 }
+          ],
+          highlights: ['下盘稳定'],
+          warnings: ['发力峰值偏晚'],
+          chartSnapshot: {
+            radar: [
+              { key: 'stability', label: '稳定性', score: 89 },
+              { key: 'power', label: '发力', score: 86 }
+            ]
+          }
+        }
       }
     ])
+  })
+
+  it('maps backend visual score trend data into chart models', async () => {
+    const { mapBackendVisualScoreTrend } = await import('../uni-app/api/growthBackendModels')
+
+    expect(
+      mapBackendVisualScoreTrend({
+        trend: [
+          { recordId: 11, date: '2026-04-10', overallScore: 82.5 },
+          { recordId: 12, date: '2026-04-11', overallScore: 91 }
+        ],
+        dimensions: [
+          { key: 'stability', label: '稳定性', values: [84, 90] },
+          { key: 'power', label: '发力', values: [79, 92] }
+        ],
+        summary: {
+          sessionCount: 2,
+          latestOverallScore: 91,
+          bestOverallScore: 91
+        }
+      })
+    ).toEqual({
+      trend: [
+        { recordId: 11, date: '2026-04-10', overallScore: 82.5 },
+        { recordId: 12, date: '2026-04-11', overallScore: 91 }
+      ],
+      dimensions: [
+        { key: 'stability', label: '稳定性', values: [84, 90] },
+        { key: 'power', label: '发力', values: [79, 92] }
+      ],
+      summary: {
+        sessionCount: 2,
+        latestOverallScore: 91,
+        bestOverallScore: 91
+      }
+    })
   })
 
   it('maps backend psychology records into growth assessment history entries', async () => {

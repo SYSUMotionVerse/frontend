@@ -162,6 +162,53 @@ describe('student backend API payload mapping', () => {
         durationSeconds: 28,
         completedIntervals: 1,
         qualityScore: 83,
+        summary: {
+          summaryText: '传感器采集很稳定。',
+          estimatedStepCount: 64,
+          activeClimbSeconds: 24.8,
+          cadenceSpmAvg: 128,
+          cadenceSpmPeak: 144,
+          cadenceStability: 0.82,
+          estimatedVerticalSpeedMps: 0.44,
+          estimatedFloorsPerMin: 3.1,
+          pauseCount: 1,
+          confidence: 0.87,
+          calories: 8.6
+        }
+      })
+    ).toEqual({
+      duration: 28,
+      speed_data: {
+        completedIntervals: 1,
+        activeClimbSeconds: 24.8,
+        cadenceSpmAvg: 128,
+        cadenceSpmPeak: 144,
+        cadenceStability: 0.82,
+        estimatedVerticalSpeedMps: 0.44,
+        estimatedFloorsPerMin: 3.1,
+        pauseCount: 1,
+        confidence: 0.87
+      },
+      acceleration_data: {
+        qualityScore: 83,
+        summaryText: '传感器采集很稳定。',
+        confidence: 0.87,
+        cadenceStability: 0.82,
+        pauseCount: 1
+      },
+      steps_count: 64,
+      calories: 8.6
+    })
+  })
+
+  it('keeps supporting string-based stair summaries as a backward-compatible payload fallback', async () => {
+    const { buildStairsRecordPayload } = await import('../uni-app/api/studentBackend')
+
+    expect(
+      buildStairsRecordPayload({
+        durationSeconds: 28,
+        completedIntervals: 1,
+        qualityScore: 83,
         summary: '传感器采集很稳定。'
       })
     ).toEqual({
@@ -171,10 +218,62 @@ describe('student backend API payload mapping', () => {
       },
       acceleration_data: {
         qualityScore: 83,
-        summary: '传感器采集很稳定。'
+        summaryText: '传感器采集很稳定。'
       },
       steps_count: null,
       calories: null
+    })
+  })
+
+  it('builds a compact visual pose analysis payload from filtered angle frames', async () => {
+    const { buildVisualPoseAnalysisPayload } = await import('../uni-app/api/studentBackend')
+
+    expect(
+      buildVisualPoseAnalysisPayload([
+        {
+          tsMs: 100,
+          angles: {
+            leftKnee: Math.PI / 2
+          },
+          bodyRotationRad: 0.2
+        },
+        null,
+        {
+          tsMs: 200,
+          angles: {
+            rightShoulder: Math.PI / 3
+          }
+        }
+      ])
+    ).toEqual({
+      schema_version: '0.1',
+      sequence_id: 'student_100',
+      source: 'student',
+      fps: 10,
+      angle_unit: 'radian',
+      angle_names: [
+        'left_elbow',
+        'right_elbow',
+        'left_shoulder',
+        'right_shoulder',
+        'left_hip',
+        'right_hip',
+        'left_knee',
+        'right_knee',
+        'torso_rotation'
+      ],
+      frames: [
+        {
+          frame_index: 0,
+          time: 0,
+          values: [null, null, null, null, null, null, Math.PI / 2, null, 0.2]
+        },
+        {
+          frame_index: 1,
+          time: 0.1,
+          values: [null, null, null, Math.PI / 3, null, null, null, null, null]
+        }
+      ]
     })
   })
 })
