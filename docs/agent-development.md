@@ -89,6 +89,36 @@ npx vue-tsc --noEmit
 - 若联调依赖微信开发者工具，说明“先跑 `pnpm dev`，再打开 `dist/build/mp-weixin`”。
 - 若无法完成真机链路，明确说明是否受限于 `touristappid` 或本地缺少微信开发者工具。
 
+## Tunnel 真机预览
+
+BlazePose 模型文件不要放在 `src/`，否则微信开发者工具预览会因为源码包过大失败。当前模型文件放在 `models/pose`，真机预览建议通过 Cloudflare Tunnel 暴露模型服务和后端 API。
+
+```bash
+pnpm pose:tunnel:start
+pnpm dev:tunnel
+```
+
+`pnpm pose:tunnel:start` 会：
+
+- 按需启动 `models/pose` 本地静态服务。
+- 给姿态模型服务创建一个 `trycloudflare.com` 地址。
+- 给本地后端 `http://127.0.0.1:8000` 创建一个 `trycloudflare.com` 地址。
+- 把运行状态写入 `.tmp/pose-model-tunnel.json`。
+
+`pnpm dev:tunnel` 会读取上面的状态，并自动注入：
+
+- `VITE_POSE_MODEL_BASE_URL`
+- `VITE_API_BASE_URL`
+
+常用管理命令：
+
+```bash
+pnpm pose:tunnel:status
+pnpm pose:tunnel:stop
+```
+
+微信开发者工具仍然导入 `dist/dev/mp-weixin` 或 `dist/build/mp-weixin`，不要导入仓库根目录。
+
 ## 推荐交付格式
 
 当 agent 完成任务时，建议在结果中至少覆盖：

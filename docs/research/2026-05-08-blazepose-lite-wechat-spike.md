@@ -40,7 +40,7 @@ The 224×224 `max=510ms` outlier skews its avg to 46.5ms; likely first-iteration
 
 ## Working solution
 
-**Model loading:** HTTP via `wx.request` (dev: `python3 -m http.server 8765 --directory src/static/models`). Prod would need OSS/CDN hosting.
+**Model loading:** HTTP via `wx.request` (dev: `pnpm serve:pose-models`, serving `models/pose`). Prod would need OSS/CDN hosting.
 
 **Frame input:** Convert `Uint8Array` RGBA camera frames to `tf.Tensor3D` and `tf.slice` to RGB:
 ```typescript
@@ -62,8 +62,7 @@ tf.tensor3d(new Float32Array([0, 0, 0]), [1, 1, 3])
 - `src/uni-app/components/pose/PoseDetectionView.vue` — tensor warmup, tensor frame input, synthetic benchmark
 - `src/uni-app/components/pose/fetch.ts` — WeChat wx.request polyfill for TFJS
 - `src/uni-app/components/pose/wechat_platform.ts` — WebGL platform setup
-- `src/uni-app/components/pose/model-loader.ts` — dead code (kept for reference, not imported)
-- `src/uni-app/components/pose/model-data.gen.ts` — dead code (kept for reference, not imported)
+- `models/pose/**` — local model files served over HTTP for real-device preview
 
 ## Next steps
 

@@ -78,6 +78,7 @@ npm-log/
 Thumbs.db
 
 # Temporary files
+.tmp/
 *.tmp
 *.temp
 *.bak

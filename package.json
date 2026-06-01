@@ -5,8 +5,14 @@
   "scripts": {
     "dev": "uni -p mp-weixin",
     "dev:mp-weixin": "uni -p mp-weixin",
+    "dev:tunnel": "node scripts/pose-model-tunnel.mjs dev",
     "build": "uni build -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
+    "build:mp-weixin-cf": "node scripts/pose-model-tunnel.mjs build",
+    "serve:pose-models": "python3 -m http.server 8765 --directory models/pose",
+    "pose:tunnel:start": "node scripts/pose-model-tunnel.mjs start",
+    "pose:tunnel:stop": "node scripts/pose-model-tunnel.mjs stop",
+    "pose:tunnel:status": "node scripts/pose-model-tunnel.mjs status",
     "test": "vitest run"
   },
   "dependencies": {
