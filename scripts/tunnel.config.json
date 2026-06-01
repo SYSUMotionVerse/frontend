@@ -1,0 +1,27 @@
+{
+  "stateFile": ".tmp/pose-model-tunnel.json",
+  "logDir": ".tmp",
+  "namedTunnel": {
+    "name": "sport-snack-dev-7q9x2m",
+    "id": "4b01c9b2-ae4d-430c-be20-25067253d837",
+    "configFile": ".tmp/cloudflared-sport-snack-dev-7q9x2m.yml",
+    "credentialsFile": "/Users/pi-dal/.cloudflared/4b01c9b2-ae4d-430c-be20-25067253d837.json"
+  },
+  "services": {
+    "poseModels": {
+      "label": "Pose model server",
+      "localUrl": "http://127.0.0.1:8765",
+      "startCommand": ["python3", "-m", "http.server", "8765", "--directory", "models/pose"],
+      "hostname": "pose-vault-7q9x2m.pi-dal.com",
+      "envName": "VITE_POSE_MODEL_BASE_URL"
+    },
+    "backendApi": {
+      "label": "Backend API server",
+      "localUrl": "http://127.0.0.1:8000",
+      "apiPath": "/api",
+      "hostname": "api-gateway-7q9x2m.pi-dal.com",
+      "originHostHeader": "127.0.0.1:8000",
+      "envName": "VITE_API_BASE_URL"
+    }
+  }
+}
