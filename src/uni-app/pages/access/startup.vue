@@ -73,6 +73,7 @@ async function bootstrapAndRoute() {
 function handleRetry() {
   void bootstrapAndRoute()
 }
+
 </script>
 
 <template>
