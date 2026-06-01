@@ -23,4 +23,45 @@ describe('PoseDetectionView sampling performance', () => {
     expect(cameraSource).toContain('takePhotoWithQuality')
     expect(cameraSource).toContain('setOverlayFrame')
   })
+
+  it('accepts a configurable target sampling fps for live camera throttling', () => {
+    const cameraSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      'utf8'
+    )
+
+    expect(cameraSource).toContain('targetFps?: number')
+    expect(cameraSource).toContain('const targetFps = computed(() => Math.max(1, Math.round(props.targetFps ?? 5)))')
+    expect(cameraSource).toContain('const frameGap = computed(() => Math.max(1, Math.round(30 / targetFps.value)))')
+    expect(cameraSource).toContain('new FrameAdapter(() => frameGap.value)')
+  })
+
+  it('defaults live recognition to the lower 5fps mode on mobile preview', () => {
+    const viewSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      'utf8'
+    )
+    const cameraSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      'utf8'
+    )
+
+    expect(viewSource).toContain('const samplingFps = ref<5 | 10>(props.initialFps ?? 5)')
+    expect(cameraSource).toContain('props.targetFps ?? 5')
+  })
+
+  it('uses small camera frames and avoids copying full frames into the overlay canvas during live inference', () => {
+    const viewSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      'utf8'
+    )
+    const cameraSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      'utf8'
+    )
+
+    expect(cameraSource).toContain('frame-size="small"')
+    expect(viewSource).not.toContain('drawFrame(frame)')
+    expect(viewSource).toContain('poseCamera.value?.setOverlayFrame(frame.width, frame.height)')
+  })
 })

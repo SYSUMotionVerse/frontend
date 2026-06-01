@@ -1,5 +1,8 @@
+import { describe, expect, it } from 'vitest'
+
 import { createInitialStudentState } from '../domain/student/state'
 import type { StudentAppState } from '../types/student'
+import { createSensorSessionAnalysis } from '../uni-app/platform/sensors'
 
 describe('student training and adherence flow', () => {
   async function loadTrainingModule() {
@@ -149,7 +152,6 @@ describe('student training and adherence flow', () => {
 
   it('records stair sessions through the sensor adapter after the timer flow', async () => {
     const { completeGuidedSession } = await loadTrainingModule()
-    const { createSensorSessionAnalysis } = await import('../uni-app/platform/sensors')
     const state = createInitialStudentState()
 
     const analysis = createSensorSessionAnalysis({
@@ -163,8 +165,13 @@ describe('student training and adherence flow', () => {
       capturedBy: analysis.capturedBy
     })
 
+    expect(analysis.capturedBy).toBe('sensor')
+    expect(analysis.completedIntervals).toBe(1)
+    expect(analysis.estimatedStepCount).toBeGreaterThanOrEqual(0)
+    expect(analysis.confidence).toBeGreaterThanOrEqual(0)
     expect(nextState.sessions[0]?.completed).toBe(true)
     expect(nextState.sessions[0]?.analysis.capturedBy).toBe('sensor')
+    expect(nextState.sessions[0]?.analysis.qualityScore).toBe(analysis.qualityScore)
   })
 
   it('maps reminder-entry queries through the reminder adapter', async () => {
