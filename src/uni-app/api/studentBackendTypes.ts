@@ -341,7 +341,54 @@ export interface StudentBackendSyncDependencies {
   listExerciseRecords: () => Promise<BackendExerciseRecord[]>
   listStairRecords: () => Promise<BackendStairRecord[]>
   getPhysicalTestTrend: () => Promise<BackendPhysicalTrendResponse>
+  getMyCompliance: () => Promise<BackendComplianceSummary>
+  getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
+  getComplianceTrend: (type: 'weekly' | 'monthly', count: number) => Promise<BackendComplianceTrend>
 }
 
 export type RegistrationSyncInput = StudentProfile
 export type GrowthPhysicalMetrics = PhysicalMetricTrend[]
+
+// ---------------------------------------------------------------------------
+// Compliance / Adherence types
+// ---------------------------------------------------------------------------
+
+export interface BackendComplianceSummary {
+  today_count: number
+  today_completed: boolean
+  total_training_days: number
+  completed_days: number
+  compliance_rate: number
+}
+
+export interface BackendComplianceCalendarDay {
+  date: string
+  day: number
+  weekday: number
+  training_count: number
+  is_completed: boolean
+}
+
+export interface BackendComplianceCalendar {
+  year: number
+  month: number
+  days: BackendComplianceCalendarDay[]
+  completed_days: number
+  total_training_count: number
+}
+
+export interface BackendComplianceTrendPoint {
+  period: string
+  label: string
+  start_date: string
+  end_date: string
+  training_days: number
+  total_count: number
+  completed_days: number
+  completion_rate: number
+}
+
+export interface BackendComplianceTrend {
+  type: 'weekly' | 'monthly'
+  trend: BackendComplianceTrendPoint[]
+}

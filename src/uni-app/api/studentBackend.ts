@@ -595,6 +595,42 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       const trend = await dependencies.getPhysicalTestTrend()
       return mapBackendPhysicalMetrics(trend)
+    },
+    async loadAdherenceData() {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      const now = new Date()
+      const [compliance, calendar, trend] = await Promise.all([
+        dependencies.getMyCompliance(),
+        dependencies.getComplianceCalendar(now.getFullYear(), now.getMonth() + 1),
+        dependencies.getComplianceTrend('weekly', 12)
+      ])
+
+      return {
+        todayCount: compliance.today_count,
+        todayCompleted: compliance.today_completed,
+        totalTrainingDays: compliance.total_training_days,
+        completedDays: compliance.completed_days,
+        complianceRate: compliance.compliance_rate,
+        calendar: calendar.days.map(d => ({
+          date: d.date,
+          day: d.day,
+          weekday: d.weekday,
+          trainingCount: d.training_count,
+          isCompleted: d.is_completed
+        })),
+        trend: trend.trend.map(t => ({
+          period: t.period,
+          label: t.label,
+          trainingDays: t.training_days,
+          totalCount: t.total_count,
+          completedDays: t.completed_days,
+          completionRate: t.completion_rate
+        }))
+      }
     }
   }
 }
