@@ -18,6 +18,7 @@ import type {
   BackendComplianceSummary,
   BackendComplianceCalendar,
   BackendComplianceTrend,
+  BackendTrainingProgress,
 } from './studentBackendTypes'
 
 type RequestMethod = NonNullable<UniApp.RequestOptions['method']> | 'PATCH'
@@ -462,6 +463,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       return request<BackendComplianceTrend>(
         `/exercises/compliance/trend/?type=weekly&weeks=${count}`
       )
+    },
+    getTrainingProgress() {
+      return request<BackendTrainingProgress>('/exercises/progress/today/')
     }
   }
 }

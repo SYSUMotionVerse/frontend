@@ -3,6 +3,7 @@ import { onBeforeUnmount, shallowRef } from 'vue'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
+import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { notifyTrainingComplete } from '../../platform/trainingFeedback'
@@ -15,6 +16,7 @@ import {
 import type { StairSessionSummary } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
+const trainingSessionId = createTrainingSessionId('stairs')
 let timerId: ReturnType<typeof setInterval> | null = null
 let captureSession: StairSensorCaptureSession | null = null
 const secondsLeft = shallowRef(30)
@@ -146,6 +148,7 @@ async function finishSession() {
 
   try {
     await studentBackendSync.syncStairSession({
+      sessionId: trainingSessionId,
       durationSeconds,
       completedIntervals,
       qualityScore: analysis.qualityScore,

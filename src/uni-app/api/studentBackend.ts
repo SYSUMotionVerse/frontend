@@ -34,6 +34,11 @@ import type {
   VisualSessionSyncInput,
   VisualPoseAnalysisPayload
 } from './studentBackendTypes'
+import {
+  createPendingTrainingSubmissionStore,
+  type PendingTrainingSubmission,
+  type PendingTrainingSubmissionStore
+} from '../platform/pendingTrainingSubmissions'
 
 type StartupTargetPage = 'register' | 'baselineQuestionnaire' | 'home'
 
@@ -49,6 +54,10 @@ type StudentBackendAccessDependencies = StudentBackendSyncDependencies & {
 type StudentBackendBootstrapAccessOptions = {
   resolveLocalProfile: () => StudentProfile
   hydrateAccessState: (input: StudentAccessHydrationInput) => void
+}
+
+type StudentBackendSubmissionOptions = {
+  pendingSubmissions: PendingTrainingSubmissionStore
 }
 
 export type BootstrapAccessResult = {
@@ -174,6 +183,7 @@ export function buildStairsRecordPayload(input: StairSessionSyncInput): StairsRe
 
   return {
     duration: input.durationSeconds,
+    training_session_id: input.sessionId,
     speed_data: omitUndefined({
       completedIntervals: input.completedIntervals,
       activeClimbSeconds: toFiniteNumberOrUndefined(summary.activeClimbSeconds),
@@ -242,6 +252,12 @@ function resolveDefaultBootstrapAccessOptions(): StudentBackendBootstrapAccessOp
     hydrateAccessState: input => {
       store.hydrateAccessState(input)
     }
+  }
+}
+
+function resolveDefaultSubmissionOptions(): StudentBackendSubmissionOptions {
+  return {
+    pendingSubmissions: createPendingTrainingSubmissionStore()
   }
 }
 
@@ -383,12 +399,50 @@ async function runIfEnabled(
 
 export function createStudentBackendSync(
   overrides: Partial<StudentBackendAccessDependencies> = {},
-  bootstrapAccessOverrides: Partial<StudentBackendBootstrapAccessOptions> = {}
+  bootstrapAccessOverrides: Partial<StudentBackendBootstrapAccessOptions> = {},
+  submissionOverrides: Partial<StudentBackendSubmissionOptions> = {}
 ) {
   const dependencies = {
     ...resolveDefaultDependencies(),
     ...overrides
   } satisfies StudentBackendAccessDependencies
+  const submissionOptions = {
+    ...resolveDefaultSubmissionOptions(),
+    ...submissionOverrides
+  } satisfies StudentBackendSubmissionOptions
+
+  async function submitPendingTrainingJob(
+    submission: Extract<PendingTrainingSubmission, { kind: 'visual' }>
+  ): Promise<BackendExerciseRecord>
+  async function submitPendingTrainingJob(
+    submission: PendingTrainingSubmission
+  ): Promise<unknown>
+  async function submitPendingTrainingJob(submission: PendingTrainingSubmission) {
+    await dependencies.ensureSession()
+    if (submission.kind === 'visual') {
+      const exerciseType = resolveBackendExerciseType(submission.modality)
+      const videos = await dependencies.listExerciseVideos(exerciseType)
+      const video = videos[0]
+      if (!video) {
+        throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+      }
+
+      return dependencies.createExerciseRecord({
+        video: video.id,
+        duration: submission.durationSeconds,
+        training_session_id: submission.sessionId,
+        ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {})
+      })
+    }
+
+    return dependencies.createStairsRecord(buildStairsRecordPayload({
+      sessionId: submission.sessionId,
+      durationSeconds: submission.durationSeconds,
+      completedIntervals: submission.completedIntervals,
+      qualityScore: submission.qualityScore,
+      summary: submission.summary
+    }))
+  }
 
   return {
     isEnabled: dependencies.isEnabled,
@@ -540,21 +594,17 @@ export function createStudentBackendSync(
         }
       }
 
-      await dependencies.ensureSession()
-
-      const exerciseType = resolveBackendExerciseType(input.modality)
-      const videos = await dependencies.listExerciseVideos(exerciseType)
-      const video = videos[0]
-
-      if (!video) {
-        throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+      const submission: PendingTrainingSubmission = {
+        kind: 'visual',
+        sessionId: input.sessionId,
+        modality: input.modality,
+        durationSeconds: input.durationSeconds,
+        ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
+        queuedAt: new Date().toISOString()
       }
-
-      const record = await dependencies.createExerciseRecord({
-        video: video.id,
-        duration: input.durationSeconds,
-        ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {})
-      })
+      submissionOptions.pendingSubmissions.save(submission)
+      const record = await submitPendingTrainingJob(submission)
+      submissionOptions.pendingSubmissions.remove(input.sessionId)
 
       return {
         synced: true,
@@ -562,10 +612,46 @@ export function createStudentBackendSync(
       }
     },
     async syncStairSession(input: StairSessionSyncInput) {
-      return runIfEnabled(dependencies.isEnabled(), async () => {
-        await dependencies.ensureSession()
-        await dependencies.createStairsRecord(buildStairsRecordPayload(input))
-      })
+      if (!dependencies.isEnabled()) {
+        return { synced: false, reason: 'disabled' } as const
+      }
+
+      const submission: PendingTrainingSubmission = {
+        kind: 'stairs',
+        sessionId: input.sessionId,
+        durationSeconds: input.durationSeconds,
+        completedIntervals: input.completedIntervals,
+        qualityScore: input.qualityScore,
+        summary: input.summary,
+        queuedAt: new Date().toISOString()
+      }
+      submissionOptions.pendingSubmissions.save(submission)
+      await submitPendingTrainingJob(submission)
+      submissionOptions.pendingSubmissions.remove(input.sessionId)
+      return { synced: true } as const
+    },
+    async retryPendingTrainingSubmissions() {
+      const submissions = submissionOptions.pendingSubmissions.list()
+      if (!dependencies.isEnabled() || submissions.length === 0) {
+        return { attempted: 0, succeeded: 0 }
+      }
+
+      await dependencies.ensureSession()
+      let succeeded = 0
+      for (const submission of submissions) {
+        try {
+          await submitPendingTrainingJob(submission)
+          submissionOptions.pendingSubmissions.remove(submission.sessionId)
+          succeeded += 1
+        } catch {
+          // Keep ambiguous or failed submissions durable for the next refresh.
+        }
+      }
+
+      return {
+        attempted: submissions.length,
+        succeeded
+      }
     },
     async loadGrowthHistory() {
       if (!dependencies.isEnabled()) {
@@ -586,6 +672,14 @@ export function createStudentBackendSync(
         assessments: mapBackendAssessmentHistory(psychologyRecords),
         trainingSessions: mapBackendTrainingHistory(exerciseRecords, stairRecords)
       }
+    },
+    async loadTrainingProgress() {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      return dependencies.getTrainingProgress()
     },
     async loadPhysicalMetrics() {
       if (!dependencies.isEnabled()) {

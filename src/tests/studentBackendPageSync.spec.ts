@@ -588,6 +588,7 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
 
     expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith({
+      sessionId: expect.any(String),
       modality: 'wushu',
       durationSeconds: 30,
       poseAnalysis: {

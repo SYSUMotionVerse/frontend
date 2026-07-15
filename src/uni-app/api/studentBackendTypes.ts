@@ -141,6 +141,7 @@ export interface VisualPoseAnalysisPayload {
 }
 
 export interface VisualSessionSyncInput {
+  sessionId: string
   modality: Exclude<TrainingModality, 'stair'>
   durationSeconds: number
   poseAnalysis?: VisualPoseAnalysisPayload
@@ -161,6 +162,7 @@ export interface StairSessionSummary {
 }
 
 export interface StairSessionSyncInput {
+  sessionId: string
   durationSeconds: number
   completedIntervals: number
   qualityScore: number
@@ -281,11 +283,13 @@ export interface BackendExerciseScoreTrendResponse {
 export interface ExerciseRecordCreatePayload {
   video: number
   duration: number
+  training_session_id: string
   poseAnalysis?: VisualPoseAnalysisPayload
 }
 
 export interface StairsRecordCreatePayload {
   duration: number
+  training_session_id: string
   speed_data: Record<string, unknown> | null
   acceleration_data: Record<string, unknown> | null
   steps_count: number | null
@@ -355,6 +359,24 @@ export interface StudentBackendSyncDependencies {
   getMyCompliance: () => Promise<BackendComplianceSummary>
   getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
   getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
+  getTrainingProgress: () => Promise<BackendTrainingProgress>
+}
+
+export type BackendTrainingModality = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'
+
+export interface BackendTrainingProgress {
+  date: string
+  modalities: Array<{
+    modality: BackendTrainingModality
+    completed: boolean
+  }>
+  distinct_daily_count: number
+  daily_goal_completed: boolean
+  week: {
+    start_date: string
+    end_date: string
+    qualifying_day_count: number
+  }
 }
 
 export type RegistrationSyncInput = StudentProfile
