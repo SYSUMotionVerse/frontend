@@ -1,8 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { createInitialStudentState } from '../domain/student/state'
+
+const initialStudentState = createInitialStudentState()
 
 const store = {
+  getSnapshot: vi.fn(() => initialStudentState),
   completeProfile: vi.fn(),
   setActiveCheckpoint: vi.fn(),
   submitLongQuestionnaire: vi.fn(),
@@ -87,7 +91,8 @@ const studentBackendSync = {
       unit: '',
       values: [19.4, 19.1]
     }
-  ])
+  ]),
+  loadAdherenceData: vi.fn().mockResolvedValue(null)
 }
 
 const stairSensorCaptureSession = {
@@ -225,6 +230,9 @@ describe('page-level backend sync wiring', () => {
       value.mockReset()
       value.mockResolvedValue({ synced: true })
     })
+
+    store.getSnapshot.mockReturnValue(initialStudentState)
+    studentBackendSync.loadAdherenceData.mockResolvedValue(null)
 
     stairSensorCaptureSession.getSnapshot.mockReset()
     stairSensorCaptureSession.stop.mockReset()
@@ -478,6 +486,69 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/home'
     })
+  })
+
+  it('renders loaded adherence stats and the backend calendar with a capped daily count', async () => {
+    studentBackendSync.loadAdherenceData.mockResolvedValue({
+      todayCount: 4,
+      todayCompleted: true,
+      totalTrainingDays: 9,
+      completedDays: 5,
+      complianceRate: 0.75,
+      calendar: [
+        { date: '2026-07-01', completedSessions: 1, status: 'partial' },
+        { date: '2026-07-02', completedSessions: 3, status: 'met-goal' }
+      ],
+      trend: [
+        {
+          period: '2026-W27',
+          label: '第27周',
+          trainingDays: 3,
+          totalCount: 6,
+          completedDays: 2,
+          completionRate: 0.75
+        }
+      ]
+    })
+
+    const AdherencePage = (await import('../uni-app/pages/growth/adherence.vue')).default
+    const wrapper = mount(AdherencePage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: {
+            template: '<div><slot /></div>'
+          }
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(studentBackendSync.loadAdherenceData).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('3/3')
+    expect(wrapper.text()).not.toContain('4/3')
+    expect(wrapper.text()).toContain('75%')
+    expect(wrapper.findAll('.adherence-cell')).toHaveLength(2)
+    expect(wrapper.find('.adherence-cell--partial').attributes('title')).toContain('2026-07-01')
+    expect(wrapper.find('.adherence-cell--met').attributes('title')).toContain('2026-07-02')
+  })
+
+  it('keeps the local adherence heatmap fallback when backend data is unavailable', async () => {
+    studentBackendSync.loadAdherenceData.mockResolvedValue(null)
+
+    const AdherencePage = (await import('../uni-app/pages/growth/adherence.vue')).default
+    const wrapper = mount(AdherencePage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: {
+            template: '<div><slot /></div>'
+          }
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.detail-page__stats').exists()).toBe(false)
+    expect(wrapper.findAll('.adherence-cell')).toHaveLength(28)
   })
 
   it('syncs visual sessions when the user completes the guided workout', async () => {

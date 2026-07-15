@@ -455,4 +455,25 @@ describe('backend client session handling', () => {
     expect(firstRecord).toBeDefined()
     expect(firstRecord?.id).toBe(9)
   })
+
+  it('requests only the supported weekly compliance trend contract', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          type: 'weekly',
+          trend: []
+        }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await client.getComplianceTrend(8)
+
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/compliance/trend/?type=weekly&weeks=8'
+    )
+  })
 })

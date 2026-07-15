@@ -1,4 +1,5 @@
 import type { CheckpointKey, StudentProfile, TrainingModality } from '../../types/student'
+import type { GrowthCalendarDay } from '../../domain/student/growth'
 import type { PhysicalMetricTrend } from '../../domain/student/types'
 
 export type BackendExerciseType = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'
@@ -170,6 +171,16 @@ export interface ExerciseVideoSummary {
   id: number
   title: string
   exercise_type: BackendExerciseType
+  /** 标准动作视频文件 URL（可为 null，需用 resolveAbsoluteUrl 拼接完整地址） */
+  video_file?: string | null
+  /** 缩略图 URL */
+  thumbnail?: string | null
+  /** 视频描述 */
+  description?: string
+  /** 时长(秒) */
+  duration?: number
+  /** 难度等级 1-5 */
+  difficulty?: number
 }
 
 export interface ExerciseScoreDimension {
@@ -341,7 +352,73 @@ export interface StudentBackendSyncDependencies {
   listExerciseRecords: () => Promise<BackendExerciseRecord[]>
   listStairRecords: () => Promise<BackendStairRecord[]>
   getPhysicalTestTrend: () => Promise<BackendPhysicalTrendResponse>
+  getMyCompliance: () => Promise<BackendComplianceSummary>
+  getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
+  getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
 }
 
 export type RegistrationSyncInput = StudentProfile
 export type GrowthPhysicalMetrics = PhysicalMetricTrend[]
+
+// ---------------------------------------------------------------------------
+// Compliance / Adherence types
+// ---------------------------------------------------------------------------
+
+export interface BackendComplianceSummary {
+  today_count: number
+  today_completed: boolean
+  total_training_days: number
+  completed_days: number
+  compliance_rate: number
+}
+
+export interface BackendComplianceCalendarDay {
+  date: string
+  day: number
+  weekday: number
+  training_count: number
+  is_completed: boolean
+}
+
+export interface BackendComplianceCalendar {
+  year: number
+  month: number
+  days: BackendComplianceCalendarDay[]
+  completed_days: number
+  total_training_count: number
+}
+
+export interface BackendComplianceTrendPoint {
+  period: string
+  label: string
+  start_date: string
+  end_date: string
+  training_days: number
+  total_count: number
+  completed_days: number
+  completion_rate: number
+}
+
+export interface BackendComplianceTrend {
+  type: 'weekly'
+  trend: BackendComplianceTrendPoint[]
+}
+
+export interface StudentAdherenceTrendPoint {
+  period: string
+  label: string
+  trainingDays: number
+  totalCount: number
+  completedDays: number
+  completionRate: number
+}
+
+export interface StudentAdherenceData {
+  todayCount: number
+  todayCompleted: boolean
+  totalTrainingDays: number
+  completedDays: number
+  complianceRate: number
+  calendar: GrowthCalendarDay[]
+  trend: StudentAdherenceTrendPoint[]
+}

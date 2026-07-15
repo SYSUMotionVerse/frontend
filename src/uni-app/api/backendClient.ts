@@ -14,7 +14,10 @@ import type {
   ExerciseVideoSummary,
   StairsRecordCreatePayload,
   SurveyRecordCreatePayload,
-  UserUpdatePayload
+  UserUpdatePayload,
+  BackendComplianceSummary,
+  BackendComplianceCalendar,
+  BackendComplianceTrend,
 } from './studentBackendTypes'
 
 type RequestMethod = NonNullable<UniApp.RequestOptions['method']> | 'PATCH'
@@ -446,6 +449,19 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getPhysicalTestTrend() {
       return request<BackendPhysicalTrendResponse>('/physical-tests/trend/')
+    },
+    getMyCompliance() {
+      return request<BackendComplianceSummary>('/exercises/compliance/my_compliance/')
+    },
+    getComplianceCalendar(year: number, month: number) {
+      return request<BackendComplianceCalendar>(
+        `/exercises/compliance/calendar/?year=${year}&month=${month}`
+      )
+    },
+    getComplianceTrend(count = 12) {
+      return request<BackendComplianceTrend>(
+        `/exercises/compliance/trend/?type=weekly&weeks=${count}`
+      )
     }
   }
 }

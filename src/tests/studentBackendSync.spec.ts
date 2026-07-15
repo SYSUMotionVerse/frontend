@@ -372,6 +372,120 @@ describe('student backend sync orchestration', () => {
     )
   })
 
+  it('returns null without loading adherence endpoints when backend sync is disabled', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const getMyCompliance = vi.fn()
+    const getComplianceCalendar = vi.fn()
+    const getComplianceTrend = vi.fn()
+    const sync = createStudentBackendSync({
+      isEnabled: () => false,
+      ensureSession,
+      getMyCompliance,
+      getComplianceCalendar,
+      getComplianceTrend
+    })
+
+    await expect(sync.loadAdherenceData()).resolves.toBeNull()
+    expect(ensureSession).not.toHaveBeenCalled()
+    expect(getMyCompliance).not.toHaveBeenCalled()
+    expect(getComplianceCalendar).not.toHaveBeenCalled()
+    expect(getComplianceTrend).not.toHaveBeenCalled()
+  })
+
+  it('loads and maps the backend adherence read model', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const now = new Date()
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const getMyCompliance = vi.fn().mockResolvedValue({
+      today_count: 4,
+      today_completed: true,
+      total_training_days: 9,
+      completed_days: 5,
+      compliance_rate: 0.75
+    })
+    const getComplianceCalendar = vi.fn().mockResolvedValue({
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      days: [
+        {
+          date: '2026-07-01',
+          day: 1,
+          weekday: 3,
+          training_count: 1,
+          is_completed: false
+        },
+        {
+          date: '2026-07-02',
+          day: 2,
+          weekday: 4,
+          training_count: 3,
+          is_completed: true
+        },
+        {
+          date: '2026-07-03',
+          day: 3,
+          weekday: 5,
+          training_count: 0,
+          is_completed: false
+        }
+      ],
+      completed_days: 1,
+      total_training_count: 4
+    })
+    const getComplianceTrend = vi.fn().mockResolvedValue({
+      type: 'weekly',
+      trend: [
+        {
+          period: '2026-W27',
+          label: '第27周',
+          start_date: '2026-06-29',
+          end_date: '2026-07-05',
+          training_days: 3,
+          total_count: 6,
+          completed_days: 2,
+          completion_rate: 0.67
+        }
+      ]
+    })
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      getMyCompliance,
+      getComplianceCalendar,
+      getComplianceTrend
+    })
+
+    await expect(sync.loadAdherenceData()).resolves.toEqual({
+      todayCount: 4,
+      todayCompleted: true,
+      totalTrainingDays: 9,
+      completedDays: 5,
+      complianceRate: 0.75,
+      calendar: [
+        { date: '2026-07-01', completedSessions: 1, status: 'partial' },
+        { date: '2026-07-02', completedSessions: 3, status: 'met-goal' },
+        { date: '2026-07-03', completedSessions: 0, status: 'none' }
+      ],
+      trend: [
+        {
+          period: '2026-W27',
+          label: '第27周',
+          trainingDays: 3,
+          totalCount: 6,
+          completedDays: 2,
+          completionRate: 0.67
+        }
+      ]
+    })
+    expect(ensureSession).toHaveBeenCalledTimes(1)
+    expect(getMyCompliance).toHaveBeenCalledTimes(1)
+    expect(getComplianceCalendar).toHaveBeenCalledWith(now.getFullYear(), now.getMonth() + 1)
+    expect(getComplianceTrend).toHaveBeenCalledWith(12)
+  })
+
   it('becomes a no-op when the backend integration is disabled', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
