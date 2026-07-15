@@ -191,6 +191,32 @@ describe('backend client session handling', () => {
     })
   })
 
+  it('loads reminder template configuration from the authenticated backend', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          status: 'not_requested',
+          updated_at: null,
+          template_id: 'server-template-id',
+          mode: 'test'
+        }
+      }
+    ])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    const result = await client.getReminderAuthorization()
+
+    expect(result).toMatchObject({
+      template_id: 'server-template-id',
+      mode: 'test'
+    })
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/notifications/reminders/authorization/'
+    )
+  })
+
   it('fetches current user from /users/me/ with session cookie after bootstrap', async () => {
     const currentUser = {
       id: 3,

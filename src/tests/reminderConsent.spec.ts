@@ -56,12 +56,6 @@ describe('WeChat reminder authorization adapter', () => {
     expect(outcome).toBe('test_accepted')
   })
 
-  it('accepts exactly one configured template identifier', async () => {
-    const { resolveReminderTemplateId } = await import('../uni-app/platform/reminderConsent')
-
-    expect(resolveReminderTemplateId(' template-1 ')).toBe('template-1')
-    expect(resolveReminderTemplateId('template-1,template-2')).toBe('')
-  })
 })
 
 describe('reminder consent composable', () => {
@@ -102,6 +96,29 @@ describe('reminder consent composable', () => {
     expect(consent.status.value).toBe('rejected')
     expect(requestAuthorization).not.toHaveBeenCalled()
   })
+
+  it('loads fresh backend template configuration at authorization time', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const requestAuthorization = vi.fn().mockResolvedValue('test_accepted')
+    const loadAuthorizationConfig = vi.fn().mockResolvedValue({
+      template_id: 'server-template-id',
+      mode: 'test'
+    })
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      loadAuthorizationConfig
+    })
+
+    await consent.authorize()
+
+    expect(loadAuthorizationConfig).toHaveBeenCalledTimes(1)
+    expect(requestAuthorization).toHaveBeenCalledWith({
+      template_id: 'server-template-id',
+      mode: 'test'
+    })
+    expect(consent.status.value).toBe('test_accepted')
+  })
 })
 
 describe('training-home reminder status', () => {
@@ -136,6 +153,22 @@ describe('training-home reminder status', () => {
 
     expect(wrapper.text()).toContain('测试授权已记录')
     expect(wrapper.text()).toContain('不代表长期订阅消息已经获批或可正式送达')
+    expect(wrapper.find('.reminder-authorization-status__action').exists()).toBe(false)
+  })
+
+  it('does not offer authorization retry when server configuration is unavailable', async () => {
+    const ReminderAuthorizationStatus = (
+      await import('../components/training/ReminderAuthorizationStatus.vue')
+    ).default
+    const wrapper = mount(ReminderAuthorizationStatus, {
+      props: {
+        status: 'unconfigured',
+        syncState: 'synced',
+        isWorking: false
+      }
+    })
+
+    expect(wrapper.text()).toContain('请联系研究管理员完成模板配置')
     expect(wrapper.find('.reminder-authorization-status__action').exists()).toBe(false)
   })
 })

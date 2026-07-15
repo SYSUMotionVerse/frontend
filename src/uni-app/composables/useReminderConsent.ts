@@ -2,16 +2,18 @@ import { computed, readonly, shallowRef } from 'vue'
 import { createBackendClient } from '../api/backendClient'
 import {
   requestReminderAuthorization,
-  resolveReminderAuthorizationMode,
-  resolveReminderTemplateId,
+  type ReminderAuthorizationConfig,
   type ReminderAuthorizationStatus,
   type ReminderSyncState
 } from '../platform/reminderConsent'
 
 type ReminderConsentDependencies = {
-  requestAuthorization: () => Promise<ReminderAuthorizationStatus>
+  requestAuthorization: (
+    config?: ReminderAuthorizationConfig
+  ) => Promise<ReminderAuthorizationStatus>
   syncAuthorization: (status: ReminderAuthorizationStatus) => Promise<unknown>
   loadAuthorization?: () => Promise<{ status: ReminderAuthorizationStatus }>
+  loadAuthorizationConfig?: () => Promise<ReminderAuthorizationConfig>
 }
 
 export function createReminderConsent(dependencies: ReminderConsentDependencies) {
@@ -34,8 +36,14 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
   async function authorize() {
     isWorking.value = true
     try {
-      status.value = await dependencies.requestAuthorization()
+      const config = dependencies.loadAuthorizationConfig
+        ? await dependencies.loadAuthorizationConfig()
+        : undefined
+      status.value = await dependencies.requestAuthorization(config)
       await syncCurrentStatus()
+    } catch {
+      status.value = 'unconfigured'
+      syncState.value = 'failed'
     } finally {
       isWorking.value = false
     }
@@ -83,15 +91,19 @@ export function useReminderConsent() {
   const backend = createBackendClient()
 
   return createReminderConsent({
-    requestAuthorization: () => requestReminderAuthorization({
-      templateId: resolveReminderTemplateId(),
-      mode: resolveReminderAuthorizationMode()
+    requestAuthorization: config => requestReminderAuthorization({
+      templateId: config?.template_id ?? '',
+      mode: config?.mode ?? 'test'
     }),
     async syncAuthorization(status) {
       await backend.ensureSession()
       await backend.updateReminderAuthorization(status)
     },
     async loadAuthorization() {
+      await backend.ensureSession()
+      return backend.getReminderAuthorization()
+    },
+    async loadAuthorizationConfig() {
       await backend.ensureSession()
       return backend.getReminderAuthorization()
     }

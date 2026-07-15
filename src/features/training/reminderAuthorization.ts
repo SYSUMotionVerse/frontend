@@ -46,8 +46,8 @@ export const REMINDER_AUTHORIZATION_PRESENTATION = {
   },
   unconfigured: {
     homeTitle: '未开启微信提醒',
-    homeDetail: '长期订阅模板尚未配置，当前不会发送微信消息。',
-    consentMessage: '长期订阅模板尚未配置，当前仅记录配置状态。',
-    canRetryAuthorization: true
+    homeDetail: '提醒配置当前不可用，请联系研究管理员完成模板配置。',
+    consentMessage: '提醒配置当前不可用，请联系研究管理员处理；这不影响进入训练。',
+    canRetryAuthorization: false
   }
 } satisfies Record<ReminderAuthorizationStatus, ReminderAuthorizationPresentation>

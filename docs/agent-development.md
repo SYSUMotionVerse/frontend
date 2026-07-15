@@ -121,15 +121,9 @@ pnpm pose:tunnel:stop
 
 ## 微信训练提醒授权
 
-提醒链路只使用一个已审批的长期订阅消息模板。模板 ID 和运行模式通过构建环境变量配置：
+提醒链路只使用一个已审批的长期订阅消息模板。模板 ID 和 `test` / `production` 运行模式由后端环境配置，并通过已认证的授权状态接口提供给小程序；前端不保存 AppSecret 或其他微信凭据，也不需要为模板配置变化重新构建。
 
-```bash
-VITE_WECHAT_REMINDER_TEMPLATE_ID=approved-template-id \
-VITE_WECHAT_REMINDER_MODE=production \
-pnpm build:mp-weixin
-```
-
-`VITE_WECHAT_REMINDER_MODE` 默认是 `test`。测试或开发构建即使获得微信授权，也只记录“测试授权已记录”，不会宣称生产提醒可用。只有完成教育类长期订阅能力开通、正式模板审批，并准备使用真实 AppID 真机验收时，才可设为 `production`。未配置模板时，小程序会明确显示“长期订阅模板尚未配置”；`touristappid` 无法完成生产验收链路。
+后端默认使用 `test` 模式。测试授权只显示“测试授权已记录”，不会宣称生产提醒可用。只有完成教育类长期订阅能力开通、正式模板审批，并准备使用真实 AppID 真机验收时，后端才可切换到 `production`。配置不可用时，小程序会提示联系研究管理员；`touristappid` 无法完成生产验收链路。
 
 ## 推荐交付格式
 

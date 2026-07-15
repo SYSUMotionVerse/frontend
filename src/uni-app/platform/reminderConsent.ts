@@ -9,6 +9,10 @@ export type ReminderAuthorizationStatus =
 
 export type ReminderSyncState = 'idle' | 'syncing' | 'synced' | 'failed'
 export type ReminderAuthorizationMode = 'test' | 'production'
+export type ReminderAuthorizationConfig = {
+  template_id: string
+  mode: ReminderAuthorizationMode
+}
 
 type SubscribeMessageResult = Record<string, 'accept' | 'reject' | 'ban' | string>
 
@@ -22,19 +26,6 @@ type RequestReminderAuthorizationOptions = {
   templateId: string
   mode: ReminderAuthorizationMode
   requestSubscribeMessage?: RequestSubscribeMessage
-}
-
-export function resolveReminderTemplateId(
-  configured: string = import.meta.env.VITE_WECHAT_REMINDER_TEMPLATE_ID ?? ''
-) {
-  const templateId = configured.trim()
-  return templateId.includes(',') ? '' : templateId
-}
-
-export function resolveReminderAuthorizationMode(
-  configured: string = import.meta.env.VITE_WECHAT_REMINDER_MODE ?? 'test'
-): ReminderAuthorizationMode {
-  return configured.trim().toLowerCase() === 'production' ? 'production' : 'test'
 }
 
 function resolveDefaultRequester(): RequestSubscribeMessage | undefined {

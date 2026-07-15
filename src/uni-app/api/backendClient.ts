@@ -20,7 +20,15 @@ import type {
   BackendComplianceTrend,
   BackendTrainingProgress,
 } from './studentBackendTypes'
-import type { ReminderAuthorizationStatus } from '../platform/reminderConsent'
+import type {
+  ReminderAuthorizationConfig,
+  ReminderAuthorizationStatus
+} from '../platform/reminderConsent'
+
+type BackendReminderAuthorization = ReminderAuthorizationConfig & {
+  status: ReminderAuthorizationStatus
+  updated_at: string | null
+}
 
 type RequestMethod = NonNullable<UniApp.RequestOptions['method']> | 'PATCH'
 
@@ -395,12 +403,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       })
     },
     getReminderAuthorization() {
-      return request<{ status: ReminderAuthorizationStatus; updated_at: string | null }>(
+      return request<BackendReminderAuthorization>(
         '/notifications/reminders/authorization/'
       )
     },
     updateReminderAuthorization(status: ReminderAuthorizationStatus) {
-      return request<{ status: ReminderAuthorizationStatus; updated_at: string | null }>(
+      return request<BackendReminderAuthorization>(
         '/notifications/reminders/authorization/',
         {
           method: 'PATCH',
