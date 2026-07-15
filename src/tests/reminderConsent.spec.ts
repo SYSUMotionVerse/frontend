@@ -76,10 +76,14 @@ describe('reminder consent composable', () => {
     expect(consent.syncState.value).toBe('failed')
     expect(consent.canRetrySync.value).toBe(true)
 
-    await consent.retrySync()
+    expect(consent.failedOperation.value).toBe('sync_result')
+    expect(consent.pendingResult.value).toBe('accepted')
+
+    await consent.retryFailedOperation()
 
     expect(syncAuthorization).toHaveBeenCalledTimes(2)
     expect(consent.syncState.value).toBe('synced')
+    expect(consent.pendingResult.value).toBeNull()
   })
 
   it('loads persisted state without opening the WeChat authorization prompt', async () => {
@@ -118,6 +122,74 @@ describe('reminder consent composable', () => {
       mode: 'test'
     })
     expect(consent.status.value).toBe('test_accepted')
+  })
+
+  it('preserves an accepted status and does not PATCH when config GET fails', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const syncAuthorization = vi.fn()
+    const requestAuthorization = vi.fn()
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization,
+      loadAuthorization: vi.fn().mockResolvedValue({ status: 'accepted' }),
+      loadAuthorizationConfig: vi.fn().mockRejectedValue(new Error('offline'))
+    })
+    await consent.loadStatus()
+
+    await consent.authorize()
+
+    expect(consent.status.value).toBe('accepted')
+    expect(consent.failedOperation.value).toBe('load_config')
+    expect(consent.pendingResult.value).toBeNull()
+    expect(requestAuthorization).not.toHaveBeenCalled()
+    expect(syncAuthorization).not.toHaveBeenCalled()
+  })
+
+  it('re-fetches configuration and opens the platform flow when config retry succeeds', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const loadAuthorizationConfig = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ template_id: 'server-template-id', mode: 'test' })
+    const requestAuthorization = vi.fn().mockResolvedValue('test_accepted')
+    const syncAuthorization = vi.fn().mockResolvedValue(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization,
+      loadAuthorizationConfig
+    })
+
+    await consent.authorize()
+    await consent.retryFailedOperation()
+
+    expect(loadAuthorizationConfig).toHaveBeenCalledTimes(2)
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
+    expect(syncAuthorization).toHaveBeenCalledWith('test_accepted')
+    expect(consent.status.value).toBe('test_accepted')
+  })
+
+  it('retries PATCH with the exact pending platform result without reopening WeChat', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const requestAuthorization = vi.fn().mockResolvedValue('accepted')
+    const loadAuthorizationConfig = vi.fn().mockResolvedValue({
+      template_id: 'server-template-id',
+      mode: 'production'
+    })
+    const syncAuthorization = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization,
+      loadAuthorizationConfig
+    })
+
+    await consent.authorize()
+    await consent.retryFailedOperation()
+
+    expect(loadAuthorizationConfig).toHaveBeenCalledTimes(1)
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
+    expect(syncAuthorization).toHaveBeenNthCalledWith(1, 'accepted')
+    expect(syncAuthorization).toHaveBeenNthCalledWith(2, 'accepted')
   })
 })
 
@@ -184,6 +256,7 @@ describe('reminder consent page', () => {
       useReminderConsent: () => ({
         status: { value: 'not_requested' },
         syncState: { value: 'idle' },
+        failedOperation: { value: null },
         isWorking: { value: false },
         authorize,
         decline
@@ -230,8 +303,10 @@ describe('reminder consent page', () => {
     const authorize = vi.fn(async () => {
       syncState.value = 'failed'
     })
-    const retrySync = vi.fn(async () => {
+    const failedOperation = shallowRef<'load_config' | 'sync_result' | null>('sync_result')
+    const retryFailedOperation = vi.fn(async () => {
       syncState.value = 'synced'
+      failedOperation.value = null
     })
 
     vi.doMock('../uni-app/composables/useReminderConsent', () => ({
@@ -239,9 +314,10 @@ describe('reminder consent page', () => {
         status,
         syncState,
         isWorking: shallowRef(false),
+        failedOperation,
         authorize,
         decline: vi.fn(),
-        retrySync
+        retryFailedOperation
       })
     }))
 
@@ -255,7 +331,7 @@ describe('reminder consent page', () => {
             template: `
               <div>
                 <button class="authorize" @click="$emit('authorize')">authorize</button>
-                <button v-if="syncState === 'failed'" class="retry-sync" @click="$emit('retry-sync')">retry</button>
+                <button v-if="syncState === 'failed'" class="retry-sync" @click="$emit('retry-failure')">retry</button>
                 <button v-if="syncState === 'failed'" class="continue" @click="$emit('continue')">continue</button>
               </div>
             `
@@ -277,7 +353,60 @@ describe('reminder consent page', () => {
     reLaunch.mockClear()
     await wrapper.get('.retry-sync').trigger('click')
     await flushPromises()
-    expect(retrySync).toHaveBeenCalledTimes(1)
+    expect(retryFailedOperation).toHaveBeenCalledTimes(1)
+    expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/training/home' })
+  })
+
+  it('preserves the page state and re-runs authorization after config loading recovers', async () => {
+    vi.resetModules()
+    const reLaunch = vi.fn()
+    vi.stubGlobal('uni', { reLaunch })
+    const status = shallowRef('accepted')
+    const syncState = shallowRef<'idle' | 'syncing' | 'synced' | 'failed'>('idle')
+    const failedOperation = shallowRef<'load_config' | 'sync_result' | null>(null)
+    const authorize = vi.fn(async () => {
+      syncState.value = 'failed'
+      failedOperation.value = 'load_config'
+    })
+    const retryFailedOperation = vi.fn(async () => {
+      status.value = 'test_accepted'
+      syncState.value = 'synced'
+      failedOperation.value = null
+    })
+
+    vi.doMock('../uni-app/composables/useReminderConsent', () => ({
+      useReminderConsent: () => ({
+        status,
+        syncState,
+        failedOperation,
+        isWorking: shallowRef(false),
+        authorize,
+        decline: vi.fn(),
+        retryFailedOperation
+      })
+    }))
+
+    const ConsentPage = (await import('../uni-app/pages/access/reminder-consent.vue')).default
+    const wrapper = mount(ConsentPage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+
+    await wrapper.get('.reminder-consent__primary').trigger('click')
+    await flushPromises()
+
+    expect(status.value).toBe('accepted')
+    expect(reLaunch).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('当前状态保持不变')
+    expect(wrapper.text()).toContain('重新获取配置并授权')
+
+    await wrapper.get('.reminder-consent__retry-sync').trigger('click')
+    await flushPromises()
+
+    expect(retryFailedOperation).toHaveBeenCalledTimes(1)
     expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/training/home' })
   })
 })

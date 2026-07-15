@@ -8,6 +8,7 @@ export type ReminderAuthorizationStatus =
   | 'unconfigured'
 
 export type ReminderSyncState = 'idle' | 'syncing' | 'synced' | 'failed'
+export type ReminderFailedOperation = 'load_config' | 'sync_result' | null
 export type ReminderAuthorizationMode = 'test' | 'production'
 export type ReminderAuthorizationConfig = {
   template_id: string

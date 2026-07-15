@@ -3,26 +3,30 @@ import { computed } from 'vue'
 import { REMINDER_AUTHORIZATION_PRESENTATION } from '../../features/training/reminderAuthorization'
 import type {
   ReminderAuthorizationStatus,
+  ReminderFailedOperation,
   ReminderSyncState
 } from '../../uni-app/platform/reminderConsent'
 
 const props = defineProps<{
   status: ReminderAuthorizationStatus
   syncState: ReminderSyncState
+  failedOperation: ReminderFailedOperation
   isWorking: boolean
 }>()
 
 const emit = defineEmits<{
   authorize: []
   skip: []
-  retrySync: []
+  retryFailure: []
   continue: []
 }>()
 
 const isSyncFailed = computed(() => props.syncState === 'failed')
 const statusMessage = computed(() => {
   if (isSyncFailed.value) {
-    return '授权结果暂未同步，但不影响进入训练。'
+    return props.failedOperation === 'load_config'
+      ? '暂时无法获取提醒配置，尚未调用微信授权；当前状态保持不变。'
+      : '授权结果暂未同步，但不影响进入训练。'
   }
   return REMINDER_AUTHORIZATION_PRESENTATION[props.status].consentMessage
 })
@@ -46,9 +50,9 @@ const statusMessage = computed(() => {
       <button
         class="reminder-consent__primary reminder-consent__retry-sync"
         :disabled="props.isWorking"
-        @click="emit('retrySync')"
+        @click="emit('retryFailure')"
       >
-        重新同步授权结果
+        {{ props.failedOperation === 'load_config' ? '重新获取配置并授权' : '重新同步授权结果' }}
       </button>
       <button class="reminder-consent__secondary reminder-consent__continue" @click="emit('continue')">
         暂不同步，进入训练

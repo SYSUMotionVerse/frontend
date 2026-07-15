@@ -4,6 +4,7 @@ import {
   requestReminderAuthorization,
   type ReminderAuthorizationConfig,
   type ReminderAuthorizationStatus,
+  type ReminderFailedOperation,
   type ReminderSyncState
 } from '../platform/reminderConsent'
 
@@ -19,31 +20,46 @@ type ReminderConsentDependencies = {
 export function createReminderConsent(dependencies: ReminderConsentDependencies) {
   const status = shallowRef<ReminderAuthorizationStatus>('not_requested')
   const syncState = shallowRef<ReminderSyncState>('idle')
+  const failedOperation = shallowRef<ReminderFailedOperation>(null)
+  const pendingResult = shallowRef<ReminderAuthorizationStatus | null>(null)
   const isWorking = shallowRef(false)
 
-  const canRetrySync = computed(() => syncState.value === 'failed')
+  const canRetrySync = computed(() => failedOperation.value !== null)
 
-  async function syncCurrentStatus() {
+  async function syncPendingResult(result: ReminderAuthorizationStatus) {
     syncState.value = 'syncing'
     try {
-      await dependencies.syncAuthorization(status.value)
+      await dependencies.syncAuthorization(result)
       syncState.value = 'synced'
+      pendingResult.value = null
+      failedOperation.value = null
     } catch {
       syncState.value = 'failed'
+      pendingResult.value = result
+      failedOperation.value = 'sync_result'
     }
   }
 
   async function authorize() {
     isWorking.value = true
+    failedOperation.value = null
     try {
-      const config = dependencies.loadAuthorizationConfig
-        ? await dependencies.loadAuthorizationConfig()
-        : undefined
-      status.value = await dependencies.requestAuthorization(config)
-      await syncCurrentStatus()
-    } catch {
-      status.value = 'unconfigured'
-      syncState.value = 'failed'
+      let config: ReminderAuthorizationConfig | undefined
+      try {
+        config = dependencies.loadAuthorizationConfig
+          ? await dependencies.loadAuthorizationConfig()
+          : undefined
+      } catch {
+        syncState.value = 'failed'
+        failedOperation.value = 'load_config'
+        pendingResult.value = null
+        return
+      }
+
+      const result = await dependencies.requestAuthorization(config)
+      status.value = result
+      pendingResult.value = result
+      await syncPendingResult(result)
     } finally {
       isWorking.value = false
     }
@@ -51,14 +67,19 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
 
   async function decline() {
     status.value = 'rejected'
-    await syncCurrentStatus()
+    pendingResult.value = 'rejected'
+    await syncPendingResult('rejected')
   }
 
-  async function retrySync() {
-    if (!canRetrySync.value) {
+  async function retryFailedOperation() {
+    if (failedOperation.value === 'load_config') {
+      await authorize()
       return
     }
-    await syncCurrentStatus()
+
+    if (failedOperation.value === 'sync_result' && pendingResult.value) {
+      await syncPendingResult(pendingResult.value)
+    }
   }
 
   async function loadStatus() {
@@ -78,11 +99,13 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
   return {
     status: readonly(status),
     syncState: readonly(syncState),
+    failedOperation: readonly(failedOperation),
+    pendingResult: readonly(pendingResult),
     isWorking: readonly(isWorking),
     canRetrySync,
     authorize,
     decline,
-    retrySync,
+    retryFailedOperation,
     loadStatus
   }
 }

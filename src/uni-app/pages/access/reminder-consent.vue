@@ -23,8 +23,8 @@ async function handleSkip() {
   }
 }
 
-async function handleRetrySync() {
-  await consent.retrySync()
+async function handleRetryFailure() {
+  await consent.retryFailedOperation()
   if (consent.syncState.value === 'synced') {
     enterTraining()
   }
@@ -40,10 +40,11 @@ async function handleRetrySync() {
     <ReminderConsentCard
       :status="consent.status.value"
       :sync-state="consent.syncState.value"
+      :failed-operation="consent.failedOperation.value"
       :is-working="consent.isWorking.value"
       @authorize="handleAuthorize"
       @skip="handleSkip"
-      @retry-sync="handleRetrySync"
+      @retry-failure="handleRetryFailure"
       @continue="enterTraining"
     />
   </UniAccessPageShell>
