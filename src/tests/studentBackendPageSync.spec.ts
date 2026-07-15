@@ -462,7 +462,7 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().navigateTo).not.toHaveBeenCalled()
   })
 
-  it('reLaunches from the questionnaire result into the training home page', async () => {
+  it('reLaunches from the baseline questionnaire result into reminder consent', async () => {
     const ResultPage = (await import('../uni-app/pages/access/questionnaire-result.vue')).default
     const wrapper = mount(ResultPage, {
       global: {
@@ -481,7 +481,7 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
 
     expect(currentUni().reLaunch).toHaveBeenCalledWith({
-      url: '/pages/training/home'
+      url: '/pages/access/reminder-consent'
     })
     expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/home'

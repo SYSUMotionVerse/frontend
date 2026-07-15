@@ -158,6 +158,39 @@ describe('backend client session handling', () => {
     })
   })
 
+  it('synchronizes reminder authorization through the authenticated reminder endpoint', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: [
+          'csrftoken=test-csrf-token; Path=/; SameSite=Lax',
+          'sessionid=test-session; Path=/; HttpOnly; SameSite=Lax'
+        ]
+      },
+      {
+        statusCode: 200,
+        data: { status: 'rejected', updated_at: '2026-07-16T12:00:00Z' }
+      }
+    ])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await client.ensureSession()
+    const result = await client.updateReminderAuthorization('rejected')
+
+    expect(result.status).toBe('rejected')
+    expect(uniMock.request.mock.calls[1]?.[0]).toMatchObject({
+      url: 'http://api.example.com/notifications/reminders/authorization/',
+      method: 'PATCH',
+      data: { status: 'rejected' },
+      header: expect.objectContaining({
+        Cookie: 'csrftoken=test-csrf-token; sessionid=test-session',
+        'X-CSRFToken': 'test-csrf-token'
+      })
+    })
+  })
+
   it('fetches current user from /users/me/ with session cookie after bootstrap', async () => {
     const currentUser = {
       id: 3,

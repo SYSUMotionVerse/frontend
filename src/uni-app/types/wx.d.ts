@@ -5,6 +5,11 @@
  */
 declare namespace WechatMiniprogram {
   interface Wx {
+    requestSubscribeMessage(options: {
+      tmplIds: string[];
+      success?: (result: Record<string, string>) => void;
+      fail?: (error: unknown) => void;
+    }): void;
     request(options: any): any;
     createCameraContext(): CameraContext;
     createOffscreenCanvas(options?: any): OffscreenCanvas;

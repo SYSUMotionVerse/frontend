@@ -6,10 +6,12 @@ import TrainingHomeFeatureCard from '../../../components/training/TrainingHomeFe
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeQuestPanel from '../../../components/training/TrainingHomeQuestPanel.vue'
 import DailyProgressCard from '../../../components/training/DailyProgressCard.vue'
+import ReminderAuthorizationStatus from '../../../components/training/ReminderAuthorizationStatus.vue'
 import { DEFAULT_AVATAR_URL } from '../../../constants/defaultAvatar'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useProfileAvatarEditor } from '../../composables/useProfileAvatarEditor'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 import { resolveReminderSource } from '../../platform/reminders'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
@@ -17,6 +19,7 @@ import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingH
 const store = useStudentStore()
 const avatarEditor = useProfileAvatarEditor()
 const trainingProgress = useTrainingProgress()
+const reminderConsent = useReminderConsent()
 
 const profileAvatarUrl = computed(() =>
   store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
@@ -70,7 +73,12 @@ onLoad((query) => {
 
 onShow(async () => {
   await trainingProgress.refresh()
+  void reminderConsent.loadStatus()
 })
+
+function handleReminderAuthorizationRetry() {
+  void reminderConsent.authorize()
+}
 </script>
 
 <template>
@@ -111,6 +119,13 @@ onShow(async () => {
       <view v-else class="home-page__progress-status">
         <text>正在同步今日训练进度…</text>
       </view>
+
+      <ReminderAuthorizationStatus
+        :status="reminderConsent.status.value"
+        :sync-state="reminderConsent.syncState.value"
+        :is-working="reminderConsent.isWorking.value"
+        @retry="handleReminderAuthorizationRetry"
+      />
 
       <view class="home-page__section">
         <view class="home-page__section-head">

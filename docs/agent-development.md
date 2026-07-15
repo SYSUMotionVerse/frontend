@@ -119,6 +119,16 @@ pnpm pose:tunnel:stop
 
 微信开发者工具仍然导入 `dist/dev/mp-weixin` 或 `dist/build/mp-weixin`，不要导入仓库根目录。
 
+## 微信训练提醒授权
+
+订阅消息模板 ID 通过构建环境变量配置，多个模板使用英文逗号分隔：
+
+```bash
+VITE_WECHAT_REMINDER_TEMPLATE_IDS=template-id-1,template-id-2 pnpm build:mp-weixin
+```
+
+未配置模板时，小程序会明确显示“长期订阅模板尚未配置”，不会宣称微信提醒已经可用。上线前仍需在微信公众平台开通教育类长期订阅能力、审批正式模板，并使用真实 AppID 和真机验证授权结果；`touristappid` 无法完成这条验收链路。
+
 ## 推荐交付格式
 
 当 agent 完成任务时，建议在结果中至少覆盖：
