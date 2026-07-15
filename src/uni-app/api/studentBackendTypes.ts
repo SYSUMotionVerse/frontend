@@ -170,6 +170,16 @@ export interface ExerciseVideoSummary {
   id: number
   title: string
   exercise_type: BackendExerciseType
+  /** 标准动作视频文件 URL（可为 null，需用 resolveAbsoluteUrl 拼接完整地址） */
+  video_file?: string | null
+  /** 缩略图 URL */
+  thumbnail?: string | null
+  /** 视频描述 */
+  description?: string
+  /** 时长(秒) */
+  duration?: number
+  /** 难度等级 1-5 */
+  difficulty?: number
 }
 
 export interface ExerciseScoreDimension {
