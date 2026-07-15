@@ -1,47 +1,42 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import { buildGrowthSummary } from '../../../domain/student/growth'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
+import type { StudentAdherenceData } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
 const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
 
-// --- Backend compliance data ---
-const complianceTodayCount = ref(0)
-const complianceTodayCompleted = ref(false)
-const complianceRate = ref(0)
-const complianceCompletedDays = ref(0)
-const complianceTrend = ref<Array<{
-  label: string
-  completedDays: number
-  completionRate: number
-}>>([])
-const complianceLoaded = ref(false)
+const adherenceData = shallowRef<StudentAdherenceData | null>(null)
+
+const complianceLoaded = computed(() => adherenceData.value !== null)
+const complianceTodayCount = computed(() => {
+  const todayCount = adherenceData.value?.todayCount ?? 0
+  return Math.min(3, Math.max(0, todayCount))
+})
+const complianceRatePercent = computed(() =>
+  Math.round((adherenceData.value?.complianceRate ?? 0) * 100)
+)
+const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [])
+const calendarDays = computed(() =>
+  adherenceData.value?.calendar ?? summary.value.adherenceCalendar
+)
 
 onMounted(async () => {
   try {
     const data = await studentBackendSync.loadAdherenceData()
     if (data) {
-      complianceTodayCount.value = data.todayCount
-      complianceTodayCompleted.value = data.todayCompleted
-      complianceRate.value = data.complianceRate
-      complianceCompletedDays.value = data.completedDays
-      complianceTrend.value = data.trend.slice(-8) // show latest 8 weeks
-      complianceLoaded.value = true
+      adherenceData.value = data
     }
   } catch (error) {
     reportBackendSyncError('打卡数据加载', error)
   }
 })
 
-// --- Calendar from local sessions ---
-const calendarDays = computed(() => summary.value.adherenceCalendar)
-
-// --- Weekday labels ---
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 </script>
 
@@ -50,33 +45,31 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
     <h1 class="detail-page__title">达标详情</h1>
     <p class="detail-page__subtitle">训练坚持记录与依从性分析。</p>
 
-    <!-- Backend stats row -->
     <section v-if="complianceLoaded" class="detail-page__stats">
       <view class="stat-item">
         <span class="stat-value">{{ complianceTodayCount }}/3</span>
         <span class="stat-label">今日打卡</span>
       </view>
       <view class="stat-item">
-        <span class="stat-value" :class="{ 'stat-value--done': complianceTodayCompleted }">
-          {{ complianceTodayCompleted ? '✓' : '—' }}
+        <span class="stat-value" :class="{ 'stat-value--done': adherenceData?.todayCompleted }">
+          {{ adherenceData?.todayCompleted ? '✓' : '—' }}
         </span>
         <span class="stat-label">今日达标</span>
       </view>
       <view class="stat-item">
-        <span class="stat-value">{{ complianceCompletedDays }}</span>
+        <span class="stat-value">{{ adherenceData?.completedDays }}</span>
         <span class="stat-label">累计达标天</span>
       </view>
       <view class="stat-item">
-        <span class="stat-value">{{ Math.round(complianceRate * 100) }}%</span>
+        <span class="stat-value">{{ complianceRatePercent }}%</span>
         <span class="stat-label">依从率</span>
       </view>
     </section>
 
-    <!-- Weekly trend bars -->
     <section v-if="complianceLoaded && complianceTrend.length > 0" class="detail-page__card">
       <h2 class="detail-page__section-title">周达标趋势</h2>
       <view class="trend-bars">
-        <view v-for="(item, idx) in complianceTrend" :key="idx" class="trend-bar-item">
+        <view v-for="item in complianceTrend" :key="item.period" class="trend-bar-item">
           <view class="trend-bar-track">
             <view
               class="trend-bar-fill"
@@ -88,7 +81,6 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
       </view>
     </section>
 
-    <!-- Heatmap from local sessions -->
     <section class="detail-page__card">
       <h2 class="detail-page__section-title">近期热力图</h2>
       <view class="heatmap-header">

@@ -1,4 +1,5 @@
 import type { CheckpointKey, StudentProfile, TrainingModality } from '../../types/student'
+import type { GrowthCalendarDay } from '../../domain/student/growth'
 import type { PhysicalMetricTrend } from '../../domain/student/types'
 
 export type BackendExerciseType = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'
@@ -353,7 +354,7 @@ export interface StudentBackendSyncDependencies {
   getPhysicalTestTrend: () => Promise<BackendPhysicalTrendResponse>
   getMyCompliance: () => Promise<BackendComplianceSummary>
   getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
-  getComplianceTrend: (type: 'weekly' | 'monthly', count: number) => Promise<BackendComplianceTrend>
+  getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
 }
 
 export type RegistrationSyncInput = StudentProfile
@@ -399,6 +400,25 @@ export interface BackendComplianceTrendPoint {
 }
 
 export interface BackendComplianceTrend {
-  type: 'weekly' | 'monthly'
+  type: 'weekly'
   trend: BackendComplianceTrendPoint[]
+}
+
+export interface StudentAdherenceTrendPoint {
+  period: string
+  label: string
+  trainingDays: number
+  totalCount: number
+  completedDays: number
+  completionRate: number
+}
+
+export interface StudentAdherenceData {
+  todayCount: number
+  todayCompleted: boolean
+  totalTrainingDays: number
+  completedDays: number
+  complianceRate: number
+  calendar: GrowthCalendarDay[]
+  trend: StudentAdherenceTrendPoint[]
 }

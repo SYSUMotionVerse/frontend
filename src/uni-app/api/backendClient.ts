@@ -458,9 +458,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         `/exercises/compliance/calendar/?year=${year}&month=${month}`
       )
     },
-    getComplianceTrend(type: 'weekly' | 'monthly' = 'weekly', count = 12) {
+    getComplianceTrend(count = 12) {
       return request<BackendComplianceTrend>(
-        `/exercises/compliance/trend/?type=${type}&weeks=${count}`
+        `/exercises/compliance/trend/?type=weekly&weeks=${count}`
       )
     }
   }
