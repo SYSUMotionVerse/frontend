@@ -1,32 +1,30 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReminderAuthorizationStatus } from '../../uni-app/platform/reminderConsent'
+import { REMINDER_AUTHORIZATION_PRESENTATION } from '../../features/training/reminderAuthorization'
+import type {
+  ReminderAuthorizationStatus,
+  ReminderSyncState
+} from '../../uni-app/platform/reminderConsent'
 
 const props = defineProps<{
   status: ReminderAuthorizationStatus
-  syncState: 'idle' | 'syncing' | 'synced' | 'failed'
+  syncState: ReminderSyncState
   isWorking: boolean
 }>()
 
 const emit = defineEmits<{
   authorize: []
   skip: []
+  retrySync: []
+  continue: []
 }>()
 
+const isSyncFailed = computed(() => props.syncState === 'failed')
 const statusMessage = computed(() => {
-  if (props.syncState === 'failed') {
+  if (isSyncFailed.value) {
     return '授权结果暂未同步，但不影响进入训练。'
   }
-  if (props.status === 'unconfigured') {
-    return '长期订阅模板尚未配置，当前仅记录你的选择。'
-  }
-  if (props.status === 'unsupported') {
-    return '当前环境不支持微信订阅授权，你仍可正常训练。'
-  }
-  if (props.status === 'banned') {
-    return '微信中已禁止该类消息，可稍后在训练首页查看状态。'
-  }
-  return ''
+  return REMINDER_AUTHORIZATION_PRESENTATION[props.status].consentMessage
 })
 </script>
 
@@ -40,20 +38,34 @@ const statusMessage = computed(() => {
       在每天 12:00 和 18:00，我们会根据今日训练进度发送提醒。消息只包含完成进度和待完成项目，不包含评分或健康数据。
     </text>
     <view class="reminder-consent__facts">
-      <text>授权由微信管理，你可以拒绝</text>
-      <text>无论是否授权，都能进入训练</text>
+      <text class="reminder-consent__fact">授权由微信管理，你可以拒绝</text>
+      <text class="reminder-consent__fact">无论是否授权，都能进入训练</text>
     </view>
     <text v-if="statusMessage" class="reminder-consent__status">{{ statusMessage }}</text>
-    <button
-      class="reminder-consent__primary"
-      :disabled="props.isWorking"
-      @click="emit('authorize')"
-    >
-      {{ props.isWorking ? '正在请求...' : '开启微信训练提醒' }}
-    </button>
-    <button class="reminder-consent__secondary" @click="emit('skip')">
-      暂不开启，进入训练
-    </button>
+    <template v-if="isSyncFailed">
+      <button
+        class="reminder-consent__primary reminder-consent__retry-sync"
+        :disabled="props.isWorking"
+        @click="emit('retrySync')"
+      >
+        重新同步授权结果
+      </button>
+      <button class="reminder-consent__secondary reminder-consent__continue" @click="emit('continue')">
+        暂不同步，进入训练
+      </button>
+    </template>
+    <template v-else>
+      <button
+        class="reminder-consent__primary"
+        :disabled="props.isWorking"
+        @click="emit('authorize')"
+      >
+        {{ props.isWorking ? '正在请求...' : '开启微信训练提醒' }}
+      </button>
+      <button class="reminder-consent__secondary" @click="emit('skip')">
+        暂不开启，进入训练
+      </button>
+    </template>
   </view>
 </template>
 
@@ -78,7 +90,7 @@ const statusMessage = computed(() => {
 .reminder-consent__title,
 .reminder-consent__copy,
 .reminder-consent__status,
-.reminder-consent__facts text {
+.reminder-consent__fact {
   display: block;
 }
 

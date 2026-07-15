@@ -2,8 +2,10 @@ import { computed, readonly, shallowRef } from 'vue'
 import { createBackendClient } from '../api/backendClient'
 import {
   requestReminderAuthorization,
-  resolveReminderTemplateIds,
-  type ReminderAuthorizationStatus
+  resolveReminderAuthorizationMode,
+  resolveReminderTemplateId,
+  type ReminderAuthorizationStatus,
+  type ReminderSyncState
 } from '../platform/reminderConsent'
 
 type ReminderConsentDependencies = {
@@ -14,7 +16,7 @@ type ReminderConsentDependencies = {
 
 export function createReminderConsent(dependencies: ReminderConsentDependencies) {
   const status = shallowRef<ReminderAuthorizationStatus>('not_requested')
-  const syncState = shallowRef<'idle' | 'syncing' | 'synced' | 'failed'>('idle')
+  const syncState = shallowRef<ReminderSyncState>('idle')
   const isWorking = shallowRef(false)
 
   const canRetrySync = computed(() => syncState.value === 'failed')
@@ -82,7 +84,8 @@ export function useReminderConsent() {
 
   return createReminderConsent({
     requestAuthorization: () => requestReminderAuthorization({
-      templateIds: resolveReminderTemplateIds()
+      templateId: resolveReminderTemplateId(),
+      mode: resolveReminderAuthorizationMode()
     }),
     async syncAuthorization(status) {
       await backend.ensureSession()

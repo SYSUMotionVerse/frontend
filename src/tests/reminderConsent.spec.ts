@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { shallowRef } from 'vue'
 
 describe('WeChat reminder authorization adapter', () => {
   it.each([
@@ -10,7 +11,8 @@ describe('WeChat reminder authorization adapter', () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
 
     const outcome = await requestReminderAuthorization({
-      templateIds: ['template-1'],
+      templateId: 'template-1',
+      mode: 'production',
       requestSubscribeMessage: vi.fn(({ success }) => {
         success({ 'template-1': wechatValue })
       })
@@ -24,7 +26,8 @@ describe('WeChat reminder authorization adapter', () => {
     const requestSubscribeMessage = vi.fn()
 
     const outcome = await requestReminderAuthorization({
-      templateIds: [],
+      templateId: '',
+      mode: 'production',
       requestSubscribeMessage
     })
 
@@ -35,8 +38,29 @@ describe('WeChat reminder authorization adapter', () => {
   it('returns unsupported outside a platform that implements subscription messages', async () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
 
-    await expect(requestReminderAuthorization({ templateIds: ['template-1'] }))
+    await expect(requestReminderAuthorization({ templateId: 'template-1', mode: 'production' }))
       .resolves.toBe('unsupported')
+  })
+
+  it('persists a truthful non-production outcome when a test build receives acceptance', async () => {
+    const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
+
+    const outcome = await requestReminderAuthorization({
+      templateId: 'template-1',
+      mode: 'test',
+      requestSubscribeMessage: vi.fn(({ success }) => {
+        success({ 'template-1': 'accept' })
+      })
+    })
+
+    expect(outcome).toBe('test_accepted')
+  })
+
+  it('accepts exactly one configured template identifier', async () => {
+    const { resolveReminderTemplateId } = await import('../uni-app/platform/reminderConsent')
+
+    expect(resolveReminderTemplateId(' template-1 ')).toBe('template-1')
+    expect(resolveReminderTemplateId('template-1,template-2')).toBe('')
   })
 })
 
@@ -97,6 +121,23 @@ describe('training-home reminder status', () => {
     await wrapper.get('.reminder-authorization-status__action').trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
   })
+
+  it('labels test acceptance without claiming production reminder delivery', async () => {
+    const ReminderAuthorizationStatus = (
+      await import('../components/training/ReminderAuthorizationStatus.vue')
+    ).default
+    const wrapper = mount(ReminderAuthorizationStatus, {
+      props: {
+        status: 'test_accepted',
+        syncState: 'synced',
+        isWorking: false
+      }
+    })
+
+    expect(wrapper.text()).toContain('测试授权已记录')
+    expect(wrapper.text()).toContain('不代表长期订阅消息已经获批或可正式送达')
+    expect(wrapper.find('.reminder-authorization-status__action').exists()).toBe(false)
+  })
 })
 
 describe('reminder consent page', () => {
@@ -144,6 +185,66 @@ describe('reminder consent page', () => {
     await wrapper.get('.skip').trigger('click')
     await flushPromises()
     expect(decline).toHaveBeenCalledTimes(1)
+    expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/training/home' })
+  })
+
+  it('keeps a failed platform result on screen for retry while allowing training', async () => {
+    vi.resetModules()
+    const reLaunch = vi.fn()
+    vi.stubGlobal('uni', { reLaunch })
+    const status = shallowRef('accepted')
+    const syncState = shallowRef<'idle' | 'syncing' | 'synced' | 'failed'>('idle')
+    const authorize = vi.fn(async () => {
+      syncState.value = 'failed'
+    })
+    const retrySync = vi.fn(async () => {
+      syncState.value = 'synced'
+    })
+
+    vi.doMock('../uni-app/composables/useReminderConsent', () => ({
+      useReminderConsent: () => ({
+        status,
+        syncState,
+        isWorking: shallowRef(false),
+        authorize,
+        decline: vi.fn(),
+        retrySync
+      })
+    }))
+
+    const ConsentPage = (await import('../uni-app/pages/access/reminder-consent.vue')).default
+    const wrapper = mount(ConsentPage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          ReminderConsentCard: {
+            props: ['syncState'],
+            template: `
+              <div>
+                <button class="authorize" @click="$emit('authorize')">authorize</button>
+                <button v-if="syncState === 'failed'" class="retry-sync" @click="$emit('retry-sync')">retry</button>
+                <button v-if="syncState === 'failed'" class="continue" @click="$emit('continue')">continue</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.authorize').trigger('click')
+    await flushPromises()
+
+    expect(reLaunch).not.toHaveBeenCalled()
+    expect(wrapper.find('.retry-sync').exists()).toBe(true)
+    expect(wrapper.find('.continue').exists()).toBe(true)
+
+    await wrapper.get('.continue').trigger('click')
+    expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/training/home' })
+
+    reLaunch.mockClear()
+    await wrapper.get('.retry-sync').trigger('click')
+    await flushPromises()
+    expect(retrySync).toHaveBeenCalledTimes(1)
     expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/training/home' })
   })
 })

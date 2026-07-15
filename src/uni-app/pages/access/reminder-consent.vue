@@ -11,12 +11,23 @@ function enterTraining() {
 
 async function handleAuthorize() {
   await consent.authorize()
-  enterTraining()
+  if (consent.syncState.value !== 'failed') {
+    enterTraining()
+  }
 }
 
 async function handleSkip() {
   await consent.decline()
-  enterTraining()
+  if (consent.syncState.value !== 'failed') {
+    enterTraining()
+  }
+}
+
+async function handleRetrySync() {
+  await consent.retrySync()
+  if (consent.syncState.value === 'synced') {
+    enterTraining()
+  }
 }
 </script>
 
@@ -32,6 +43,8 @@ async function handleSkip() {
       :is-working="consent.isWorking.value"
       @authorize="handleAuthorize"
       @skip="handleSkip"
+      @retry-sync="handleRetrySync"
+      @continue="enterTraining"
     />
   </UniAccessPageShell>
 </template>

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReminderAuthorizationStatus } from '../../uni-app/platform/reminderConsent'
+import { REMINDER_AUTHORIZATION_PRESENTATION } from '../../features/training/reminderAuthorization'
+import type {
+  ReminderAuthorizationStatus,
+  ReminderSyncState
+} from '../../uni-app/platform/reminderConsent'
 
 const props = defineProps<{
   status: ReminderAuthorizationStatus
-  syncState: 'idle' | 'syncing' | 'synced' | 'failed'
+  syncState: ReminderSyncState
   isWorking: boolean
 }>()
 
@@ -12,36 +16,17 @@ const emit = defineEmits<{
   retry: []
 }>()
 
-const title = computed(() => {
-  if (props.status === 'accepted') {
-    return '微信提醒已开启'
-  }
-  if (props.status === 'not_requested') {
-    return '微信提醒尚未确认'
-  }
-  return '未开启微信提醒'
-})
+const presentation = computed(() => REMINDER_AUTHORIZATION_PRESENTATION[props.status])
+const title = computed(() => presentation.value.homeTitle)
 
 const detail = computed(() => {
   if (props.syncState === 'failed') {
     return '状态同步失败，不影响训练。可再次尝试授权并同步。'
   }
-  if (props.status === 'accepted') {
-    return '符合条件时，我们会在 12:00 和 18:00 发送训练进度提醒。'
-  }
-  if (props.status === 'unconfigured') {
-    return '长期订阅模板尚未配置，当前不会发送微信消息。'
-  }
-  if (props.status === 'unsupported') {
-    return '当前平台不支持微信授权，可在微信小程序中重试。'
-  }
-  if (props.status === 'banned') {
-    return '微信已禁止该类消息，可调整微信设置后重试。'
-  }
-  return '你仍可正常训练，需要时可主动再次授权。'
+  return presentation.value.homeDetail
 })
 
-const canRetry = computed(() => props.status !== 'accepted')
+const canRetry = computed(() => presentation.value.canRetryAuthorization)
 </script>
 
 <template>

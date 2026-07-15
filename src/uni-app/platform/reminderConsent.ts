@@ -1,10 +1,14 @@
 export type ReminderAuthorizationStatus =
   | 'not_requested'
   | 'accepted'
+  | 'test_accepted'
   | 'rejected'
   | 'banned'
   | 'unsupported'
   | 'unconfigured'
+
+export type ReminderSyncState = 'idle' | 'syncing' | 'synced' | 'failed'
+export type ReminderAuthorizationMode = 'test' | 'production'
 
 type SubscribeMessageResult = Record<string, 'accept' | 'reject' | 'ban' | string>
 
@@ -15,17 +19,22 @@ type RequestSubscribeMessage = (options: {
 }) => void
 
 type RequestReminderAuthorizationOptions = {
-  templateIds: string[]
+  templateId: string
+  mode: ReminderAuthorizationMode
   requestSubscribeMessage?: RequestSubscribeMessage
 }
 
-export function resolveReminderTemplateIds(
-  configured: string = import.meta.env.VITE_WECHAT_REMINDER_TEMPLATE_IDS ?? ''
+export function resolveReminderTemplateId(
+  configured: string = import.meta.env.VITE_WECHAT_REMINDER_TEMPLATE_ID ?? ''
 ) {
-  return configured
-    .split(',')
-    .map(templateId => templateId.trim())
-    .filter(Boolean)
+  const templateId = configured.trim()
+  return templateId.includes(',') ? '' : templateId
+}
+
+export function resolveReminderAuthorizationMode(
+  configured: string = import.meta.env.VITE_WECHAT_REMINDER_MODE ?? 'test'
+): ReminderAuthorizationMode {
+  return configured.trim().toLowerCase() === 'production' ? 'production' : 'test'
 }
 
 function resolveDefaultRequester(): RequestSubscribeMessage | undefined {
@@ -39,7 +48,7 @@ function resolveDefaultRequester(): RequestSubscribeMessage | undefined {
 export async function requestReminderAuthorization(
   options: RequestReminderAuthorizationOptions
 ): Promise<ReminderAuthorizationStatus> {
-  if (options.templateIds.length === 0) {
+  if (!options.templateId) {
     return 'unconfigured'
   }
 
@@ -50,15 +59,15 @@ export async function requestReminderAuthorization(
 
   return new Promise(resolve => {
     requestSubscribeMessage({
-      tmplIds: options.templateIds,
+      tmplIds: [options.templateId],
       success(result) {
-        const outcomes = options.templateIds.map(templateId => result[templateId])
-        if (outcomes.includes('accept')) {
-          resolve('accepted')
+        const outcome = result[options.templateId]
+        if (outcome === 'accept') {
+          resolve(options.mode === 'production' ? 'accepted' : 'test_accepted')
           return
         }
 
-        resolve(outcomes.includes('ban') ? 'banned' : 'rejected')
+        resolve(outcome === 'ban' ? 'banned' : 'rejected')
       },
       fail() {
         resolve('unsupported')
