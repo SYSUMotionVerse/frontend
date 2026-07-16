@@ -681,6 +681,30 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       return dependencies.getTrainingProgress()
     },
+    async loadStationNotifications() {
+      if (!dependencies.isEnabled()) {
+        return { count: 0, notifications: [] }
+      }
+
+      await dependencies.ensureSession()
+      const [notifications, unread] = await Promise.all([
+        dependencies.listNotifications(),
+        dependencies.getUnreadNotifications()
+      ])
+      return {
+        count: unread.count,
+        notifications: notifications.filter(item => item.notification_type === 'TRAINING_REMINDER')
+      }
+    },
+    async markStationNotificationRead(id: number) {
+      if (!dependencies.isEnabled()) {
+        return { synced: false, reason: 'disabled' } as const
+      }
+
+      await dependencies.ensureSession()
+      await dependencies.markNotificationRead(id)
+      return { synced: true } as const
+    },
     async loadPhysicalMetrics() {
       if (!dependencies.isEnabled()) {
         return []

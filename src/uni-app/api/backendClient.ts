@@ -19,6 +19,8 @@ import type {
   BackendComplianceCalendar,
   BackendComplianceTrend,
   BackendTrainingProgress,
+  BackendStationNotification,
+  BackendUnreadNotifications,
 } from './studentBackendTypes'
 import type {
   ReminderAuthorizationConfig,
@@ -489,6 +491,21 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getTrainingProgress() {
       return request<BackendTrainingProgress>('/exercises/progress/today/')
+    },
+    listNotifications() {
+      return request<BackendStationNotification[] | PaginatedResponse<BackendStationNotification>>(
+        '/notifications/messages/?notification_type=TRAINING_REMINDER'
+      ).then(response => unwrapCollectionResponse<BackendStationNotification>(response))
+    },
+    getUnreadNotifications() {
+      return request<BackendUnreadNotifications>(
+        '/notifications/messages/unread/?notification_type=TRAINING_REMINDER'
+      )
+    },
+    markNotificationRead(id: number) {
+      return request(`/notifications/messages/${id}/mark_read/`, {
+        method: 'POST'
+      })
     }
   }
 }

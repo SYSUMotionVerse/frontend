@@ -360,6 +360,25 @@ export interface StudentBackendSyncDependencies {
   getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
   getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
   getTrainingProgress: () => Promise<BackendTrainingProgress>
+  listNotifications: () => Promise<BackendStationNotification[]>
+  getUnreadNotifications: () => Promise<BackendUnreadNotifications>
+  markNotificationRead: (id: number) => Promise<unknown>
+}
+
+export interface BackendStationNotification {
+  id: number
+  notification_type: 'TRAINING_REMINDER' | 'SCALE_REMINDER' | 'ACHIEVEMENT' | 'SYSTEM'
+  title: string
+  content: string
+  is_read: boolean
+  reminder_slot: '12:00' | '18:00' | null
+  action_target: string
+  created_at: string
+}
+
+export interface BackendUnreadNotifications {
+  count: number
+  notifications: BackendStationNotification[]
 }
 
 export type BackendTrainingModality = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'

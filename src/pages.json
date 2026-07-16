@@ -37,6 +37,12 @@
       }
     },
     {
+      "path": "pages/notifications/index",
+      "style": {
+        "navigationBarTitleText": "训练提醒"
+      }
+    },
+    {
       "path": "pages/training/select",
       "style": {
         "navigationBarTitleText": "选择训练"

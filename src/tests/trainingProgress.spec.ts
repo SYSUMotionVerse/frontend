@@ -19,6 +19,7 @@ const backendProgress = {
 
 const loadTrainingProgress = vi.fn().mockResolvedValue(backendProgress)
 const retryPendingTrainingSubmissions = vi.fn().mockResolvedValue({ attempted: 0, succeeded: 0 })
+const loadStationNotifications = vi.fn().mockResolvedValue({ count: 0, notifications: [] })
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
@@ -31,7 +32,9 @@ vi.mock('../uni-app/api/studentBackend', async importOriginal => {
     ...actual,
     studentBackendSync: {
       loadTrainingProgress,
-      retryPendingTrainingSubmissions
+      retryPendingTrainingSubmissions,
+      loadStationNotifications,
+      markStationNotificationRead: vi.fn()
     }
   }
 })

@@ -15,11 +15,13 @@ import { useReminderConsent } from '../../composables/useReminderConsent'
 import { resolveReminderSource } from '../../platform/reminders'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import { useStationNotifications } from '../../composables/useStationNotifications'
 
 const store = useStudentStore()
 const avatarEditor = useProfileAvatarEditor()
 const trainingProgress = useTrainingProgress()
 const reminderConsent = useReminderConsent()
+const stationNotifications = useStationNotifications()
 
 const profileAvatarUrl = computed(() =>
   store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
@@ -72,7 +74,10 @@ onLoad((query) => {
 })
 
 onShow(async () => {
-  await trainingProgress.refresh()
+  await Promise.all([
+    trainingProgress.refresh(),
+    stationNotifications.refresh()
+  ])
   void reminderConsent.loadStatus()
 })
 
@@ -92,11 +97,13 @@ function handleReminderAuthorizationRetry() {
         :avatar-error-message="avatarErrorMessage"
         :is-wechat-mini-program="isWechatMiniProgram"
         :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
+        :unread-count="stationNotifications.unreadCount.value"
         mini-tag="TODAY'S QUEST"
         title="今天先完成主线任务"
         title-pill="训练首页"
         variant="home"
         @choose-wechat-avatar="avatarEditor.handleWechatAvatarChoice"
+        @open-notifications="stationNotifications.openList"
       />
 
       <TrainingHomeQuestPanel
