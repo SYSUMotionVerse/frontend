@@ -5,6 +5,7 @@ let loadPage: ((query?: Record<string, unknown>) => void) | undefined
 let showPage: (() => Promise<void>) | undefined
 const calls: string[] = []
 const setReminderSource = vi.fn()
+const resolveReminderReturn = vi.fn(async () => { calls.push('resolve') })
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn((callback: typeof loadPage) => { loadPage = callback }),
@@ -13,7 +14,7 @@ vi.mock('@dcloudio/uni-app', () => ({
 
 vi.mock('../uni-app/api/studentBackend', () => ({
   studentBackendSync: {
-    resolveReminderReturn: vi.fn(async () => { calls.push('resolve') }),
+    resolveReminderReturn,
     retryPendingTrainingSubmissions: vi.fn(async () => ({ attempted: 0, succeeded: 0 })),
     loadTrainingProgress: vi.fn(async () => {
       calls.push('progress')
@@ -69,6 +70,7 @@ describe('training home reminder return orchestration', () => {
     vi.resetModules()
     calls.length = 0
     setReminderSource.mockReset()
+    resolveReminderReturn.mockReset().mockImplementation(async () => { calls.push('resolve') })
     loadPage = undefined
     showPage = undefined
   })
@@ -124,5 +126,44 @@ describe('training home reminder return orchestration', () => {
 
     expect(calls).toEqual(['progress'])
     expect(setReminderSource).not.toHaveBeenCalled()
+  })
+
+  it('waits for a shared return resolution before concurrent shows refresh progress', async () => {
+    let completeResolution: (() => void) | undefined
+    resolveReminderReturn.mockImplementationOnce(() => {
+      calls.push('resolve')
+      return new Promise<void>(resolve => { completeResolution = resolve })
+    })
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    mount(HomePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          TrainingHomeQuestPanel: true,
+          DailyProgressCard: true,
+          ReminderAuthorizationStatus: true,
+          TrainingHomeFeatureCard: true,
+          TrainingHomeCoachCard: true,
+          navigator: true
+        }
+      }
+    })
+
+    loadPage?.({
+      tracking: 'bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26',
+      slot: '18:00',
+      date: '2026-07-16'
+    })
+    const firstShow = showPage?.()
+    const secondShow = showPage?.()
+
+    await Promise.resolve()
+    expect(calls).toEqual(['resolve'])
+
+    completeResolution?.()
+    await Promise.all([firstShow, secondShow])
+
+    expect(calls).toEqual(['resolve', 'progress', 'progress'])
   })
 })

@@ -150,7 +150,7 @@ describe('trusted reminder return', () => {
     expect(reminderReturn.state.value.status).toBe('resolved')
   })
 
-  it('does not submit the same target twice while resolution is in flight', async () => {
+  it('shares the in-flight resolution so concurrent callers wait for completion', async () => {
     let completeResolution: (() => void) | undefined
     resolveReminderReturn.mockImplementationOnce(() => new Promise<void>(resolve => {
       completeResolution = resolve
@@ -165,11 +165,18 @@ describe('trusted reminder return', () => {
     })
     const firstShow = reminderReturn.resolvePending()
     const secondShow = reminderReturn.resolvePending()
+    let secondShowCompleted = false
+    void secondShow.then(() => { secondShowCompleted = true })
 
     expect(resolveReminderReturn).toHaveBeenCalledTimes(1)
+    expect(secondShow).toBe(firstShow)
+    await Promise.resolve()
+    expect(secondShowCompleted).toBe(false)
+
     completeResolution?.()
     await Promise.all([firstShow, secondShow])
 
+    expect(secondShowCompleted).toBe(true)
     expect(reminderReturn.state.value.status).toBe('resolved')
   })
 
