@@ -21,6 +21,8 @@ import type {
   BackendTrainingProgress,
   BackendStationNotification,
   BackendUnreadNotifications,
+  BackendReminderReturn,
+  BackendReminderReturnPayload,
 } from './studentBackendTypes'
 import type {
   ReminderAuthorizationConfig,
@@ -45,6 +47,16 @@ interface PaginatedResponse<T> {
   next?: string | null
   previous?: string | null
   results: T[]
+}
+
+export class BackendRequestError extends Error {
+  readonly statusCode: number
+
+  constructor(message: string, statusCode: number) {
+    super(message)
+    this.name = 'BackendRequestError'
+    this.statusCode = statusCode
+  }
 }
 
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -296,7 +308,10 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
             return
           }
 
-          reject(new Error(resolveErrorMessage(response.data, `Request failed with ${response.statusCode}`)))
+          reject(new BackendRequestError(
+            resolveErrorMessage(response.data, `Request failed with ${response.statusCode}`),
+            response.statusCode
+          ))
         },
         fail(error) {
           reject(error)
@@ -505,6 +520,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     markNotificationRead(id: number) {
       return request(`/notifications/messages/${id}/mark_read/`, {
         method: 'POST'
+      })
+    },
+    resolveReminderReturn(payload: BackendReminderReturnPayload) {
+      return request<BackendReminderReturn>('/notifications/messages/resolve_return/', {
+        method: 'POST',
+        data: payload
       })
     }
   }

@@ -34,6 +34,7 @@ import type {
   VisualSessionSyncInput,
   VisualPoseAnalysisPayload
 } from './studentBackendTypes'
+import type { ReminderReturnTarget } from '../platform/reminders'
 import {
   createPendingTrainingSubmissionStore,
   type PendingTrainingSubmission,
@@ -704,6 +705,18 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       await dependencies.markNotificationRead(id)
       return { synced: true } as const
+    },
+    async resolveReminderReturn(target: ReminderReturnTarget) {
+      if (!dependencies.isEnabled()) {
+        return { synced: false, reason: 'disabled' } as const
+      }
+
+      await dependencies.ensureSession()
+      return dependencies.resolveReminderReturn({
+        tracking_id: target.trackingId,
+        slot: target.slot,
+        local_date: target.localDate
+      })
     },
     async loadPhysicalMetrics() {
       if (!dependencies.isEnabled()) {

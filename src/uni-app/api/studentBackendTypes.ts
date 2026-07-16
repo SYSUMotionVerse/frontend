@@ -363,6 +363,7 @@ export interface StudentBackendSyncDependencies {
   listNotifications: () => Promise<BackendStationNotification[]>
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
+  resolveReminderReturn: (payload: BackendReminderReturnPayload) => Promise<BackendReminderReturn>
 }
 
 export interface BackendStationNotification {
@@ -379,6 +380,19 @@ export interface BackendStationNotification {
 export interface BackendUnreadNotifications {
   count: number
   notifications: BackendStationNotification[]
+}
+
+export interface BackendReminderReturnPayload {
+  tracking_id: string
+  slot: '12:00' | '18:00'
+  local_date: string
+}
+
+export interface BackendReminderReturn {
+  resolved: true
+  slot: '12:00' | '18:00'
+  local_date: string
+  first_returned_at: string
 }
 
 export type BackendTrainingModality = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'

@@ -12,16 +12,17 @@ import UniTrainingPageShell from '../../components/training/UniTrainingPageShell
 import { useProfileAvatarEditor } from '../../composables/useProfileAvatarEditor'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useReminderConsent } from '../../composables/useReminderConsent'
-import { resolveReminderSource } from '../../platform/reminders'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
 import { useStationNotifications } from '../../composables/useStationNotifications'
+import { useReminderReturn } from '../../composables/useReminderReturn'
 
 const store = useStudentStore()
 const avatarEditor = useProfileAvatarEditor()
 const trainingProgress = useTrainingProgress()
 const reminderConsent = useReminderConsent()
 const stationNotifications = useStationNotifications()
+const reminderReturn = useReminderReturn()
 
 const profileAvatarUrl = computed(() =>
   store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
@@ -64,16 +65,18 @@ const learnCards = [
 
 onLoad((query) => {
   const nextQuery = query ?? {}
-  const reminderSource = resolveReminderSource({
-    source: nextQuery.source?.toString()
+  reminderReturn.capture({
+    tracking: nextQuery.tracking?.toString(),
+    slot: nextQuery.slot?.toString(),
+    date: nextQuery.date?.toString()
   })
-
-  if (reminderSource) {
-    store.setReminderSource(reminderSource)
-  }
 })
 
 onShow(async () => {
+  await reminderReturn.resolvePending()
+  if (reminderReturn.state.value.status === 'resolved') {
+    store.setReminderSource('wechat-reminder')
+  }
   await Promise.all([
     trainingProgress.refresh(),
     stationNotifications.refresh()

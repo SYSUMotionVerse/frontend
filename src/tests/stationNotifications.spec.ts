@@ -160,6 +160,32 @@ describe('station notifications', () => {
     expect(markStationNotificationRead).toHaveBeenCalledTimes(2)
   })
 
+  it('preserves encoded tracking, slot, and date when opening a station reminder', async () => {
+    loadStationNotifications.mockResolvedValueOnce({
+      count: 1,
+      notifications: [{
+        id: 17,
+        notification_type: 'TRAINING_REMINDER',
+        title: '晚间训练提醒',
+        content: '今天还差两项训练。',
+        is_read: true,
+        reminder_slot: '18:00',
+        action_target: '/pages/training/home?tracking=bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26&slot=18%3A00&date=2026-07-16',
+        created_at: '2026-07-16T10:00:00Z'
+      }]
+    })
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    const notifications = useStationNotifications()
+    await notifications.refresh()
+
+    await notifications.open(notifications.state.value.notifications[0])
+
+    expect(markStationNotificationRead).not.toHaveBeenCalled()
+    expect(navigateTo).toHaveBeenCalledWith({
+      url: '/pages/training/home?tracking=bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26&slot=18%3A00&date=2026-07-16&source=reminder'
+    })
+  })
+
   it('offers an explicit retry after notification loading fails', async () => {
     loadStationNotifications.mockRejectedValueOnce(new Error('offline'))
     const NotificationPage = (await import('../uni-app/pages/notifications/index.vue')).default

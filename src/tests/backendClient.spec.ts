@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBackendClient } from '../uni-app/api/backendClient'
+import {
+  BackendRequestError,
+  createBackendClient
+} from '../uni-app/api/backendClient'
 
 interface MockRequestResponse {
   statusCode: number
@@ -533,6 +536,31 @@ describe('backend client session handling', () => {
 
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
       'http://api.example.com/exercises/compliance/trend/?type=weekly&weeks=8'
+    )
+  })
+
+  it('exposes the response status code on backend request errors', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 410,
+        data: { detail: 'Reminder return has expired.' }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    const request = client.resolveReminderReturn({
+      tracking_id: 'bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26',
+      slot: '12:00',
+      local_date: '2026-07-16'
+    })
+
+    await expect(request).rejects.toEqual(
+      expect.objectContaining<Partial<BackendRequestError>>({
+        message: 'Reminder return has expired.',
+        statusCode: 410
+      })
     )
   })
 })
