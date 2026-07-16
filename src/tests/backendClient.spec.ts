@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBackendClient } from '../uni-app/api/backendClient'
+import {
+  BackendRequestError,
+  createBackendClient
+} from '../uni-app/api/backendClient'
 
 interface MockRequestResponse {
   statusCode: number
@@ -156,6 +159,65 @@ describe('backend client session handling', () => {
       Cookie: 'csrftoken=test-csrf-token; sessionid=test-session',
       'X-CSRFToken': 'test-csrf-token'
     })
+  })
+
+  it('synchronizes reminder authorization through the authenticated reminder endpoint', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: [
+          'csrftoken=test-csrf-token; Path=/; SameSite=Lax',
+          'sessionid=test-session; Path=/; HttpOnly; SameSite=Lax'
+        ]
+      },
+      {
+        statusCode: 200,
+        data: { status: 'rejected', updated_at: '2026-07-16T12:00:00Z' }
+      }
+    ])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await client.ensureSession()
+    const result = await client.updateReminderAuthorization('rejected')
+
+    expect(result.status).toBe('rejected')
+    expect(uniMock.request.mock.calls[1]?.[0]).toMatchObject({
+      url: 'http://api.example.com/notifications/reminders/authorization/',
+      method: 'PATCH',
+      data: { status: 'rejected' },
+      header: expect.objectContaining({
+        Cookie: 'csrftoken=test-csrf-token; sessionid=test-session',
+        'X-CSRFToken': 'test-csrf-token'
+      })
+    })
+  })
+
+  it('loads reminder template configuration from the authenticated backend', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          status: 'not_requested',
+          updated_at: null,
+          template_id: 'server-template-id',
+          mode: 'test'
+        }
+      }
+    ])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    const result = await client.getReminderAuthorization()
+
+    expect(result).toMatchObject({
+      template_id: 'server-template-id',
+      mode: 'test'
+    })
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/notifications/reminders/authorization/'
+    )
   })
 
   it('fetches current user from /users/me/ with session cookie after bootstrap', async () => {
@@ -474,6 +536,31 @@ describe('backend client session handling', () => {
 
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
       'http://api.example.com/exercises/compliance/trend/?type=weekly&weeks=8'
+    )
+  })
+
+  it('exposes the response status code on backend request errors', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 410,
+        data: { detail: 'Reminder return has expired.' }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    const request = client.resolveReminderReturn({
+      tracking_id: 'bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26',
+      slot: '12:00',
+      local_date: '2026-07-16'
+    })
+
+    await expect(request).rejects.toEqual(
+      expect.objectContaining<Partial<BackendRequestError>>({
+        message: 'Reminder return has expired.',
+        statusCode: 410
+      })
     )
   })
 })

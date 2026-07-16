@@ -19,6 +19,12 @@
       }
     },
     {
+      "path": "pages/access/reminder-consent",
+      "style": {
+        "navigationBarTitleText": "训练提醒"
+      }
+    },
+    {
       "path": "pages/training/home",
       "style": {
         "navigationBarTitleText": "训练首页"

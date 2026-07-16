@@ -586,7 +586,7 @@ describe('ui review fixes', () => {
     )
 
     expect(headerCard).toContain('home-header__mini-tag')
-    expect(headerCard).toContain('home-header__bell-dot')
+    expect(headerCard).toContain('home-header__bell-badge')
     expect(headerCard).toContain("variant?: 'home' | 'compact'")
     expect(headerCard).toContain('width: 88rpx;')
     expect(headerCard).toContain('font-size: 46rpx;')

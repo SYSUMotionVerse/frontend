@@ -3,17 +3,18 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import VisualTrainingPanel from '../../../components/training/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../../domain/student/types'
-import { studentBackendSync } from '../../api/studentBackend'
 import { buildVisualPoseAnalysisPayload } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useVisualTrainingSubmission } from '../../composables/useVisualTrainingSubmission'
 import { createCameraSessionAnalysis } from '../../platform/camera'
 import PoseDetectionView from '../../components/pose/PoseDetectionView.vue'
 import type { DetectResult } from '../../components/pose/PoseDetectModel'
 import type { PoseAngleFrame } from '../../components/pose/poseAnalysis'
 
 const store = useStudentStore()
+const visualSubmission = useVisualTrainingSubmission()
 const modality = ref<TrainingModality>('wushu')
 const poseCamera = ref<any>(null)
 
@@ -122,7 +123,7 @@ async function finishSession() {
 
   try {
     const poseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
-    const result = await studentBackendSync.syncVisualSession({
+    const result = await visualSubmission.sync({
       modality: syncModality,
       durationSeconds,
       ...(poseAnalysis ? { poseAnalysis } : {})

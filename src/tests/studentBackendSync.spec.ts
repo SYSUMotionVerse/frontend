@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { StudentProfile } from '../types/student'
+import type { PendingTrainingSubmission } from '../uni-app/platform/pendingTrainingSubmissions'
 
 function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
   return {
@@ -20,6 +21,22 @@ function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile 
 }
 
 describe('student backend sync orchestration', () => {
+  function createPendingSubmissionStore() {
+    const entries = new Map<string, PendingTrainingSubmission>()
+    return {
+      entries,
+      store: {
+        list: vi.fn(() => Array.from(entries.values())),
+        save: vi.fn((entry: PendingTrainingSubmission) => {
+          entries.set(entry.sessionId, entry)
+        }),
+        remove: vi.fn((sessionId: string) => {
+          entries.delete(sessionId)
+        })
+      }
+    }
+  }
+
   it('syncs registration through login, profile update, and a survey record', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
@@ -275,6 +292,7 @@ describe('student backend sync orchestration', () => {
     })
 
     const result = await sync.syncVisualSession({
+      sessionId: 'visual-session-123',
       modality: 'wushu',
       durationSeconds: 30,
       poseAnalysis: {
@@ -308,6 +326,7 @@ describe('student backend sync orchestration', () => {
     expect(createExerciseRecord).toHaveBeenCalledWith({
       video: 9,
       duration: 30,
+      training_session_id: 'visual-session-123',
       poseAnalysis: {
         schema_version: '0.1',
         sequence_id: 'student_123',
@@ -358,6 +377,7 @@ describe('student backend sync orchestration', () => {
     })
 
     await sync.syncStairSession({
+      sessionId: 'stairs-session-123',
       durationSeconds: 26,
       completedIntervals: 1,
       qualityScore: 81,
@@ -367,9 +387,220 @@ describe('student backend sync orchestration', () => {
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(createStairsRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        duration: 26
+        duration: 26,
+        training_session_id: 'stairs-session-123'
       })
     )
+  })
+
+  it('replays an ambiguous visual POST with the exact durable session payload', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const createExerciseRecord = vi.fn()
+      .mockRejectedValueOnce(new Error('request timeout'))
+      .mockResolvedValueOnce({ id: 12, status: 'COMPLETED' })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        listExerciseVideos: vi.fn().mockResolvedValue([
+          { id: 9, exercise_type: 'MARTIAL_ARTS', title: '马步冲拳' }
+        ]),
+        createExerciseRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncVisualSession({
+      sessionId: 'durable-visual-session',
+      modality: 'wushu',
+      durationSeconds: 30
+    })).rejects.toThrow('request timeout')
+    expect(pending.entries.has('durable-visual-session')).toBe(true)
+
+    await expect(sync.retryPendingTrainingSubmissions()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(createExerciseRecord).toHaveBeenCalledTimes(2)
+    expect(createExerciseRecord.mock.calls[1]?.[0]).toEqual(
+      createExerciseRecord.mock.calls[0]?.[0]
+    )
+    expect(createExerciseRecord.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      training_session_id: 'durable-visual-session'
+    }))
+    expect(pending.entries.size).toBe(0)
+  })
+
+  it('queues a visual completion before session bootstrap and replays it later', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const ensureSession = vi.fn()
+      .mockRejectedValueOnce(new Error('login unavailable'))
+      .mockResolvedValueOnce(undefined)
+    const createExerciseRecord = vi.fn().mockResolvedValue({ id: 31, status: 'COMPLETED' })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession,
+        listExerciseVideos: vi.fn().mockResolvedValue([
+          { id: 9, exercise_type: 'MARTIAL_ARTS', title: '马步冲拳' }
+        ]),
+        createExerciseRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncVisualSession({
+      sessionId: 'visual-before-login',
+      modality: 'wushu',
+      durationSeconds: 30
+    })).rejects.toThrow('login unavailable')
+    expect(pending.store.save.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureSession.mock.invocationCallOrder[0]
+    )
+    expect(pending.entries.get('visual-before-login')).toEqual(expect.objectContaining({
+      sessionId: 'visual-before-login',
+      kind: 'visual',
+      modality: 'wushu',
+      durationSeconds: 30
+    }))
+
+    await expect(sync.retryPendingTrainingSubmissions()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(createExerciseRecord).toHaveBeenCalledWith(expect.objectContaining({
+      training_session_id: 'visual-before-login'
+    }))
+    expect(pending.entries.size).toBe(0)
+  })
+
+  it('keeps a visual completion when video lookup fails and resolves it on replay', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const listExerciseVideos = vi.fn()
+      .mockRejectedValueOnce(new Error('video list unavailable'))
+      .mockResolvedValueOnce([
+        { id: 19, exercise_type: 'HIIT', title: 'HIIT' }
+      ])
+    const createExerciseRecord = vi.fn().mockResolvedValue({ id: 32, status: 'COMPLETED' })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        listExerciseVideos,
+        createExerciseRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncVisualSession({
+      sessionId: 'visual-before-video',
+      modality: 'hiit',
+      durationSeconds: 45
+    })).rejects.toThrow('video list unavailable')
+    expect(pending.entries.has('visual-before-video')).toBe(true)
+    expect(pending.store.save.mock.invocationCallOrder[0]).toBeLessThan(
+      listExerciseVideos.mock.invocationCallOrder[0]
+    )
+
+    await expect(sync.retryPendingTrainingSubmissions()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(listExerciseVideos).toHaveBeenNthCalledWith(2, 'HIIT')
+    expect(createExerciseRecord).toHaveBeenCalledWith(expect.objectContaining({
+      duration: 45,
+      training_session_id: 'visual-before-video'
+    }))
+    expect(pending.entries.size).toBe(0)
+  })
+
+  it('replays an ambiguous stair POST with the exact durable session payload', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const createStairsRecord = vi.fn()
+      .mockRejectedValueOnce(new Error('request timeout'))
+      .mockResolvedValueOnce({ id: 22 })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        createStairsRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncStairSession({
+      sessionId: 'durable-stairs-session',
+      durationSeconds: 30,
+      completedIntervals: 1,
+      qualityScore: 80,
+      summary: '完成训练。'
+    })).rejects.toThrow('request timeout')
+    expect(pending.entries.has('durable-stairs-session')).toBe(true)
+
+    await expect(sync.retryPendingTrainingSubmissions()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(createStairsRecord).toHaveBeenCalledTimes(2)
+    expect(createStairsRecord.mock.calls[1]?.[0]).toEqual(
+      createStairsRecord.mock.calls[0]?.[0]
+    )
+    expect(createStairsRecord.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      training_session_id: 'durable-stairs-session'
+    }))
+    expect(pending.entries.size).toBe(0)
+  })
+
+  it('queues a stair completion before session bootstrap and replays it later', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const ensureSession = vi.fn()
+      .mockRejectedValueOnce(new Error('login unavailable'))
+      .mockResolvedValueOnce(undefined)
+    const createStairsRecord = vi.fn().mockResolvedValue({ id: 33 })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession,
+        createStairsRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncStairSession({
+      sessionId: 'stairs-before-login',
+      durationSeconds: 30,
+      completedIntervals: 1,
+      qualityScore: 82,
+      summary: '完成训练。'
+    })).rejects.toThrow('login unavailable')
+    expect(pending.store.save.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureSession.mock.invocationCallOrder[0]
+    )
+    expect(pending.entries.get('stairs-before-login')).toEqual(expect.objectContaining({
+      sessionId: 'stairs-before-login',
+      kind: 'stairs',
+      durationSeconds: 30,
+      qualityScore: 82
+    }))
+
+    await expect(sync.retryPendingTrainingSubmissions()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(createStairsRecord).toHaveBeenCalledWith(expect.objectContaining({
+      training_session_id: 'stairs-before-login'
+    }))
+    expect(pending.entries.size).toBe(0)
   })
 
   it('returns null without loading adherence endpoints when backend sync is disabled', async () => {

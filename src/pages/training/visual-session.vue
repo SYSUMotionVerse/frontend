@@ -3,17 +3,18 @@ import { computed, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import type { TrainingModality } from '../../domain/student/types'
 import { createVisualSessionLayout } from '../../features/training/visualSessionLayout'
-import { studentBackendSync } from '../../uni-app/api/studentBackend'
 import { buildVisualPoseAnalysisPayload } from '../../uni-app/api/studentBackend'
 import { reportBackendSyncError } from '../../uni-app/api/reportBackendSyncError'
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../uni-app/composables/useStudentStore'
+import { useVisualTrainingSubmission } from '../../uni-app/composables/useVisualTrainingSubmission'
 import { createCameraSessionAnalysis } from '../../uni-app/platform/camera'
 import PoseDetectionView from '../../uni-app/components/pose/PoseDetectionView.vue'
 import type { DetectResult } from '../../uni-app/components/pose/PoseDetectModel'
 import type { PoseAngleFrame } from '../../uni-app/components/pose/poseAnalysis'
 
 const store = useStudentStore()
+const visualSubmission = useVisualTrainingSubmission()
 const modality = ref<TrainingModality>('wushu')
 const poseCamera = ref<any>(null)
 
@@ -212,7 +213,7 @@ async function finishSession() {
 
   try {
     const poseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
-    const result = await studentBackendSync.syncVisualSession({
+    const result = await visualSubmission.sync({
       modality: syncModality,
       durationSeconds,
       ...(poseAnalysis ? { poseAnalysis } : {})

@@ -159,6 +159,7 @@ describe('student backend API payload mapping', () => {
 
     expect(
       buildStairsRecordPayload({
+        sessionId: 'stairs-summary-session',
         durationSeconds: 28,
         completedIntervals: 1,
         qualityScore: 83,
@@ -178,6 +179,7 @@ describe('student backend API payload mapping', () => {
       })
     ).toEqual({
       duration: 28,
+      training_session_id: 'stairs-summary-session',
       speed_data: {
         completedIntervals: 1,
         activeClimbSeconds: 24.8,
@@ -201,11 +203,28 @@ describe('student backend API payload mapping', () => {
     })
   })
 
+  it('carries the stable client session id into a stairs completion request', async () => {
+    const { buildStairsRecordPayload } = await import('../uni-app/api/studentBackend')
+
+    expect(
+      buildStairsRecordPayload({
+        sessionId: 'stairs-session-123',
+        durationSeconds: 30,
+        completedIntervals: 1,
+        qualityScore: 83,
+        summary: '完成楼梯训练。'
+      })
+    ).toEqual(expect.objectContaining({
+      training_session_id: 'stairs-session-123'
+    }))
+  })
+
   it('keeps supporting string-based stair summaries as a backward-compatible payload fallback', async () => {
     const { buildStairsRecordPayload } = await import('../uni-app/api/studentBackend')
 
     expect(
       buildStairsRecordPayload({
+        sessionId: 'stairs-fallback-session',
         durationSeconds: 28,
         completedIntervals: 1,
         qualityScore: 83,
@@ -213,6 +232,7 @@ describe('student backend API payload mapping', () => {
       })
     ).toEqual({
       duration: 28,
+      training_session_id: 'stairs-fallback-session',
       speed_data: {
         completedIntervals: 1
       },

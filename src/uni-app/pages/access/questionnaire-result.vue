@@ -28,7 +28,9 @@ const submittedAtValue = computed(() => submittedAt.value)
 function handleContinue() {
   store.refreshReminderEligibility()
   void uni.reLaunch({
-    url: '/pages/training/home'
+    url: checkpoint.value === 'baseline'
+      ? '/pages/access/reminder-consent'
+      : '/pages/training/home'
   })
 }
 </script>

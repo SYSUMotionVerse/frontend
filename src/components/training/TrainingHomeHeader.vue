@@ -13,6 +13,7 @@ const props = withDefaults(defineProps<{
   avatarErrorMessage?: string
   isWechatMiniProgram?: boolean
   supportsWechatAvatarSelection?: boolean
+  unreadCount?: number
 }>(), {
   miniTag: "TODAY'S QUEST",
   title: '今天先完成主线任务',
@@ -21,11 +22,13 @@ const props = withDefaults(defineProps<{
   avatarUploadState: 'idle',
   avatarErrorMessage: '',
   isWechatMiniProgram: false,
-  supportsWechatAvatarSelection: false
+  supportsWechatAvatarSelection: false,
+  unreadCount: 0
 })
 
 const emit = defineEmits<{
   chooseWechatAvatar: [event: { detail?: { avatarUrl?: string } }]
+  openNotifications: []
 }>()
 const headerClasses = computed(() => ['home-header', `home-header--${props.variant}`])
 </script>
@@ -53,10 +56,16 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
         </view>
       </view>
 
-      <view class="home-header__bell-shell">
-        <view class="home-header__bell-dot" />
+      <button
+        class="home-header__bell-shell"
+        aria-label="查看训练提醒"
+        @click="emit('openNotifications')"
+      >
+        <text v-if="props.unreadCount > 0" class="home-header__bell-badge">
+          {{ props.unreadCount > 99 ? '99+' : props.unreadCount }}
+        </text>
         <text class="home-header__bell">铃</text>
-      </view>
+      </button>
     </view>
 
     <text class="home-header__status">{{ props.reminderLabel }}</text>
@@ -202,6 +211,8 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   display: inline-flex;
   width: 88rpx;
   height: 88rpx;
+  margin: 0;
+  padding: 0;
   flex: none;
   align-items: center;
   justify-content: center;
@@ -212,22 +223,32 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
     0 6rpx 0 rgba(231, 219, 202, 0.72);
 }
 
+.home-header__bell-shell::after {
+  border: none;
+}
+
 .home-header--compact .home-header__bell-shell {
   width: 76rpx;
   height: 76rpx;
 }
 
-.home-header__bell-dot {
+.home-header__bell-badge {
   position: absolute;
   top: 20rpx;
   right: 20rpx;
-  width: 10rpx;
-  height: 10rpx;
+  min-width: 28rpx;
+  min-height: 28rpx;
+  padding: 2rpx 7rpx;
   border-radius: 9999px;
   background: #ff8b8b;
+  color: #fffaf6;
+  font-size: 16rpx;
+  line-height: 1.4;
+  font-weight: 900;
+  text-align: center;
 }
 
-.home-header--compact .home-header__bell-dot {
+.home-header--compact .home-header__bell-badge {
   top: 16rpx;
   right: 16rpx;
 }

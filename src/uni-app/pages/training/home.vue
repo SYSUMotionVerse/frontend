@@ -5,59 +5,44 @@ import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoac
 import TrainingHomeFeatureCard from '../../../components/training/TrainingHomeFeatureCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeQuestPanel from '../../../components/training/TrainingHomeQuestPanel.vue'
+import DailyProgressCard from '../../../components/training/DailyProgressCard.vue'
+import ReminderAuthorizationStatus from '../../../components/training/ReminderAuthorizationStatus.vue'
 import { DEFAULT_AVATAR_URL } from '../../../constants/defaultAvatar'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useProfileAvatarEditor } from '../../composables/useProfileAvatarEditor'
 import { useStudentStore } from '../../composables/useStudentStore'
-import { resolveReminderSource } from '../../platform/reminders'
+import { useReminderConsent } from '../../composables/useReminderConsent'
+import { useTrainingProgress } from '../../composables/useTrainingProgress'
+import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import { useStationNotifications } from '../../composables/useStationNotifications'
+import { useReminderReturn } from '../../composables/useReminderReturn'
 
 const store = useStudentStore()
 const avatarEditor = useProfileAvatarEditor()
+const trainingProgress = useTrainingProgress()
+const reminderConsent = useReminderConsent()
+const stationNotifications = useStationNotifications()
+const reminderReturn = useReminderReturn()
 
 const profileAvatarUrl = computed(() =>
   store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
 )
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
-
-const reminderLabel = computed(() =>
-  store.state.dailyAdherence.reminderEligible ? '今日提醒仍然开启' : '今天的提醒目标已完成'
-)
+const {
+  progress,
+  reminderLabel,
+  quests,
+  completedQuestCount,
+  coachCards
+} = useTrainingHomeProgressViewModel({
+  progressState: trainingProgress.state,
+  displayName
+})
 const avatarUploadState = computed(() => unref(avatarEditor.uploadState) ?? 'idle')
 const avatarErrorMessage = computed(() => unref(avatarEditor.errorMessage) ?? '')
 const isWechatMiniProgram = computed(() => Boolean(unref(avatarEditor.isWechatMiniProgram)))
 const supportsWechatAvatarSelection = computed(() => Boolean(unref(avatarEditor.supportsWechatAvatarSelection)))
-
-const quests = computed(() => {
-  const validCheckIns = store.state.dailyAdherence.validCheckIns
-  const qualifyingDays = store.state.weeklyAdherence.qualifyingDays
-
-  return [
-    {
-      id: 'daily-first',
-      title: '完成 1 次有效打卡',
-      detail: validCheckIns > 0 ? `今天已经完成 ${validCheckIns} 次有效打卡。` : '先完成一次短训练，把今天的状态点亮。',
-      completed: validCheckIns >= 1,
-      highlight: false
-    },
-    {
-      id: 'daily-three',
-      title: '今日累计 3 次有效打卡',
-      detail: `当前进度 ${validCheckIns}/3，完成后就能保持今日满格节奏。`,
-      completed: validCheckIns >= 3,
-      highlight: validCheckIns < 3
-    },
-    {
-      id: 'weekly-streak',
-      title: '本周达标 3 天',
-      detail: `目前已达标 ${qualifyingDays} 天，再稳住节奏就能拿下本周目标。`,
-      completed: qualifyingDays >= 3,
-      highlight: validCheckIns >= 3 && qualifyingDays < 3
-    }
-  ]
-})
-
-const completedQuestCount = computed(() => quests.value.filter((quest) => quest.completed).length)
 
 const learnCards = [
   {
@@ -78,41 +63,30 @@ const learnCards = [
   }
 ]
 
-const coachCards = computed(() => [
-  {
-    id: 'quote',
-    eyebrow: '教练金句',
-    title: '今天先把动作做扎实',
-    body: `“${displayName.value}，真正的进步不是一次爆发，而是把每一次基本动作都做对。”`,
-    footer: 'Coach Harris',
-    tone: 'quote' as const
-  },
-  {
-    id: 'recovery',
-    eyebrow: '恢复建议',
-    title: '补水和放松别落下',
-    body: store.state.dailyAdherence.reminderEligible
-      ? '训练后先喝水，再做两分钟放松拉伸，下一轮会更轻松。'
-      : '今天的目标已经完成，记得补水并让身体慢慢降下来。',
-    footer: '恢复优先，明天会更稳。',
-    tone: 'tip' as const
-  }
-])
-
 onLoad((query) => {
   const nextQuery = query ?? {}
-  const reminderSource = resolveReminderSource({
-    source: nextQuery.source?.toString()
+  reminderReturn.capture({
+    tracking: nextQuery.tracking?.toString(),
+    slot: nextQuery.slot?.toString(),
+    date: nextQuery.date?.toString()
   })
+})
 
-  if (reminderSource) {
-    store.setReminderSource(reminderSource)
+onShow(async () => {
+  await reminderReturn.resolvePending()
+  if (reminderReturn.state.value.status === 'resolved') {
+    store.setReminderSource('wechat-reminder')
   }
+  await Promise.all([
+    trainingProgress.refresh(),
+    stationNotifications.refresh()
+  ])
+  void reminderConsent.loadStatus()
 })
 
-onShow(() => {
-  store.refreshReminderEligibility()
-})
+function handleReminderAuthorizationRetry() {
+  void reminderConsent.authorize()
+}
 </script>
 
 <template>
@@ -126,18 +100,41 @@ onShow(() => {
         :avatar-error-message="avatarErrorMessage"
         :is-wechat-mini-program="isWechatMiniProgram"
         :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
+        :unread-count="stationNotifications.unreadCount.value"
         mini-tag="TODAY'S QUEST"
         title="今天先完成主线任务"
         title-pill="训练首页"
         variant="home"
         @choose-wechat-avatar="avatarEditor.handleWechatAvatarChoice"
+        @open-notifications="stationNotifications.openList"
       />
 
       <TrainingHomeQuestPanel
+        v-if="progress"
         :completed-count="completedQuestCount"
         :quests="quests"
         :total-count="quests.length"
         title="今日任务"
+      />
+
+      <DailyProgressCard
+        v-if="progress"
+        :daily-count="progress.dailyCount"
+        :modalities="progress.modalities"
+        :week-qualifying-day-count="progress.week.qualifyingDayCount"
+      />
+      <view v-else-if="trainingProgress.state.value.status === 'error'" class="home-page__progress-status">
+        <text>{{ trainingProgress.state.value.message }}</text>
+      </view>
+      <view v-else class="home-page__progress-status">
+        <text>正在同步今日训练进度…</text>
+      </view>
+
+      <ReminderAuthorizationStatus
+        :status="reminderConsent.status.value"
+        :sync-state="reminderConsent.syncState.value"
+        :is-working="reminderConsent.isWorking.value"
+        @retry="handleReminderAuthorizationRetry"
       />
 
       <view class="home-page__section">
@@ -211,6 +208,17 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
+}
+
+.home-page__progress-status {
+  padding: 28rpx 32rpx;
+  border: 2rpx solid rgba(123, 135, 152, 0.16);
+  border-radius: 24rpx;
+  background: rgba(123, 135, 152, 0.06);
+  color: #7b8798;
+  font-size: 26rpx;
+  line-height: 1.5;
+  font-weight: 700;
 }
 
 .home-page__section-head {
