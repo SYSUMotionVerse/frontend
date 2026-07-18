@@ -76,9 +76,9 @@ npx vue-tsc --noEmit
 2. 打开微信开发者工具，选择“导入项目”。
 3. 项目目录选择：`dist/build/mp-weixin`。
 4. `AppID` 处理规则：
-   - 当前仓库在 [`src/manifest.json`](../src/manifest.json) 中默认使用 `touristappid`。
-   - 如果只是本地页面调试，可以继续使用游客模式或测试 `AppID`。
-   - 如果需要真机预览、上传或调用受限能力，请先替换为真实小程序 `AppID`。
+   - 以唯一清单 [`src/manifest.json`](../src/manifest.json) 中的 `mp-weixin.appid` 为准。
+   - 如果配置为 `touristappid`，仅适合本地页面调试或游客模式。
+   - 如果需要真机预览、上传或调用受限能力，即使清单中已配置非游客 AppID，也必须确认当前发布账号拥有该 AppID，并完成请求域名白名单和相应平台能力配置。
 5. 导入后，保持 `pnpm dev` 进程运行，让微信开发者工具自动读取增量产物。
 
 ## Agent 开发约束

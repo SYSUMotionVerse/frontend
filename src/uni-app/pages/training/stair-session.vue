@@ -79,7 +79,9 @@ async function startTimer() {
   } catch (error) {
     captureSession = null
     sensorStatus.value = 'unavailable'
+    isRunning.value = false
     reportBackendSyncError('楼梯训练传感器启动', error)
+    return
   }
 
   timerId = setInterval(() => {
@@ -159,6 +161,7 @@ async function finishSession() {
   }
 
   store.completeTrainingSession({
+    sessionId: trainingSessionId,
     modality: 'stair',
     qualityScore: analysis.qualityScore,
     summary: analysis.summary,

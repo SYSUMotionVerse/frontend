@@ -332,8 +332,8 @@ describe('ui review fixes', () => {
     expect(growthIndexPage).toContain('历史记录')
     expect(growthIndexPage).toContain('查看训练与问卷历史。')
     expect(growthIndexPage).not.toContain('Physical Metrics')
-    expect(growthIndexPage).not.toContain('History')
-    expect(growthIndexPage).not.toContain('Open session and questionnaire history.')
+    expect(growthIndexPage).not.toMatch(/>\s*History\s*</)
+    expect(growthIndexPage).not.toMatch(/>\s*Open session and questionnaire history\.\s*</)
 
     expect(resultCard).toContain('优秀势头')
     expect(resultCard).toContain('进步良好')

@@ -1,5 +1,4 @@
 import type { CheckpointKey, StudentProfile } from '../../types/student'
-import { resolveStartupEntryRoute } from '../../domain/student/access'
 import { useStudentStore } from '../composables/useStudentStore'
 import type { StudentAccessHydrationInput } from '../composables/useStudentStore'
 import { createBackendClient } from './backendClient'
@@ -11,7 +10,8 @@ import {
 import {
   mapBackendAssessmentHistory,
   mapBackendPhysicalMetrics,
-  mapBackendTrainingHistory
+  mapBackendTrainingHistory,
+  mapBackendVisualScoreTrend
 } from './growthBackendModels'
 import { DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD, type PoseAngleFrame } from '../components/pose/poseAnalysis'
 import type {
@@ -19,11 +19,15 @@ import type {
   BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseType,
+  BackendPsychologyRecord,
   BackendSyncResult,
+  ExerciseVideoSummary,
   LongQuestionnaireSyncResult,
   LongQuestionnaireSyncInput,
   ProfileAvatarSyncResult,
   RegistrationSyncInput,
+  ShortQuestionnaireSyncInput,
+  ShortQuestionnaireSyncResult,
   StairSessionSummary,
   StairSessionSyncInput,
   StairsRecordCreatePayload,
@@ -40,12 +44,20 @@ import {
   type PendingTrainingSubmission,
   type PendingTrainingSubmissionStore
 } from '../platform/pendingTrainingSubmissions'
+import {
+  createPendingShortQuestionnaireStore,
+  type PendingShortQuestionnaireStore
+} from '../platform/pendingShortQuestionnaires'
+import {
+  createRegistrationProfileStorage,
+  type RegistrationProfileStorage
+} from '../platform/registrationProfileStorage'
 
-type StartupTargetPage = 'register' | 'baselineQuestionnaire' | 'home'
+type StartupTargetPage = 'register' | 'questionnaire' | 'home'
 
 type StartupTargetPageUrl =
   | '/pages/access/register'
-  | '/pages/access/questionnaire?checkpoint=baseline'
+  | `/pages/access/questionnaire?checkpoint=${CheckpointKey}`
   | '/pages/training/home'
 
 type StudentBackendAccessDependencies = StudentBackendSyncDependencies & {
@@ -59,11 +71,14 @@ type StudentBackendBootstrapAccessOptions = {
 
 type StudentBackendSubmissionOptions = {
   pendingSubmissions: PendingTrainingSubmissionStore
+  pendingShortQuestionnaires: PendingShortQuestionnaireStore
+  registrationProfileStorage: RegistrationProfileStorage
 }
 
 export type BootstrapAccessResult = {
   targetPage: StartupTargetPage
   targetPageUrl: StartupTargetPageUrl
+  checkpoint?: CheckpointKey
 }
 
 function toJsonString(value: Record<string, unknown>) {
@@ -165,6 +180,24 @@ export function resolveBackendExerciseType(
   return modality === 'hiit' ? 'HIIT' : 'MARTIAL_ARTS'
 }
 
+function resolveExerciseVideoUrl(video: ExerciseVideoSummary): ExerciseVideoSummary {
+  const source = video.video_file?.trim()
+  if (!source || /^https?:\/\//i.test(source) || !source.startsWith('/')) {
+    return {
+      ...video,
+      video_file: source ?? null
+    }
+  }
+
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000/api'
+  const origin = configuredBaseUrl.match(/^(https?:\/\/[^/]+)/i)?.[1]
+
+  return {
+    ...video,
+    video_file: origin ? `${origin}${source}` : source
+  }
+}
+
 function toFiniteNumberOrUndefined(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
@@ -258,14 +291,16 @@ function resolveDefaultBootstrapAccessOptions(): StudentBackendBootstrapAccessOp
 
 function resolveDefaultSubmissionOptions(): StudentBackendSubmissionOptions {
   return {
-    pendingSubmissions: createPendingTrainingSubmissionStore()
+    pendingSubmissions: createPendingTrainingSubmissionStore(),
+    pendingShortQuestionnaires: createPendingShortQuestionnaireStore(),
+    registrationProfileStorage: createRegistrationProfileStorage()
   }
 }
 
 function hasQuestions(
   value: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>
 ): value is Extract<typeof value, { questions: unknown[] }> {
-  return Array.isArray((value as { questions?: unknown[] }).questions)
+  return Boolean(value) && Array.isArray((value as { questions?: unknown[] }).questions)
 }
 
 function hasTextValue(value: string | null | undefined): value is string {
@@ -336,6 +371,14 @@ export function isBackendProfileComplete(user: BackendCurrentUser) {
   )
 }
 
+function hasRequiredStudyProfileFields(profile: StudentProfile) {
+  return (
+    profile.age > 0 &&
+    profile.grade.trim().length > 0 &&
+    profile.restingHeartRate > 0
+  )
+}
+
 export function mapBackendCurrentUserToStudentProfile(
   user: BackendCurrentUser,
   seedProfile: StudentProfile
@@ -359,18 +402,12 @@ export function mapBackendCurrentUserToStudentProfile(
   }
 }
 
-function buildBootstrapAccessResult(targetEntryRoute: string): BootstrapAccessResult {
-  if (targetEntryRoute === '/register') {
+function buildBootstrapAccessResult(checkpoint?: CheckpointKey): BootstrapAccessResult {
+  if (checkpoint) {
     return {
-      targetPage: 'register',
-      targetPageUrl: '/pages/access/register'
-    }
-  }
-
-  if (targetEntryRoute === '/questionnaires/baseline') {
-    return {
-      targetPage: 'baselineQuestionnaire',
-      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline'
+      targetPage: 'questionnaire',
+      targetPageUrl: `/pages/access/questionnaire?checkpoint=${checkpoint}`,
+      checkpoint
     }
   }
 
@@ -378,6 +415,73 @@ function buildBootstrapAccessResult(targetEntryRoute: string): BootstrapAccessRe
     targetPage: 'home',
     targetPageUrl: '/pages/training/home'
   }
+}
+
+function buildRegistrationAccessResult(): BootstrapAccessResult {
+  return {
+    targetPage: 'register',
+    targetPageUrl: '/pages/access/register'
+  }
+}
+
+function resolveCompletedPsychologyCheckpoints(records: BackendPsychologyRecord[]) {
+  const checkpoints = new Set<CheckpointKey>()
+  for (const record of records) {
+    if (record?.scale_info && typeof record.scale_info.order === 'number') {
+      checkpoints.add(mapPsychologyRecordSummary(record).checkpoint)
+    }
+  }
+  return checkpoints
+}
+
+function hasSequentialCompletedCheckpoints(completedCheckpoints: Set<CheckpointKey>) {
+  const order: CheckpointKey[] = ['baseline', 'week4', 'week8', 'week12']
+  let foundGap = false
+
+  for (const checkpoint of order) {
+    if (!completedCheckpoints.has(checkpoint)) {
+      foundGap = true
+      continue
+    }
+
+    if (foundGap) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isAllScalesCompletedMessage(message: string) {
+  const normalized = message.trim().toLowerCase()
+  return (
+    (normalized.includes('所有') && normalized.includes('完成')) ||
+    normalized.includes('all scales completed') ||
+    normalized.includes('all scales have been completed')
+  )
+}
+
+function resolveDueCheckpoint(
+  nextScale: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>,
+  completedCheckpoints: Set<CheckpointKey>
+) {
+  if (hasQuestions(nextScale)) {
+    const checkpoint = mapBackendScaleToQuestionnaire(nextScale).checkpoint
+    if (completedCheckpoints.has(checkpoint)) {
+      throw new Error('Backend checkpoint state is inconsistent. Please contact the study administrator.')
+    }
+    return checkpoint
+  }
+
+  if (nextScale && typeof nextScale.message === 'string' && nextScale.message.trim().length > 0) {
+    if (isAllScalesCompletedMessage(nextScale.message)) {
+      return undefined
+    }
+
+    throw new Error(`Backend could not identify the next required questionnaire checkpoint: ${nextScale.message}`)
+  }
+
+  throw new Error('Backend could not identify the next required questionnaire checkpoint.')
 }
 
 async function runIfEnabled(
@@ -423,7 +527,7 @@ export function createStudentBackendSync(
     if (submission.kind === 'visual') {
       const exerciseType = resolveBackendExerciseType(submission.modality)
       const videos = await dependencies.listExerciseVideos(exerciseType)
-      const video = videos[0]
+      const video = videos.find(item => item.video_file?.trim()) ?? videos[0]
       if (!video) {
         throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
       }
@@ -491,7 +595,7 @@ export function createStudentBackendSync(
     },
     async bootstrapAccess() {
       if (!dependencies.isEnabled()) {
-        return buildBootstrapAccessResult('/register')
+        return buildRegistrationAccessResult()
       }
 
       await dependencies.ensureSession()
@@ -506,23 +610,44 @@ export function createStudentBackendSync(
         ...bootstrapAccessOverrides
       } satisfies StudentBackendBootstrapAccessOptions
 
+      const storedProfile = submissionOptions.registrationProfileStorage.load()
       const profile = mapBackendCurrentUserToStudentProfile(
         backendUser,
-        bootstrapAccess.resolveLocalProfile()
+        storedProfile ?? bootstrapAccess.resolveLocalProfile()
       )
-      const hasCompletedBaselineQuestionnaire = psychologyRecords.length > 0
+      profile.completed = profile.completed && hasRequiredStudyProfileFields(profile)
+      if (!profile.completed) {
+        bootstrapAccess.hydrateAccessState({
+          profile,
+          completedQuestionnaireCheckpoints: [],
+          activeCheckpoint: 'baseline'
+        })
+        return buildRegistrationAccessResult()
+      }
+
+      const completedCheckpoints = resolveCompletedPsychologyCheckpoints(psychologyRecords)
+      if (!hasSequentialCompletedCheckpoints(completedCheckpoints)) {
+        throw new Error('Backend checkpoint records are out of order.')
+      }
+      const registeredProfileHasNoPsychologyRecords = completedCheckpoints.size === 0 && psychologyRecords.length === 0
+      const dueCheckpoint = resolveDueCheckpoint(
+        await dependencies.getNextPsychologyScale(),
+        completedCheckpoints
+      )
+      if (registeredProfileHasNoPsychologyRecords && dueCheckpoint !== 'baseline') {
+        throw new Error('Backend checkpoint order is invalid: baseline questionnaire is not completed.')
+      }
+      if (!dueCheckpoint && completedCheckpoints.size < 4) {
+        throw new Error('Backend reports all questionnaires completed but checkpoint records are incomplete.')
+      }
 
       bootstrapAccess.hydrateAccessState({
         profile,
-        hasCompletedBaselineQuestionnaire
+        completedQuestionnaireCheckpoints: [...completedCheckpoints],
+        activeCheckpoint: dueCheckpoint ?? 'baseline'
       })
 
-      const targetEntryRoute = resolveStartupEntryRoute({
-        isProfileComplete: profile.completed,
-        hasCompletedBaselineQuestionnaire
-      })
-
-      return buildBootstrapAccessResult(targetEntryRoute)
+      return buildBootstrapAccessResult(dueCheckpoint)
     },
     async loadLongQuestionnaire(preferredCheckpoint?: CheckpointKey) {
       if (!dependencies.isEnabled()) {
@@ -558,12 +683,31 @@ export function createStudentBackendSync(
         }
 
         await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(syncedProfile))
-        try {
-          await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(syncedProfile))
-        } catch {
-          // Registration metadata fallback should not block the primary profile update flow.
-        }
+        await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(syncedProfile))
+        submissionOptions.registrationProfileStorage.save(syncedProfile)
       })
+    },
+    async syncShortQuestionnaire(
+      input: ShortQuestionnaireSyncInput
+    ): Promise<ShortQuestionnaireSyncResult> {
+      submissionOptions.pendingShortQuestionnaires.save({
+        sessionId: input.sessionId,
+        response: {
+          energyLevel: input.energyLevel,
+          confidence: input.confidence,
+          enjoyment: input.enjoyment
+        },
+        queuedAt: new Date().toISOString()
+      })
+
+      if (!dependencies.isEnabled() || !dependencies.submitShortQuestionnaire) {
+        return { synced: false, reason: 'pending-backend-endpoint' }
+      }
+
+      await dependencies.ensureSession()
+      await dependencies.submitShortQuestionnaire(input)
+      submissionOptions.pendingShortQuestionnaires.remove(input.sessionId)
+      return { synced: true }
     },
     async syncLongQuestionnaire(input: LongQuestionnaireSyncInput) {
       if (!dependencies.isEnabled()) {
@@ -586,6 +730,19 @@ export function createStudentBackendSync(
         analysis: summary.analysis,
         submittedAt: summary.submittedAt
       } satisfies LongQuestionnaireSyncResult
+    },
+    async loadVisualExerciseVideo(
+      modality: VisualSessionSyncInput['modality']
+    ): Promise<ExerciseVideoSummary | null> {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      const videos = await dependencies.listExerciseVideos(resolveBackendExerciseType(modality))
+      const video = videos.find(item => item.video_file?.trim())
+
+      return video ? resolveExerciseVideoUrl(video) : null
     },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
       if (!dependencies.isEnabled()) {
@@ -726,6 +883,15 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       const trend = await dependencies.getPhysicalTestTrend()
       return mapBackendPhysicalMetrics(trend)
+    },
+    async loadVisualScoreTrend() {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      const trend = await dependencies.getExerciseScoreTrend()
+      return mapBackendVisualScoreTrend(trend)
     },
     async loadAdherenceData() {
       if (!dependencies.isEnabled()) {

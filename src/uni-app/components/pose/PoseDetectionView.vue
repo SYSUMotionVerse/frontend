@@ -296,9 +296,12 @@ async function onFrame(frame: Frame) {
       rgb[j++] = data[i + 2];
     }
     const rgbTensor = tf.tensor3d(rgb, [frame.height, frame.width, 3]);
-
-    const poses = await detector.estimatePoses(rgbTensor, { flipHorizontal: false });
-    rgbTensor.dispose();
+    let poses
+    try {
+      poses = await detector.estimatePoses(rgbTensor, { flipHorizontal: false });
+    } finally {
+      rgbTensor.dispose();
+    }
     inferMs = Date.now() - t;
 
     // Rolling FPS

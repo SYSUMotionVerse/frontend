@@ -47,8 +47,8 @@ Before making changes, read `README.md` and `docs/agent-development.md`. Treat `
 ### WeChat DevTools Notes
 
 - Install WeChat DevTools from the official Weixin developer documentation.
-- If local preview is enough, the current default `AppID` can remain in tourist mode.
-- If a task requires real-device preview, upload, or restricted platform capabilities, check `src/manifest.json` first. The repository currently defaults to `touristappid`, which is not sufficient for those flows.
+- If local preview is enough, a `touristappid` configuration can remain in tourist mode.
+- If a task requires real-device preview, upload, or restricted platform capabilities, check the canonical `src/manifest.json` first and verify that the configured AppID is owned by the release account. A non-tourist AppID in source does not by itself prove that upload credentials, request-domain allowlists, or restricted capabilities are ready.
 
 ### Expected Agent Output
 

@@ -24,6 +24,42 @@ function createBackendUser(overrides: Partial<BackendCurrentUser> = {}): Backend
   }
 }
 
+function createCompleteSeedProfile(overrides: Partial<StudentProfile> = {}) {
+  return createSeedProfile({
+    age: 15,
+    grade: '高一',
+    restingHeartRate: 68,
+    ...overrides
+  })
+}
+
+function createScale(order: 1 | 2 | 3 | 4) {
+  return {
+    id: order,
+    title: `第${order}次量表`,
+    description: '检查点量表',
+    order,
+    created_at: '2026-04-11T09:00:00Z',
+    questions: [{
+      id: order * 10,
+      question_text: '最近状态如何？',
+      question_type: 'SINGLE' as const,
+      order: 1,
+      options: [{ id: order * 100, option_text: '良好', score: 1, order: 1 }]
+    }]
+  }
+}
+
+function createCompletedScaleRecord(order: 1 | 2 | 3 | 4) {
+  return {
+    id: 90 + order,
+    total_score: 1,
+    analysis: '状态良好',
+    completed_at: `2026-07-${10 + order}T10:00:00Z`,
+    scale_info: createScale(order)
+  }
+}
+
 describe('startup access bootstrap', () => {
   it('maps backend user fields into a local student profile', async () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
@@ -76,6 +112,43 @@ describe('startup access bootstrap', () => {
     expect(profile.avatarSource).toBe('wechat')
   })
 
+  it('keeps a backend avatar authoritative over locally stored registration metadata', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser({
+          avatar: 'https://api.example.com/media/current.png'
+        })),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(1))
+      },
+      {
+        hydrateAccessState,
+        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
+      },
+      {
+        registrationProfileStorage: {
+          load: vi.fn().mockReturnValue(createCompleteSeedProfile({
+            avatarUrl: 'https://cdn.example.com/legacy.png',
+            avatarSource: 'wechat'
+          })),
+          save: vi.fn()
+        }
+      }
+    )
+
+    await sync.bootstrapAccess()
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      profile: expect.objectContaining({
+        avatarUrl: 'https://api.example.com/media/current.png',
+        avatarSource: ''
+      })
+    }))
+  })
+
   it('marks profile incomplete when required backend fields are missing', async () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
 
@@ -115,6 +188,7 @@ describe('startup access bootstrap', () => {
       })
     )
     const listPsychologyRecords = vi.fn().mockResolvedValue([])
+    const getNextPsychologyScale = vi.fn()
     const hydrateAccessState = vi.fn()
     const resolveLocalProfile = vi.fn().mockReturnValue(createSeedProfile())
 
@@ -123,7 +197,8 @@ describe('startup access bootstrap', () => {
         isEnabled: () => true,
         ensureSession,
         getCurrentUser,
-        listPsychologyRecords
+        listPsychologyRecords,
+        getNextPsychologyScale
       },
       {
         hydrateAccessState,
@@ -137,12 +212,13 @@ describe('startup access bootstrap', () => {
     expect(result.targetPageUrl).toBe('/pages/access/register')
     expect(hydrateAccessState).toHaveBeenCalledWith(
       expect.objectContaining({
-        hasCompletedBaselineQuestionnaire: false,
+        completedQuestionnaireCheckpoints: [],
         profile: expect.objectContaining({
           completed: false
         })
       })
     )
+    expect(getNextPsychologyScale).not.toHaveBeenCalled()
   })
 
   it('routes startup to baseline questionnaire when profile is complete but baseline record is missing', async () => {
@@ -153,11 +229,12 @@ describe('startup access bootstrap', () => {
         isEnabled: () => true,
         ensureSession: vi.fn().mockResolvedValue(undefined),
         getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
-        listPsychologyRecords: vi.fn().mockResolvedValue([])
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(1))
       },
       {
         hydrateAccessState: vi.fn(),
-        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
       }
     )
 
@@ -166,7 +243,7 @@ describe('startup access bootstrap', () => {
     expect(result.targetPageUrl).toBe('/pages/access/questionnaire?checkpoint=baseline')
   })
 
-  it('routes startup to home when profile and baseline record are both completed', async () => {
+  it('routes startup to a due week 4 questionnaire from backend next-scale truth', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const sync = createStudentBackendSync(
@@ -174,26 +251,228 @@ describe('startup access bootstrap', () => {
         isEnabled: () => true,
         ensureSession: vi.fn().mockResolvedValue(undefined),
         getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
-        listPsychologyRecords: vi.fn().mockResolvedValue([
-          {
-            id: 99
-          }
-        ])
+        listPsychologyRecords: vi.fn().mockResolvedValue([createCompletedScaleRecord(1)]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(2))
       },
       {
         hydrateAccessState: vi.fn(),
-        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
       }
     )
 
     const result = await sync.bootstrapAccess()
 
-    expect(result.targetPageUrl).toBe('/pages/training/home')
+    expect(result.targetPageUrl).toBe('/pages/access/questionnaire?checkpoint=week4')
+  })
+
+  it.each([
+    [3, 'week8'],
+    [4, 'week12']
+  ] as const)('routes scale order %s to the %s checkpoint', async (order, checkpoint) => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue(
+          Array.from({ length: order - 1 }, (_, index) =>
+            createCompletedScaleRecord((index + 1) as 1 | 2 | 3))
+        ),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(order))
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: `/pages/access/questionnaire?checkpoint=${checkpoint}`
+    })
+  })
+
+  it('hydrates study-required registration metadata from durable local storage', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(1))
+      },
+      {
+        hydrateAccessState,
+        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
+      },
+      {
+        registrationProfileStorage: {
+          load: vi.fn().mockReturnValue(createCompleteSeedProfile({
+            age: 16,
+            grade: '高二',
+            restingHeartRate: 66
+          })),
+          save: vi.fn()
+        }
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline'
+    })
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      profile: expect.objectContaining({
+        age: 16,
+        grade: '高二',
+        restingHeartRate: 66,
+        completed: true
+      })
+    }))
+  })
+
+  it('routes startup home only when the backend reports all scales completed', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([
+          createCompletedScaleRecord(1),
+          createCompletedScaleRecord(2),
+          createCompletedScaleRecord(3),
+          createCompletedScaleRecord(4)
+        ]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({ message: '所有量表已完成' })
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: '/pages/training/home'
+    })
+  })
+
+  it('hydrates completed checkpoint records by their backend scale order', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const completedScale = createScale(1)
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([{
+          id: 91,
+          total_score: 1,
+          analysis: '状态良好',
+          completed_at: '2026-07-18T10:00:00Z',
+          scale_info: completedScale
+        }]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(2))
+      },
+      {
+        hydrateAccessState,
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await sync.bootstrapAccess()
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      completedQuestionnaireCheckpoints: ['baseline'],
+      activeCheckpoint: 'week4'
+    }))
+  })
+
+  it('blocks startup when the backend cannot identify a due checkpoint', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({ message: '量表配置不可用' })
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).rejects.toThrow(
+      'Backend could not identify the next required questionnaire checkpoint'
+    )
+  })
+
+  it('blocks later checkpoints when baseline has no completion record', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(2))
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).rejects.toThrow('baseline questionnaire is not completed')
+  })
+
+  it('blocks non-sequential checkpoint records', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([
+          createCompletedScaleRecord(1),
+          createCompletedScaleRecord(3)
+        ]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(2))
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).rejects.toThrow('checkpoint records are out of order')
+  })
+
+  it('blocks home when next-scale says complete but checkpoint records are missing', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({ message: '所有量表已完成' })
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).rejects.toThrow('baseline questionnaire is not completed')
   })
 })
 
 describe('student store startup hydration', () => {
-  it('hydrates backend access state into local profile and baseline questionnaire', async () => {
+  it('hydrates backend access state into local profile and all checkpoint states', async () => {
     const { createStudentStore } = await import('../uni-app/composables/useStudentStore')
 
     const store = createStudentStore()
@@ -209,14 +488,16 @@ describe('student store startup hydration', () => {
         weightKg: 60,
         completed: true
       }),
-      hasCompletedBaselineQuestionnaire: false
+      completedQuestionnaireCheckpoints: ['baseline'],
+      activeCheckpoint: 'week4'
     })
 
     const snapshot = store.getSnapshot()
 
     expect(snapshot.profile.name).toBe('Wei')
     expect(snapshot.profile.studentId).toBe('20260008')
-    expect(snapshot.longQuestionnaires.baseline.completed).toBe(false)
-    expect(snapshot.longQuestionnaires.baseline.score).toBeNull()
+    expect(snapshot.longQuestionnaires.baseline.completed).toBe(true)
+    expect(snapshot.longQuestionnaires.week4.completed).toBe(false)
+    expect(snapshot.activeCheckpoint).toBe('week4')
   })
 })

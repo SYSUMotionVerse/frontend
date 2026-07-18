@@ -1,18 +1,26 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import AchievementBadgeList from '../../../components/growth/AchievementBadgeList.vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
+import AssessmentHistoryList from '../../../components/growth/AssessmentHistoryList.vue'
 import GrowthSummaryCards from '../../../components/growth/GrowthSummaryCards.vue'
 import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPanel.vue'
 import SessionBadgeList from '../../../components/growth/SessionBadgeList.vue'
-import { buildGrowthSummary, resolvePhysicalMetricsState } from '../../../domain/student/growth'
+import TrainingHistoryList from '../../../components/growth/TrainingHistoryList.vue'
+import VisualScoreTrendPanel from '../../../components/growth/VisualScoreTrendPanel.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
-import { useStudentStore } from '../../composables/useStudentStore'
+import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const store = useStudentStore()
-
-const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
-const physicalMetricsState = computed(() => resolvePhysicalMetricsState(store.getSnapshot()))
+const {
+  achievements,
+  adherenceCalendar,
+  assessments,
+  latestAssessment,
+  physicalMetricsState,
+  scoreTrend,
+  sessionBadges,
+  sessions,
+  summaryCards
+} = useGrowthOverview()
 
 function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'history') {
   void uni.navigateTo({
@@ -35,8 +43,8 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
     </view>
 
     <GrowthSummaryCards
-      :cards="summary.summaryCards"
-      :latest-assessment="summary.latestAssessment"
+      :cards="summaryCards"
+      :latest-assessment="latestAssessment"
     />
 
     <view class="growth-page__section growth-page__section-shell">
@@ -46,8 +54,8 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
           <text>查看详情</text>
         </button>
       </view>
-      <AdherenceHeatmap :days="summary.adherenceCalendar" />
-      <SessionBadgeList :badges="summary.sessionBadges" />
+      <AdherenceHeatmap :days="adherenceCalendar" />
+      <SessionBadgeList :badges="sessionBadges" />
     </view>
 
     <view class="growth-page__section growth-page__section-shell">
@@ -57,7 +65,7 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
           <text>查看详情</text>
         </button>
       </view>
-      <AchievementBadgeList :achievements="summary.achievements" />
+      <AchievementBadgeList :achievements="achievements" />
     </view>
 
     <view class="growth-page__section growth-page__section-shell">
@@ -72,12 +80,21 @@ function openDetailPage(page: 'adherence' | 'achievements' | 'metrics' | 'histor
 
     <view class="growth-page__section growth-page__section-shell">
       <view class="growth-page__section-head">
+        <text class="growth-page__section-title">视觉得分趋势</text>
+      </view>
+      <VisualScoreTrendPanel :score-trend="scoreTrend" />
+    </view>
+
+    <view class="growth-page__section growth-page__section-shell">
+      <view class="growth-page__section-head">
         <text class="growth-page__section-title">历史记录</text>
         <button class="growth-page__link" type="button" @click="openDetailPage('history')">
           <text>查看详情</text>
         </button>
       </view>
       <text class="growth-page__subtitle">查看训练与问卷历史。</text>
+      <TrainingHistoryList :sessions="sessions" />
+      <AssessmentHistoryList :assessments="assessments" />
     </view>
   </UniGrowthPageShell>
 </template>

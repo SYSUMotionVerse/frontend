@@ -190,8 +190,8 @@ describe('startStairSensorCapture', () => {
       completedIntervals: 2
     })
 
-    expect(uniMock.startAccelerometer).toHaveBeenCalledWith({ interval: 'game' })
-    expect(uniMock.startGyroscope).toHaveBeenCalledWith({ interval: 'game' })
+    expect(uniMock.startAccelerometer).toHaveBeenCalledWith(expect.objectContaining({ interval: 'game' }))
+    expect(uniMock.startGyroscope).toHaveBeenCalledWith(expect.objectContaining({ interval: 'game' }))
 
     uniMock.emitGyroscope({ x: 0.12, y: 0.21, z: 0.31 })
     uniMock.emitAcceleration({ x: 13.3, y: 0, z: 0 })
@@ -254,18 +254,41 @@ describe('startStairSensorCapture', () => {
     vi.stubGlobal('uni', {})
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(3000)
 
-    const session = await startStairSensorCapture({
+    await expect(startStairSensorCapture({
       completedIntervals: 0
-    })
-    const snapshot = session.getSnapshot()
-    const result = await session.stop()
-
-    expect(snapshot.samples).toEqual([])
-    expect(snapshot.latestGyroscope).toBeNull()
-    expect(snapshot.analysis.estimatedStepCount).toBe(0)
-    expect(result.analysis.completedIntervals).toBe(0)
-    expect(result.analysis.capturedBy).toBe('sensor')
+    })).rejects.toThrow('Motion sensor APIs are unavailable.')
 
     nowSpy.mockRestore()
+  })
+
+  it('rejects when a callback-style sensor start reports failure and cleans up listeners', async () => {
+    let accelerometerHandler: ((sample: { x: number; y: number; z: number }) => void) | null = null
+    const uniMock = {
+      startAccelerometer: vi.fn((options: { fail?: (error: unknown) => void }) => {
+        options.fail?.({ errMsg: 'startAccelerometer:fail permission denied' })
+      }),
+      stopAccelerometer: vi.fn(),
+      onAccelerometerChange: vi.fn((handler: typeof accelerometerHandler) => {
+        accelerometerHandler = handler
+      }),
+      offAccelerometerChange: vi.fn(() => {
+        accelerometerHandler = null
+      }),
+      startGyroscope: vi.fn((options: { success?: () => void }) => {
+        options.success?.()
+      }),
+      stopGyroscope: vi.fn(),
+      onGyroscopeChange: vi.fn(),
+      offGyroscopeChange: vi.fn()
+    }
+    vi.stubGlobal('uni', uniMock)
+
+    await expect(startStairSensorCapture({
+      completedIntervals: 0
+    })).rejects.toThrow('permission denied')
+
+    expect(uniMock.offAccelerometerChange).toHaveBeenCalledTimes(1)
+    expect(uniMock.offGyroscopeChange).toHaveBeenCalledTimes(1)
+    expect(accelerometerHandler).toBeNull()
   })
 })

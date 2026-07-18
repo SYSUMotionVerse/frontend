@@ -68,7 +68,7 @@ describe('student backend sync orchestration', () => {
     )
   })
 
-  it('keeps registration successful when the fallback survey record write fails', async () => {
+  it('rejects registration when required metadata cannot be persisted', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const ensureSession = vi.fn().mockResolvedValue(undefined)
@@ -82,9 +82,7 @@ describe('student backend sync orchestration', () => {
       createSurveyRecord
     })
 
-    await expect(sync.syncRegistration(createProfile())).resolves.toEqual({
-      synced: true
-    })
+    await expect(sync.syncRegistration(createProfile())).rejects.toThrow('Request failed with 400')
 
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(updateProfile).toHaveBeenCalledTimes(1)
@@ -362,6 +360,31 @@ describe('student backend sync orchestration', () => {
         status: 'COMPLETED'
       })
     })
+  })
+
+  it('loads the first playable visual exercise video for the selected modality', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/api')
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const listExerciseVideos = vi.fn().mockResolvedValue([
+      { id: 8, exercise_type: 'HIIT', title: '未上传文件', video_file: null },
+      { id: 9, exercise_type: 'HIIT', title: '间歇训练', video_file: '/media/hiit.mp4' }
+    ])
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      listExerciseVideos
+    })
+
+    await expect(sync.loadVisualExerciseVideo('hiit')).resolves.toEqual({
+      id: 9,
+      exercise_type: 'HIIT',
+      title: '间歇训练',
+      video_file: 'https://api.example.com/media/hiit.mp4'
+    })
+    expect(ensureSession).toHaveBeenCalledTimes(1)
+    expect(listExerciseVideos).toHaveBeenCalledWith('HIIT')
+    vi.unstubAllEnvs()
   })
 
   it('syncs a stair session through the stairs endpoint', async () => {

@@ -40,6 +40,7 @@ interface RequestOptions {
   method?: RequestMethod
   data?: unknown
   headers?: Record<string, string>
+  hasRetriedAuthentication?: boolean
 }
 
 interface PaginatedResponse<T> {
@@ -62,6 +63,7 @@ export class BackendRequestError extends Error {
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 const defaultApiBaseUrl = 'http://127.0.0.1:8000/api'
 const avatarUploadTimeoutMs = 15000
+const requestTimeoutMs = 15000
 
 function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, '')
@@ -269,11 +271,13 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     const method = (options.method ?? 'GET') as RequestMethod
     const csrfToken = cookieJar.get('csrftoken')
 
-    return new Promise<T>((resolve, reject) => {
+    try {
+      return await new Promise<T>((resolve, reject) => {
       uni.request({
         url: `${baseUrl}${path}`,
         method: method as UniApp.RequestOptions['method'],
         data: options.data ?? {},
+        timeout: requestTimeoutMs,
         header: {
           'content-type': 'application/json',
           ...(sessionCookie ? { Cookie: sessionCookie } : {}),
@@ -317,7 +321,32 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
           reject(error)
         }
       })
-    })
+      })
+    } catch (error) {
+      const shouldRetryAuthentication =
+        error instanceof BackendRequestError &&
+        (error.statusCode === 401 || error.statusCode === 403) &&
+        hasAuthenticatedSession &&
+        !options.hasRetriedAuthentication &&
+        path !== '/users/wechat_login/'
+
+      if (!shouldRetryAuthentication) {
+        throw error
+      }
+
+      resetSession()
+      await ensureSession()
+      return request<T>(path, {
+        ...options,
+        hasRetriedAuthentication: true
+      })
+    }
+  }
+
+  function resetSession() {
+    hasAuthenticatedSession = false
+    sessionCookie = ''
+    cookieJar.clear()
   }
 
   async function ensureSession() {

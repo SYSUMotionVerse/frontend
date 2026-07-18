@@ -563,4 +563,56 @@ describe('backend client session handling', () => {
       })
     )
   })
+
+  it('re-authenticates once and retries an authenticated request after a 401', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: ['sessionid=expired-session; Path=/; HttpOnly']
+      },
+      {
+        statusCode: 401,
+        data: { detail: 'Authentication credentials were not provided.' }
+      },
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: ['sessionid=fresh-session; Path=/; HttpOnly']
+      },
+      {
+        statusCode: 200,
+        data: { message: '所有量表已完成' }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await client.ensureSession()
+    const result = await client.getNextPsychologyScale()
+
+    expect(result).toEqual({ message: '所有量表已完成' })
+    expect(uniMock.login).toHaveBeenCalledTimes(2)
+    expect(uniMock.request).toHaveBeenCalledTimes(4)
+    expect(uniMock.request.mock.calls[3]?.[0].header).toMatchObject({
+      Cookie: 'sessionid=fresh-session'
+    })
+  })
+
+  it('sets an explicit timeout on backend requests', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: { message: '所有量表已完成' }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await client.getNextPsychologyScale()
+
+    expect(uniMock.request.mock.calls[0]?.[0].timeout).toBe(15000)
+  })
 })

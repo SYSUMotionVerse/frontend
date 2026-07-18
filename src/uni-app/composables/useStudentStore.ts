@@ -24,6 +24,7 @@ import type {
 } from '../../domain/student/types'
 
 type TrainingSessionInput = {
+  sessionId?: string
   modality: TrainingModality
   qualityScore: number
   summary: string
@@ -32,7 +33,8 @@ type TrainingSessionInput = {
 
 export type StudentAccessHydrationInput = {
   profile: StudentProfile
-  hasCompletedBaselineQuestionnaire: boolean
+  completedQuestionnaireCheckpoints: CheckpointKey[]
+  activeCheckpoint: CheckpointKey
 }
 
 export function createStudentStore(initialState: StudentAppState = createInitialStudentState()) {
@@ -57,13 +59,17 @@ export function createStudentStore(initialState: StudentAppState = createInitial
   function hydrateAccessState(input: StudentAccessHydrationInput) {
     const nextState = getSnapshot()
     nextState.profile = { ...input.profile }
-    nextState.activeCheckpoint = 'baseline'
-    nextState.longQuestionnaires.baseline.completed = input.hasCompletedBaselineQuestionnaire
+    nextState.activeCheckpoint = input.activeCheckpoint
+    const completedCheckpoints = new Set(input.completedQuestionnaireCheckpoints)
 
-    if (!input.hasCompletedBaselineQuestionnaire) {
-      nextState.longQuestionnaires.baseline.score = null
-      nextState.longQuestionnaires.baseline.percentage = null
-      nextState.longQuestionnaires.baseline.submittedAt = null
+    for (const checkpoint of Object.keys(nextState.longQuestionnaires) as CheckpointKey[]) {
+      const questionnaire = nextState.longQuestionnaires[checkpoint]
+      questionnaire.completed = completedCheckpoints.has(checkpoint)
+      if (!questionnaire.completed) {
+        questionnaire.score = null
+        questionnaire.percentage = null
+        questionnaire.submittedAt = null
+      }
     }
 
     Object.assign(state, nextState)

@@ -139,7 +139,7 @@ describe('student growth summaries', () => {
     )
 
     expect(pageSource).toContain('SessionBadgeList')
-    expect(pageSource).toContain(':badges="summary.sessionBadges"')
+    expect(pageSource).toContain(':badges="sessionBadges"')
     expect(pageSource.indexOf('<AdherenceHeatmap')).toBeLessThan(pageSource.indexOf('<SessionBadgeList'))
   })
 

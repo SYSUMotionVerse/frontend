@@ -9,7 +9,7 @@ describe('Pose low-distraction fallback mode', () => {
       'utf8'
     )
     const sessionSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/pages/training/visual-session.vue'),
+      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
       'utf8'
     )
 
@@ -18,6 +18,6 @@ describe('Pose low-distraction fallback mode', () => {
     expect(poseViewSource).toContain(':show-overlay="overlayEnabled"')
     expect(poseViewSource).toContain('if (!usingSamplingFallback && poses.length > 0 && poses[0].keypoints)')
     expect(sessionSource).toContain("v-if=\"livePoseFps > 0 && !poseFallbackSampling\"")
-    expect(sessionSource).toContain("stats.status === 'sampling' || stats.status === 'sampling-fallback'")
+    expect(sessionSource).toContain('poseFallbackSampling')
   })
 })

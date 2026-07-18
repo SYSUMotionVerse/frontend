@@ -73,15 +73,22 @@ interface MotionVector {
 }
 
 interface UniMotionSensor {
-  startAccelerometer?: (options?: { interval?: MotionInterval }) => unknown
-  stopAccelerometer?: () => unknown
+  startAccelerometer?: (options?: SensorMethodOptions & { interval?: MotionInterval }) => unknown
+  stopAccelerometer?: (options?: SensorMethodOptions) => unknown
   onAccelerometerChange?: (callback: (result: MotionVector) => void) => void
   offAccelerometerChange?: (callback?: (result: MotionVector) => void) => void
-  startGyroscope?: (options?: { interval?: MotionInterval }) => unknown
-  stopGyroscope?: () => unknown
+  startGyroscope?: (options?: SensorMethodOptions & { interval?: MotionInterval }) => unknown
+  stopGyroscope?: (options?: SensorMethodOptions) => unknown
   onGyroscopeChange?: (callback: (result: MotionVector) => void) => void
   offGyroscopeChange?: (callback?: (result: MotionVector) => void) => void
 }
+
+interface SensorMethodOptions {
+  success?: () => void
+  fail?: (error: unknown) => void
+}
+
+type SensorMethodKind = 'callback' | 'promise'
 
 const GRAVITY_BASELINE = 9.81
 const STEP_PEAK_DELTA = 1.2
@@ -97,6 +104,14 @@ export async function startStairSensorCapture(
   input: StartStairSensorCaptureInput
 ): Promise<StairSensorCaptureSession> {
   const motionSensor = resolveUniMotionSensor()
+  if (
+    !motionSensor.startAccelerometer ||
+    !motionSensor.startGyroscope ||
+    !motionSensor.onAccelerometerChange ||
+    !motionSensor.onGyroscopeChange
+  ) {
+    throw new Error('Motion sensor APIs are unavailable.')
+  }
   const startedAtMs = Date.now()
   const samples: SensorSample[] = []
   let latestGyroscope: GyroscopeSample | null = null
@@ -137,18 +152,33 @@ export async function startStairSensorCapture(
   motionSensor.onAccelerometerChange?.(accelerometerHandler)
   motionSensor.onGyroscopeChange?.(gyroscopeHandler)
 
-  await Promise.all([
-    callUniSensorMethod(() =>
-      motionSensor.startAccelerometer?.({
-        interval: input.accelerometerInterval ?? DEFAULT_SENSOR_INTERVAL
-      })
-    ),
-    callUniSensorMethod(() =>
-      motionSensor.startGyroscope?.({
-        interval: input.gyroscopeInterval ?? DEFAULT_SENSOR_INTERVAL
-      })
-    )
-  ])
+  try {
+    await Promise.all([
+      callUniSensorMethod(callbacks =>
+        motionSensor.startAccelerometer?.({
+          interval: input.accelerometerInterval ?? DEFAULT_SENSOR_INTERVAL,
+          ...callbacks
+        }),
+        'callback'
+      ),
+      callUniSensorMethod(callbacks =>
+        motionSensor.startGyroscope?.({
+          interval: input.gyroscopeInterval ?? DEFAULT_SENSOR_INTERVAL,
+          ...callbacks
+        }),
+        'callback'
+      )
+    ])
+  } catch (error) {
+    isActive = false
+    motionSensor.offAccelerometerChange?.(accelerometerHandler)
+    motionSensor.offGyroscopeChange?.(gyroscopeHandler)
+    callUniSensorMethod(callbacks => motionSensor.stopAccelerometer?.(callbacks), 'callback')
+      .catch(() => {})
+    callUniSensorMethod(callbacks => motionSensor.stopGyroscope?.(callbacks), 'callback')
+      .catch(() => {})
+    throw error
+  }
 
   const buildSnapshot = (snapshotInput?: StopStairSensorCaptureInput): StairSensorCaptureSnapshot => {
     const analysis = createSensorSessionAnalysis({
@@ -190,8 +220,8 @@ export async function startStairSensorCapture(
         motionSensor.offGyroscopeChange?.(gyroscopeHandler)
 
         await Promise.all([
-          callUniSensorMethod(() => motionSensor.stopAccelerometer?.()),
-          callUniSensorMethod(() => motionSensor.stopGyroscope?.())
+          callUniSensorMethod(callbacks => motionSensor.stopAccelerometer?.(callbacks), 'callback'),
+          callUniSensorMethod(callbacks => motionSensor.stopGyroscope?.(callbacks), 'callback')
         ])
 
         stoppedResult = buildSnapshot(stopInput)
@@ -487,10 +517,60 @@ function resolveUniMotionSensor(): UniMotionSensor {
   return runtime.uni ? (runtime.uni as UniMotionSensor) : {}
 }
 
-async function callUniSensorMethod(invoke: () => unknown) {
-  const result = invoke()
+async function callUniSensorMethod(
+  invoke: (callbacks: SensorMethodOptions) => unknown,
+  methodKind: SensorMethodKind = 'promise'
+) {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const settle = (action: 'resolve' | 'reject', error?: unknown) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      if (action === 'resolve') {
+        resolve()
+        return
+      }
+      reject(toSensorError(error))
+    }
 
-  if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-    await result
+    let result: unknown
+    try {
+      result = invoke({
+        success: () => settle('resolve'),
+        fail: error => settle('reject', error)
+      })
+    } catch (error) {
+      settle('reject', error)
+      return
+    }
+
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void Promise.resolve(result).then(
+        () => settle('resolve'),
+        error => settle('reject', error)
+      )
+      return
+    }
+
+    if (methodKind === 'promise') {
+      settle('resolve')
+    }
+  })
+}
+
+function toSensorError(error: unknown) {
+  if (error instanceof Error) {
+    return error
   }
+
+  if (error && typeof error === 'object') {
+    const message = (error as { errMsg?: unknown }).errMsg
+    if (typeof message === 'string' && message.trim()) {
+      return new Error(message)
+    }
+  }
+
+  return new Error('Motion sensor operation failed.')
 }

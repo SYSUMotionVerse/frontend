@@ -11,6 +11,7 @@ const store = {
   setActiveCheckpoint: vi.fn(),
   submitLongQuestionnaire: vi.fn(),
   completeTrainingSession: vi.fn(),
+  submitShortQuestionnaireForLatestSession: vi.fn(),
   refreshReminderEligibility: vi.fn(),
   state: {
     profile: {
@@ -32,6 +33,10 @@ const studentBackendSync = {
     targetPageUrl: '/pages/training/home'
   }),
   syncRegistration: vi.fn().mockResolvedValue({ synced: true }),
+  syncShortQuestionnaire: vi.fn().mockResolvedValue({
+    synced: false,
+    reason: 'pending-backend-endpoint'
+  }),
   loadLongQuestionnaire: vi.fn().mockResolvedValue({
     scaleId: 1,
     title: '运动心理健康量表（第1次）',
@@ -63,6 +68,13 @@ const studentBackendSync = {
       comment: '动作基本标准，注意细节。',
       status: 'COMPLETED'
     }
+  }),
+  loadVisualExerciseVideo: vi.fn().mockResolvedValue({
+    id: 9,
+    title: '马步冲拳',
+    exercise_type: 'MARTIAL_ARTS',
+    video_file: 'https://cdn.example.com/wushu.mp4',
+    duration: 42
   }),
   syncStairSession: vi.fn().mockResolvedValue({ synced: true }),
   loadGrowthHistory: vi.fn().mockResolvedValue({
@@ -115,7 +127,7 @@ vi.mock('../uni-app/composables/useStudentStore', () => ({
 
 vi.mock('../uni-app/api/studentBackend', () => ({
   studentBackendSync,
-  buildVisualPoseAnalysisPayload: (frames: unknown[]) => ({
+  buildVisualPoseAnalysisPayload: (frames: unknown[]) => frames.length === 0 ? undefined : ({
     schema_version: '0.1',
     sequence_id: 'student_123',
     source: 'student',
@@ -288,6 +300,13 @@ describe('page-level backend sync wiring', () => {
     studentBackendSync.bootstrapAccess.mockResolvedValue({
       targetPageUrl: '/pages/training/home'
     })
+    studentBackendSync.loadVisualExerciseVideo.mockResolvedValue({
+      id: 9,
+      title: '马步冲拳',
+      exercise_type: 'MARTIAL_ARTS',
+      video_file: 'https://cdn.example.com/wushu.mp4',
+      duration: 42
+    })
 
     ;(globalThis as typeof globalThis & { uni: Record<string, ReturnType<typeof vi.fn>> }).uni = {
       redirectTo: vi.fn().mockResolvedValue(undefined),
@@ -407,6 +426,46 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/access/questionnaire?checkpoint=baseline'
     })
+  })
+
+  it('keeps the student on registration when backend profile sync fails', async () => {
+    studentBackendSync.syncRegistration.mockRejectedValueOnce(new Error('network fail'))
+
+    const RegisterPage = (await import('../uni-app/pages/access/register.vue')).default
+    const wrapper = mount(RegisterPage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: {
+            template: '<div><slot /></div>'
+          },
+          RegistrationForm: {
+            template: '<button class="submit-registration" @click="$emit(\'submit\', payload)">submit</button>',
+            data: () => ({
+              payload: {
+                avatarUrl: '',
+                avatarSource: '',
+                studentId: '20260002',
+                name: 'Wei',
+                gender: '男',
+                age: 19,
+                major: 'Sports Science',
+                grade: '一年级',
+                heightCm: 172,
+                weightKg: 62,
+                restingHeartRate: 68
+              }
+            })
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-registration').trigger('click')
+    await flushPromises()
+
+    expect(store.completeProfile).not.toHaveBeenCalled()
+    expect(store.setActiveCheckpoint).not.toHaveBeenCalled()
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
   })
 
   it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
@@ -551,7 +610,102 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.findAll('.adherence-cell')).toHaveLength(28)
   })
 
-  it('syncs visual sessions when the user completes the guided workout', async () => {
+  it('keeps a short questionnaire visibly pending instead of claiming server completion', async () => {
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [{
+        id: 'session-short-1',
+        modality: 'hiit',
+        date: '2026-07-18',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 88,
+          summary: '节奏稳定',
+          capturedBy: 'camera'
+        }
+      }]
+    })
+    studentBackendSync.syncShortQuestionnaire.mockResolvedValue({
+      synced: false,
+      reason: 'pending-backend-endpoint'
+    })
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
+      sessionId: 'session-short-1',
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    expect(store.submitShortQuestionnaireForLatestSession).toHaveBeenCalledWith({
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    expect(wrapper.text()).toContain('反馈已安全保存在本机')
+    expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
+      url: '/pages/training/feedback?sessionId=session-short-1'
+    })
+  })
+
+  it('continues to feedback when the short questionnaire backend seam succeeds', async () => {
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [{
+        id: 'session-short-2',
+        modality: 'wushu',
+        date: '2026-07-18',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 90,
+          summary: '完成稳定',
+          capturedBy: 'camera'
+        }
+      }]
+    })
+    studentBackendSync.syncShortQuestionnaire.mockResolvedValue({ synced: true })
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    expect(currentUni().redirectTo).toHaveBeenCalledWith({
+      url: '/pages/training/feedback?sessionId=session-short-2'
+    })
+  })
+
+  it('blocks visual completion until the actual routed teaching video ends', async () => {
     studentBackendSync.syncVisualSession.mockResolvedValue({
       synced: true,
       record: {
@@ -562,7 +716,7 @@ describe('page-level backend sync wiring', () => {
       }
     })
 
-    const VisualSessionPage = (await import('../uni-app/pages/training/visual-session.vue')).default
+    const VisualSessionPage = (await import('../pages/training/visual-session.vue')).default
     const wrapper = mount(VisualSessionPage, {
       global: {
         stubs: {
@@ -570,19 +724,34 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            template: '<div><slot /><button class="complete-visual-session" @click="$emit(\'complete\')">complete</button></div>'
+            props: ['videoUrl', 'canComplete'],
+            emits: ['videoTimeUpdate', 'videoEnded', 'complete'],
+            methods: {
+              watchVideo() {
+                for (let second = 0; second <= 42; second += 1) {
+                  this.$emit('videoTimeUpdate', { detail: { currentTime: second } })
+                }
+                this.$emit('videoEnded', { detail: { currentTime: 42 } })
+              }
+            },
+            template: `<div>
+              <span class="video-url">{{ videoUrl }}</span>
+              <button class="complete-visual-session" @click="$emit('complete')">complete</button>
+              <button class="end-video" @click="watchVideo">ended</button>
+            </div>`
           }
         }
       }
     })
 
     await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find(button => button.text() === '启动 5fps 识别')!
-      .trigger('click')
+    await wrapper.get('.complete-visual-session').trigger('click')
     await flushPromises()
-    await wrapper.get('.pose-detection-view-stub').trigger('click')
+
+    expect(studentBackendSync.syncVisualSession).not.toHaveBeenCalled()
+    expect(store.completeTrainingSession).not.toHaveBeenCalled()
+
+    await wrapper.get('.end-video').trigger('click')
     await flushPromises()
     await wrapper.get('.complete-visual-session').trigger('click')
     await flushPromises()
@@ -590,35 +759,11 @@ describe('page-level backend sync wiring', () => {
     expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith({
       sessionId: expect.any(String),
       modality: 'wushu',
-      durationSeconds: 30,
-      poseAnalysis: {
-        schema_version: '0.1',
-        sequence_id: 'student_123',
-        source: 'student',
-        fps: 10,
-        angle_unit: 'radian',
-        angle_names: [
-          'left_elbow',
-          'right_elbow',
-          'left_shoulder',
-          'right_shoulder',
-          'left_hip',
-          'right_hip',
-          'left_knee',
-          'right_knee',
-          'torso_rotation'
-        ],
-        frames: [
-          {
-            frame_index: 0,
-            time: 0,
-            values: [null, null, null, null, null, null, Math.PI / 2, null, 0.25]
-          }
-        ]
-      }
+      durationSeconds: 42
     })
     expect(store.completeTrainingSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        sessionId: expect.stringMatching(/^visual-/),
         modality: 'wushu',
         qualityScore: 89,
         summary: '动作基本标准，注意细节。'
@@ -627,6 +772,32 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/short-questionnaire'
     })
+  })
+
+  it('blocks visual completion when the backend has no playable video', async () => {
+    studentBackendSync.loadVisualExerciseVideo.mockResolvedValue(null)
+
+    const VisualSessionPage = (await import('../pages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          VisualTrainingPanel: {
+            props: ['videoError'],
+            emits: ['complete'],
+            template: '<div><span class="video-error">{{ videoError }}</span><button class="complete-visual-session" @click="$emit(\'complete\')">complete</button></div>'
+          }
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.video-error').text()).toContain('暂未配置')
+    await wrapper.get('.complete-visual-session').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncVisualSession).not.toHaveBeenCalled()
+    expect(store.completeTrainingSession).not.toHaveBeenCalled()
   })
 
   it('auto-completes stair sessions after 30 seconds and prevents duplicate starts before redirecting', async () => {
@@ -680,8 +851,39 @@ describe('page-level backend sync wiring', () => {
       })
     )
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
-    expect(store.completeTrainingSession).toHaveBeenCalled()
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: expect.stringMatching(/^stairs-/) })
+    )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
+      url: '/pages/training/short-questionnaire'
+    })
+  })
+
+  it('does not record a stair session when motion sensors cannot start', async () => {
+    startStairSensorCapture.mockRejectedValueOnce(
+      new Error('Motion sensor APIs are unavailable.')
+    )
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          StairTrainingPanel: {
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).not.toHaveBeenCalled()
+    expect(store.completeTrainingSession).not.toHaveBeenCalled()
+    expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/short-questionnaire'
     })
   })

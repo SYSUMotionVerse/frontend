@@ -145,6 +145,7 @@ export function submitStudentLongQuestionnaire(
 export function completeStudentTrainingSession(
   state: StudentAppState,
   input: {
+    sessionId?: string
     modality: TrainingModality
     qualityScore: number
     summary: string

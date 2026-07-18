@@ -44,8 +44,17 @@ The current frontend collects fields that the backend user model does not expose
 - `avatarSource`
 
 The frontend writes them as JSON in `analysis` with `survey_type = 1`.
+Registration is not considered complete unless this write succeeds. The mini-program also keeps
+the completed registration profile in durable local storage so these fields survive app restarts.
+The backend does not currently expose a confirmed read endpoint for restoring this metadata on a
+different device, so a new device fails closed and asks the student to complete registration again.
 
 ## Long questionnaire mapping
+
+Startup treats `GET /psychology/scales/next_scale/` as the authoritative due-checkpoint signal
+and cross-checks it against the completed psychology records. An unknown message, a skipped
+baseline, a duplicate completed checkpoint, or an incomplete record set reported as “all
+completed” blocks entry instead of silently routing to training.
 
 The current long questionnaire is still frontend-defined and does not yet use the backend psychology scale question IDs. Because of that, the frontend does not call `POST /psychology/records/submit/` yet.
 
@@ -107,6 +116,9 @@ Treat the Django code as the source of truth when docs and implementation disagr
 
 - No backend avatar upload endpoint is present in the repo. Avatar upload still depends on `VITE_AVATAR_UPLOAD_URL`.
 - No dedicated student-side POST endpoint exists for the short post-training questionnaire.
+  The frontend therefore writes each response to the durable mini-program storage key
+  `sport-snack:pending-short-questionnaires` and reports it as pending; it does not claim a
+  server sync until a typed backend submission dependency is available.
 - No dedicated student-side POST endpoint exists for physical test entry; the documented write path is teacher-only batch upload.
 - The frontend register flow still collects `grade` and `restingHeartRate`, but the backend user model does not currently store them as first-class fields.
 

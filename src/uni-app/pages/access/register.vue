@@ -17,9 +17,13 @@ async function handleSubmit(payload: RegistrationPayload) {
   }
 
   try {
-    await studentBackendSync.syncRegistration(completedProfile)
+    const result = await studentBackendSync.syncRegistration(completedProfile)
+    if (!result.synced) {
+      return
+    }
   } catch (error) {
     reportBackendSyncError('资料同步', error)
+    return
   }
 
   store.completeProfile(completedProfile)

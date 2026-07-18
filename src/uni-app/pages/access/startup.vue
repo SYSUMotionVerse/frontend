@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { studentBackendSync } from '../../api/studentBackend'
+import {
+  studentBackendSync,
+  type BootstrapAccessResult
+} from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
-
-type BootstrapAccessResult = {
-  targetPageUrl?: string
-  targetPage?: 'register' | 'baselineQuestionnaire' | 'home'
-}
-
-type StudentBackendSyncWithBootstrap = typeof studentBackendSync & {
-  bootstrapAccess: () => Promise<BootstrapAccessResult>
-}
 
 const retryLimit = 2
 const isLoading = ref(true)
@@ -30,8 +24,8 @@ function resolveTargetPageUrl(result: BootstrapAccessResult) {
     return '/pages/access/register'
   }
 
-  if (result.targetPage === 'baselineQuestionnaire') {
-    return '/pages/access/questionnaire?checkpoint=baseline'
+  if (result.targetPage === 'questionnaire') {
+    return `/pages/access/questionnaire?checkpoint=${result.checkpoint ?? 'baseline'}`
   }
 
   if (result.targetPage === 'home') {
@@ -47,7 +41,7 @@ async function bootstrapAndRoute() {
 
   for (let attempt = 1; attempt <= retryLimit; attempt += 1) {
     try {
-      const result = await (studentBackendSync as StudentBackendSyncWithBootstrap).bootstrapAccess()
+      const result = await studentBackendSync.bootstrapAccess()
       const targetPageUrl = resolveTargetPageUrl(result)
 
       if (!targetPageUrl) {

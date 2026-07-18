@@ -312,6 +312,17 @@ export interface LongQuestionnaireSyncResult extends BackendSyncResult {
   submittedAt?: string
 }
 
+export interface ShortQuestionnaireSyncInput {
+  sessionId: string
+  energyLevel: number
+  confidence: number
+  enjoyment: number
+}
+
+export type ShortQuestionnaireSyncResult =
+  | { synced: true }
+  | { synced: false, reason: 'pending-backend-endpoint' }
+
 export interface GrowthTrainingHistoryItem {
   id: string
   modality: TrainingModality
@@ -364,6 +375,7 @@ export interface StudentBackendSyncDependencies {
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
   resolveReminderReturn: (payload: BackendReminderReturnPayload) => Promise<BackendReminderReturn>
+  submitShortQuestionnaire?: (input: ShortQuestionnaireSyncInput) => Promise<unknown>
 }
 
 export interface BackendStationNotification {

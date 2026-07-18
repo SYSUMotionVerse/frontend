@@ -2,6 +2,7 @@ import { cloneStudentValue } from './clone'
 import type { SessionAnalysis, StudentAppState, TrainingModality } from './types'
 
 export interface CompletionInput {
+  sessionId?: string
   modality: TrainingModality
   qualityScore: number
   summary: string
@@ -29,7 +30,7 @@ export function completeGuidedSession(state: StudentAppState, input: CompletionI
   const validCheckInApplied = nextState.dailyAdherence.validCheckIns < 3
 
   nextState.sessions.push({
-    id: `session-${sessionNumber}`,
+    id: input.sessionId ?? `session-${sessionNumber}`,
     modality: input.modality,
     date: nextState.dailyAdherence.date,
     completed: true,
