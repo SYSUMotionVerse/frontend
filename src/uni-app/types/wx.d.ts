@@ -5,6 +5,10 @@
  */
 declare namespace WechatMiniprogram {
   interface Wx {
+    env?: {
+      USER_DATA_PATH?: string;
+    };
+    getFileSystemManager?(): any;
     requestSubscribeMessage(options: {
       tmplIds: string[];
       success?: (result: Record<string, string>) => void;
