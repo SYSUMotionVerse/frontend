@@ -4,29 +4,28 @@
 
 - 小程序代码通过微信开发者工具上传到微信平台。
 - 业务 API 通过 HTTPS 域名反向代理到 `119.91.74.187`。
-- BlazePose 模型存放在阿里云 OSS 或其 CDN 域名。
+- BlazePose 模型存放在腾讯云 COS，并通过 `cdn.sysusports.cn` 加速。
 - 姿态推理完全在用户手机上执行，摄像头帧不会上传服务器。
 - 每个模型版本首次下载约 8.5 MB，随后从微信用户文件目录读取。
 
-## 1. 上传 BlazePose 模型到 OSS
+## 1. 上传 BlazePose 模型到腾讯云 COS
 
-模型文件位于 `models/pose`。建议给上传凭据只授予目标 Bucket 和前缀的写权限，不要使用主账号 AccessKey。
+模型文件位于 `models/pose`。建议给上传凭据只授予目标 Bucket 和 `pose/` 前缀的写权限，不要使用主账号密钥。
 
 ```bash
-export OSS_REGION=oss-cn-shenzhen
-export OSS_BUCKET=your-bucket
-export OSS_ACCESS_KEY_ID=your-access-key-id
-export OSS_ACCESS_KEY_SECRET=your-access-key-secret
-export OSS_MODEL_PREFIX=pose
-export POSE_MODEL_VERSION=blazepose-lite-v1
-
-pnpm pose:oss:upload
+COS_REGION=ap-guangzhou
+COS_BUCKET=sysusports-1442740064
+COS_SECRET_ID=
+COS_SECRET_KEY=
+COS_PUBLIC_BASE_URL=https://cdn.sysusports.cn
+COS_MODEL_PREFIX=pose
+POSE_MODEL_VERSION=blazepose-lite-v1
 ```
 
-如果使用自定义 Endpoint，可额外设置：
+这些值已放入本机 `.env`；只需填写 `COS_SECRET_ID` 和 `COS_SECRET_KEY`，然后运行：
 
 ```bash
-export OSS_ENDPOINT=https://oss-cn-shenzhen.aliyuncs.com
+pnpm pose:cos:upload
 ```
 
 上传目录为：
@@ -42,7 +41,7 @@ pose/blazepose-lite-v1/
     └── group1-shard1of1.bin
 ```
 
-模型属于公开客户端资源。目标对象必须能通过 HTTPS 匿名读取，可通过 Bucket 公共读、限定前缀的 Bucket Policy，或公开 CDN 域名实现。不要把 AccessKey 放入小程序环境变量。
+模型属于公开客户端资源。目标对象必须能通过 HTTPS 匿名读取，可通过限定 `pose/` 前缀的 Bucket Policy 或公开 CDN 域名实现。不要把 SecretId、SecretKey 放入小程序环境变量或提交到 Git。
 
 ## 2. 配置生产环境
 
@@ -57,7 +56,7 @@ cp .env.production.example .env.production
 ```dotenv
 VITE_API_BASE_URL=https://api.example.com/api
 VITE_POSE_MODEL_VERSION=blazepose-lite-v1
-VITE_POSE_MODEL_BASE_URL=https://models.example.com/pose/blazepose-lite-v1
+VITE_POSE_MODEL_BASE_URL=https://cdn.sysusports.cn/pose/blazepose-lite-v1
 ```
 
 模型版本变化时同时修改 `VITE_POSE_MODEL_VERSION` 和模型 URL。小程序会使用新的缓存目录重新下载；同版本后续训练直接读取本地文件。
@@ -67,7 +66,7 @@ VITE_POSE_MODEL_BASE_URL=https://models.example.com/pose/blazepose-lite-v1
 在小程序后台的“开发管理 → 开发设置 → 服务器域名”中，至少添加：
 
 - API HTTPS 域名到 `request` 合法域名。
-- OSS/CDN HTTPS 域名到 `request` 合法域名。
+- COS/CDN HTTPS 域名 `https://cdn.sysusports.cn` 到 `request` 合法域名。
 
 域名必须与生产环境变量完全一致；不要填写路径 `/api` 或 `/pose/...`。
 

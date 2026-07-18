@@ -127,7 +127,7 @@ pnpm pose:tunnel:stop
 
 ## 生产发布
 
-生产包使用 `pnpm build:mp-weixin:production`。该命令要求 API 和姿态模型均为 HTTPS 地址，并阻止本地地址进入上传包。BlazePose 模型应放在 OSS/CDN，通过 `pnpm pose:oss:upload` 上传；小程序首次下载后会保存到微信用户文件目录，同一模型版本后续直接本地读取。详细步骤见 [`mini-program-production-release.md`](mini-program-production-release.md)。
+生产包使用 `pnpm build:mp-weixin:production`。该命令要求 API 和姿态模型均为 HTTPS 地址，并阻止本地地址进入上传包。BlazePose 模型应放在腾讯云 COS/CDN，通过 `pnpm pose:cos:upload` 上传；小程序首次下载后会保存到微信用户文件目录，同一模型版本后续直接本地读取。详细步骤见 [`mini-program-production-release.md`](mini-program-production-release.md)。
 
 ## 推荐交付格式
 

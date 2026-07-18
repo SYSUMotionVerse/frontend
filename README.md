@@ -136,12 +136,12 @@ pnpm build:mp-weixin:production
 ```
 
 This release command requires HTTPS API and pose-model origins and rejects
-local development URLs. Pose models can be uploaded to OSS with
-`pnpm pose:oss:upload`. See
+local development URLs. Pose models can be uploaded to Tencent Cloud COS with
+`pnpm pose:cos:upload`. See
 [`docs/mini-program-production-release.md`](docs/mini-program-production-release.md).
 
 该命令会校验 API 与姿态模型地址必须适合微信正式环境。姿态模型可通过
-`pnpm pose:oss:upload` 上传至 OSS，完整流程见
+`pnpm pose:cos:upload` 上传至腾讯云 COS，完整流程见
 [`docs/mini-program-production-release.md`](docs/mini-program-production-release.md)。
 
 The production-ready bundle is written to `dist/build/mp-weixin`.

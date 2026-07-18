@@ -13,7 +13,9 @@ describe('createBlazePoseModelConfig', () => {
   })
 
   it('loads BlazePose models from HTTP URLs instead of embedding model weights in the source package', () => {
-    const config = createBlazePoseModelConfig()
+    const config = createBlazePoseModelConfig({
+      modelBaseUrl: DEFAULT_POSE_MODEL_BASE_URL
+    })
 
     expect(BLAZEPOSE_MODEL_NAME).toBe('BlazePose')
     expect(config.runtime).toBe('tfjs')
