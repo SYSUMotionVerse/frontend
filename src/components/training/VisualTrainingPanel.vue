@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import PoseDetectionView from '../../uni-app/components/pose/PoseDetectionView.vue'
 import type { DetectResult } from '../../uni-app/components/pose/PoseDetectModel'
 
@@ -36,9 +36,44 @@ const emit = defineEmits<{
 }>()
 
 const poseCamera = shallowRef<InstanceType<typeof PoseDetectionView> | null>(null)
+const POSE_MOUNT_DELAY_MS = 500
+const poseMountReady = shallowRef(false)
+let poseMountTimer: ReturnType<typeof setTimeout> | null = null
 const recordLabel = computed(() => {
   if (props.recording) return `停止录制 ${props.recordSeconds}s`
+  if (props.recognitionEnabled && !poseMountReady.value) return '相机准备中…'
   return props.recognitionEnabled ? '开始录制' : '先启动识别'
+})
+const cameraPlaceholderLabel = computed(() =>
+  props.recognitionEnabled ? '正在释放教学视频并准备摄像头…' : '选择识别帧率后开启摄像头'
+)
+const poseStatusLabel = computed(() => {
+  if (props.poseFallbackSampling) {
+    return props.livePoseFps > 0 ? `${props.livePoseFps} FPS 采样识别` : '采样识别中'
+  }
+  return props.livePoseFps > 0 ? `${props.livePoseFps} FPS 实时识别` : '实时识别启动中'
+})
+
+watch(
+  () => props.recognitionEnabled,
+  (enabled) => {
+    if (poseMountTimer) {
+      clearTimeout(poseMountTimer)
+      poseMountTimer = null
+    }
+    poseMountReady.value = false
+    if (!enabled) return
+
+    poseMountTimer = setTimeout(() => {
+      poseMountTimer = null
+      if (props.recognitionEnabled) poseMountReady.value = true
+    }, POSE_MOUNT_DELAY_MS)
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  if (poseMountTimer) clearTimeout(poseMountTimer)
 })
 
 async function startRecord() {
@@ -66,20 +101,21 @@ defineExpose({ startRecord, stopRecord })
 
     <view class="visual-session__stage">
       <PoseDetectionView
-        v-if="recognitionEnabled"
+        v-if="recognitionEnabled && poseMountReady"
         :key="recognitionFps"
         ref="poseCamera"
+        class="visual-session__pose-view"
         mode="production"
         :initial-fps="recognitionFps"
         :on-result="result => emit('poseResult', result)"
         :on-stats="stats => emit('poseStats', stats)"
       />
-      <camera
+      <view
         v-else
-        class="visual-session__camera"
-        frame-size="small"
-        device-position="front"
-      />
+        class="visual-session__camera-placeholder"
+      >
+        <text>{{ cameraPlaceholderLabel }}</text>
+      </view>
 
       <view v-if="!recognitionEnabled" class="visual-session__recognition-actions">
         <button class="visual-session__recognition-button" @click="emit('startRecognition', 5)">
@@ -91,14 +127,17 @@ defineExpose({ startRecord, stopRecord })
       </view>
 
       <view
-        v-if="livePoseFps > 0 && !poseFallbackSampling"
+        v-if="recognitionEnabled && poseMountReady"
         class="visual-session__pose-badge"
       >
-        {{ livePoseFps }} FPS 实时识别
+        {{ poseStatusLabel }}
       </view>
 
       <view class="visual-session__coach">
-        <view v-if="videoLoading" class="visual-session__video-state">
+        <view v-if="recognitionEnabled" class="visual-session__video-state">
+          <text>识别已启动，教学视频已释放</text>
+        </view>
+        <view v-else-if="videoLoading" class="visual-session__video-state">
           <text>正在加载教学视频…</text>
         </view>
         <view v-else-if="videoError || !videoUrl" class="visual-session__video-state visual-session__video-state--error">
@@ -135,13 +174,15 @@ defineExpose({ startRecord, stopRecord })
       <button class="visual-session__secondary" @click="emit('interrupt')">退出</button>
       <button
         class="visual-session__record"
-        :disabled="!recognitionEnabled"
+        :class="{ 'visual-session__record--disabled': !recognitionEnabled || !poseMountReady }"
+        :disabled="!recognitionEnabled || !poseMountReady"
         @click="emit('toggleRecord')"
       >
         {{ recordLabel }}
       </button>
       <button
         class="visual-session__complete"
+        :class="{ 'visual-session__complete--disabled': !canComplete }"
         :disabled="!canComplete"
         @click="emit('complete')"
       >
@@ -223,16 +264,23 @@ defineExpose({ startRecord, stopRecord })
   box-shadow: 0 20rpx 52rpx rgba(47, 39, 31, 0.16);
 }
 
-.visual-session__camera,
-.visual-session__stage :deep(.pose-detection-view),
-.visual-session__stage :deep(.pose-camera),
-.visual-session__stage :deep(.camera-layer) {
-  width: 100% !important;
-  height: 100% !important;
+.visual-session__pose-view {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.visual-session__camera {
-  display: block;
+.visual-session__camera-placeholder {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 250, 244, 0.72);
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .visual-session__coach {
@@ -382,8 +430,8 @@ defineExpose({ startRecord, stopRecord })
   color: #fffaf4;
 }
 
-.visual-session__record[disabled],
-.visual-session__complete[disabled] {
+.visual-session__record--disabled,
+.visual-session__complete--disabled {
   background: #e5dfd7;
   color: #9b9187;
   opacity: 1;

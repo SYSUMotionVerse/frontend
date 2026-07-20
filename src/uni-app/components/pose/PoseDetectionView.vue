@@ -21,6 +21,7 @@ import { setupWechatPlatform } from './wechat_platform';
 import { fetchFunc } from './fetch';
 import type { DetectResult, Frame } from './PoseDetectModel';
 import { buildPoseAngleFrame } from './poseAnalysis'
+import { getNextSamplingDelayMs } from './poseSamplingSchedule'
 import PoseCamera from './PoseCamera.vue';
 
 const props = defineProps<{
@@ -31,12 +32,18 @@ const props = defineProps<{
   onStats: (stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) => void;
 }>();
 
-const SAMPLING_FALLBACK_INTERVAL_MS = 600
 const SAMPLING_FALLBACK_MAX_SIDE = 256
 const SAMPLING_FALLBACK_CAPTURE_QUALITY: 'low' = 'low'
 
 const poseCamera = ref<any>(null);
 let detector: PoseDetector | null = null;
+let isMounted = false;
+let resolveCameraReady: (() => void) | null = null
+let rejectCameraReady: ((error: Error) => void) | null = null
+const cameraReadyPromise = new Promise<void>((resolve, reject) => {
+  resolveCameraReady = resolve
+  rejectCameraReady = reject
+})
 
 // Camera lifecycle state
 const cameraReady = ref(false);
@@ -48,7 +55,7 @@ const cameraErrorBanner = computed(() => cameraError.value || detectorError.valu
 const firstFrameReceived = ref(false);
 const firstPoseEstimated = ref(false);
 const showOverlay = computed(() => firstFrameReceived.value || firstPoseEstimated.value);
-const overlayEnabled = computed(() => showOverlay.value && !usingSamplingFallback)
+const overlayEnabled = computed(() => showOverlay.value)
 
 // Single-shot analysis
 const analyzing = ref(false);
@@ -68,7 +75,7 @@ let lastFrameTime = 0;
 let fps = 0;
 let liveInferenceInFlight = false;
 let emittedFrameIndex = 0
-let samplingFallbackTimer: ReturnType<typeof setInterval> | null = null
+let samplingFallbackTimer: ReturnType<typeof setTimeout> | null = null
 let usingSamplingFallback = false
 
 // ───────────────────────────────────────────
@@ -76,9 +83,16 @@ let usingSamplingFallback = false
 // ───────────────────────────────────────────
 
 onMounted(async () => {
-  const t0 = Date.now();
+  isMounted = true;
 
   try {
+    // Let the native camera finish allocating first. Initialising camera and
+    // TFJS WebGL concurrently can exceed the mini-program GPU startup budget.
+    await waitForCameraReady()
+    if (!isMounted) return
+
+    const t0 = Date.now();
+
     // 1. Initialise TFJS + WeChat WebGL
     const offscreenCanvas = wx.createOffscreenCanvas({
       type: 'webgl',
@@ -88,22 +102,47 @@ onMounted(async () => {
     setupWechatPlatform({ fetchFunc, tf, webgl, canvas: offscreenCanvas });
     await tf.ready();
 
+    // Guard: unmount may have fired during await
+    if (!isMounted) return;
+
     // 2. Load detector
     const config = await createBlazePoseModelConfig();
-    detector = await createDetector(BLAZEPOSE_MODEL_NAME as any, config as any);
+    const loadedDetector = await createDetector(BLAZEPOSE_MODEL_NAME as any, config as any);
+
+    // Guard: unmount may have fired during detector load
+    if (!isMounted) {
+      try { loadedDetector.dispose(); } catch { /* already disposed */ }
+      return;
+    }
+    detector = loadedDetector;
     loadMs = Date.now() - t0;
 
-    // 3. Warm-up — JIT-compile WebGL shaders
-    const t1 = Date.now();
-    const warmupTensor = tf.tensor3d(new Float32Array([0, 0, 0]), [1, 1, 3]);
-    await detector.estimatePoses(warmupTensor);
-    warmupTensor.dispose();
-    warmMs = Date.now() - t1;
+    // 3. Keep shader warm-up debug-only. Production performs its first
+    // inference on a bounded 256px sample instead of adding a startup spike.
+    if (isDebugMode.value) {
+      await warmDetector()
+    }
 
-    // 4. Start camera
-    poseCamera.value?.startCamera();
+    // Guard: unmount may have fired during warm-up
+    if (!isMounted) return;
+
+    // 4. Production defaults to bounded photo sampling. Realtime frame
+    // callbacks remain available in debug mode for device compatibility tests.
+    if (isDebugMode.value) {
+      poseCamera.value?.startCamera()
+    } else {
+      startSamplingFallback('production-safe-mode')
+    }
     emitStats('ready');
   } catch (err: any) {
+    if (!isMounted) return;
+    // If the detector was assigned before the failure (e.g. warm-up rejected),
+    // dispose and null it so the failed component does not retain GPU resources
+    // until unmount.
+    if (detector) {
+      try { detector.dispose(); } catch { /* already disposed */ }
+      detector = null;
+    }
     detectorError.value = err?.message ?? 'detector load failed';
     console.warn('[pose] detector load failed:', detectorError.value);
     emitStats('failed');
@@ -111,13 +150,35 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  stopSamplingFallback()
-  detector = null;
+  isMounted = false;
+  rejectCameraReady?.(new Error('pose detector unmounted before camera ready'))
+  stopSamplingFallback();
+  // Dispose the TF.js detector to free WebGL/GPU resources.
+  if (detector) {
+    try { detector.dispose(); } catch { /* detector may already be disposed */ }
+    detector = null;
+  }
   poseCamera.value?.stopCamera();
 });
 
 function emitStats(status: string) {
   props.onStats({ status, loadMs, warmMs, inferMs, fps });
+}
+
+function waitForCameraReady() {
+  return cameraReadyPromise
+}
+
+async function warmDetector() {
+  if (!detector) return
+  const t1 = Date.now()
+  const warmupTensor = tf.tensor3d(new Float32Array([0, 0, 0]), [1, 1, 3])
+  try {
+    await detector.estimatePoses(warmupTensor)
+  } finally {
+    warmupTensor.dispose()
+  }
+  warmMs = Date.now() - t1
 }
 
 // ───────────────────────────────────────────
@@ -162,11 +223,14 @@ async function inferFromCanvas(
     rgb[j++] = raw[i + 2];
   }
   const rgbTensor = tf.tensor3d(rgb, [height, width, 3]);
-  const t0 = Date.now();
-  const poses = await detector!.estimatePoses(rgbTensor, { flipHorizontal: false });
-  const ms = Date.now() - t0;
-  rgbTensor.dispose();
-  return { poses, inferMs: ms };
+  try {
+    const t0 = Date.now();
+    const poses = await detector!.estimatePoses(rgbTensor, { flipHorizontal: false });
+    const ms = Date.now() - t0;
+    return { poses, inferMs: ms };
+  } finally {
+    rgbTensor.dispose();
+  }
 }
 
 function scaleFrameSize(width: number, height: number, maxSide: number) {
@@ -205,7 +269,7 @@ async function runPhotoInference() {
   offCtx.drawImage(img as any, 0, 0, scaled.width, scaled.height)
   const { poses, inferMs: sampleInferMs } = await inferFromCanvas(offCanvas, scaled.width, scaled.height)
   inferMs = sampleInferMs
-  if (!usingSamplingFallback && poses.length > 0 && poses[0].keypoints) {
+  if (poses.length > 0 && poses[0].keypoints) {
     poseCamera.value.setOverlayFrame?.(scaled.width, scaled.height)
     firstFrameReceived.value = true
     firstPoseEstimated.value = true
@@ -230,18 +294,34 @@ function startSamplingFallback(reason?: string) {
   }
 
   usingSamplingFallback = true
-  console.warn('[pose] realtime camera frames unavailable, switching to sampled inference', reason ?? '')
+  if (reason === 'production-safe-mode') {
+    console.info('[pose] using sampled inference for production stability')
+  } else {
+    console.warn('[pose] realtime camera frames unavailable, switching to sampled inference', reason ?? '')
+  }
 
-  samplingFallbackTimer = setInterval(() => {
-    void sampleFallbackFrame()
-  }, SAMPLING_FALLBACK_INTERVAL_MS)
+  scheduleNextSamplingFrame(0)
 
   emitStats('sampling-fallback')
 }
 
+function scheduleNextSamplingFrame(delayMs: number) {
+  samplingFallbackTimer = setTimeout(async () => {
+    samplingFallbackTimer = null
+    if (!usingSamplingFallback) return
+
+    const startedAt = Date.now()
+    await sampleFallbackFrame()
+    if (!usingSamplingFallback) return
+
+    const elapsedMs = Date.now() - startedAt
+    scheduleNextSamplingFrame(getNextSamplingDelayMs(samplingFps.value, elapsedMs))
+  }, delayMs)
+}
+
 function stopSamplingFallback() {
   if (samplingFallbackTimer) {
-    clearInterval(samplingFallbackTimer)
+    clearTimeout(samplingFallbackTimer)
     samplingFallbackTimer = null
   }
 
@@ -364,8 +444,14 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
   switch (evt.type) {
     case 'cameraReady':
       cameraReady.value = true;
+      resolveCameraReady?.()
       break;
-    case 'cameraInitError':
+    case 'cameraInitError': {
+      const message = evt.detail ?? 'camera init failed'
+      cameraError.value = message
+      rejectCameraReady?.(new Error(message))
+      break;
+    }
     case 'cameraFail':
       cameraError.value = evt.detail ?? '';
       startSamplingFallback(evt.detail)
@@ -393,6 +479,7 @@ defineExpose({
   <!-- Camera view + overlay canvas -->
   <PoseCamera
     ref="poseCamera"
+    class="pose-detection-view__camera"
     :on-frame="onFrame"
     :on-status="onCameraStatus"
     :show-overlay="overlayEnabled"
@@ -425,6 +512,12 @@ export default {
 </script>
 
 <style>
+.pose-detection-view__camera {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Analyze button bar — bottom-center fixed */
 .analyze-bar {
   position: fixed;

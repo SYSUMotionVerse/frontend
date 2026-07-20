@@ -15,7 +15,7 @@ declare namespace WechatMiniprogram {
       fail?: (error: unknown) => void;
     }): void;
     request(options: any): any;
-    createCameraContext(): CameraContext;
+    createCameraContext(component?: any): CameraContext;
     createOffscreenCanvas(options?: any): OffscreenCanvas;
     getSystemInfoSync(): SystemInfo;
     createSelectorQuery(): SelectorQuery;

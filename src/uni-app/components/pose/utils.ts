@@ -16,6 +16,17 @@ export function getNode<T = any>(
   });
 }
 
+/** Bind a native context API to the current uni-app custom component. */
+export function createComponentContext<T>(
+  componentProxy: any,
+  createContext: (component?: any) => T,
+): T {
+  const nativeComponentScope = componentProxy?.$scope
+  return nativeComponentScope
+    ? createContext(nativeComponentScope)
+    : createContext()
+}
+
 /** Object-fit contain math: returns [renderedW, renderedH]. */
 export function objectFit(
   imgW: number,

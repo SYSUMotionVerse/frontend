@@ -14,7 +14,7 @@
  */
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, reactive } from 'vue';
 import type { Frame } from './PoseDetectModel';
-import { getNode } from './utils';
+import { createComponentContext, getNode } from './utils';
 
 const instance = getCurrentInstance();
 
@@ -79,8 +79,18 @@ const frameGap = computed(() => Math.max(1, Math.round(30 / targetFps.value)))
 const frameAdapter = new FrameAdapter(() => frameGap.value);
 let cameraContext: any = null;
 let cameraListener: any = null;
+let shouldStartFrameListener = false;
 let canvasCtx: CanvasRenderingContext2D | null = null;
 let overlayCanvas: HTMLCanvasElement | null = null;
+
+const CAMERA_READY_TIMEOUT_MS = 5000
+type CameraContextWaiter = {
+  resolve: (context: any) => void
+  reject: (error: Error) => void
+  timeoutId: ReturnType<typeof setTimeout>
+}
+const cameraContextWaiters = new Set<CameraContextWaiter>()
+let cameraInitializationError = ''
 
 onMounted(async () => {
   await nextTick();
@@ -110,12 +120,15 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopCamera();
+  rejectCameraContextWaiters(new Error('camera component unmounted'))
 });
 
 function startCamera() {
   if (state.isActive) return;
+  shouldStartFrameListener = true;
+  if (!cameraContext) return;
+
   try {
-    cameraContext = wx.createCameraContext();
     cameraListener = cameraContext.onCameraFrame(frameAdapter.triggerFrame.bind(frameAdapter));
     cameraListener.start({
       success: () => {
@@ -136,10 +149,63 @@ function startCamera() {
 }
 
 function stopCamera() {
+  shouldStartFrameListener = false;
   if (!state.isActive) return;
   cameraListener?.stop();
   cameraListener = null;
   state.isActive = false;
+}
+
+function resolveCameraContextWaiters() {
+  if (!cameraContext) return
+  for (const waiter of cameraContextWaiters) {
+    clearTimeout(waiter.timeoutId)
+    waiter.resolve(cameraContext)
+  }
+  cameraContextWaiters.clear()
+}
+
+function rejectCameraContextWaiters(error: Error) {
+  for (const waiter of cameraContextWaiters) {
+    clearTimeout(waiter.timeoutId)
+    waiter.reject(error)
+  }
+  cameraContextWaiters.clear()
+}
+
+function waitForCameraContext(): Promise<any> {
+  if (cameraContext) return Promise.resolve(cameraContext)
+  if (cameraInitializationError) return Promise.reject(new Error(cameraInitializationError))
+
+  return new Promise((resolve, reject) => {
+    const waiter: CameraContextWaiter = {
+      resolve,
+      reject,
+      timeoutId: setTimeout(() => {
+        cameraContextWaiters.delete(waiter)
+        reject(new Error('camera initialization timed out'))
+      }, CAMERA_READY_TIMEOUT_MS)
+    }
+    cameraContextWaiters.add(waiter)
+  })
+}
+
+function initializeCameraContext() {
+  if (cameraContext) return
+  try {
+    cameraContext = createComponentContext(
+      instance?.proxy,
+      component => wx.createCameraContext(component)
+    )
+    cameraInitializationError = ''
+    resolveCameraContextWaiters()
+    if (shouldStartFrameListener) startCamera()
+  } catch (err: any) {
+    cameraInitializationError = err?.message ?? 'createCameraContext failed'
+    state.cameraError = cameraInitializationError
+    rejectCameraContextWaiters(new Error(cameraInitializationError))
+    props.onStatus?.({ type: 'cameraFail', detail: cameraInitializationError })
+  }
 }
 
 /** Take a still photo from the camera — independent of the frame listener. */
@@ -147,13 +213,10 @@ function takePhoto(): Promise<{ tempImagePath: string; width: number; height: nu
   return takePhotoWithQuality('high')
 }
 
-function takePhotoWithQuality(quality: 'high' | 'normal' | 'low'): Promise<{ tempImagePath: string; width: number; height: number }> {
+async function takePhotoWithQuality(quality: 'high' | 'normal' | 'low'): Promise<{ tempImagePath: string; width: number; height: number }> {
+  const context = await waitForCameraContext()
   return new Promise((resolve, reject) => {
-    if (!cameraContext) {
-      reject(new Error('cameraContext not ready'));
-      return;
-    }
-    cameraContext.takePhoto({
+    context.takePhoto({
       quality,
       success: (res: any) => {
         wx.getImageInfo({
@@ -179,13 +242,10 @@ function setOverlayFrame(width: number, height: number) {
 }
 
 /** Start recording video. */
-function startRecord(): Promise<void> {
+async function startRecord(): Promise<void> {
+  const context = await waitForCameraContext()
   return new Promise((resolve, reject) => {
-    if (!cameraContext) {
-      reject(new Error('cameraContext not ready'));
-      return;
-    }
-    cameraContext.startRecord({
+    context.startRecord({
       success: () => resolve(),
       fail: (err: any) => reject(new Error(err?.errMsg ?? 'startRecord failed')),
     });
@@ -193,13 +253,10 @@ function startRecord(): Promise<void> {
 }
 
 /** Stop recording and return the local video file path. */
-function stopRecord(): Promise<string> {
+async function stopRecord(): Promise<string> {
+  const context = await waitForCameraContext()
   return new Promise((resolve, reject) => {
-    if (!cameraContext) {
-      reject(new Error('cameraContext not ready'));
-      return;
-    }
-    cameraContext.stopRecord({
+    context.stopRecord({
       success: (res: any) => resolve(res.tempVideoPath as string),
       fail: (err: any) => reject(new Error(err?.errMsg ?? 'stopRecord failed')),
     });
@@ -241,12 +298,16 @@ function drawKeypoints(keypoints: Array<{ x: number; y: number; score?: number; 
 
 /** Handle camera component initdone event — camera preview is actually ready. */
 function onCameraInitDone(e: any) {
+  initializeCameraContext()
   props.onStatus?.({ type: 'cameraReady', detail: `maxZoom: ${e.detail?.maxZoom}` });
 }
 
 /** Handle camera component error — camera preview failed to initialise. */
 function onCameraError(e: any) {
-  props.onStatus?.({ type: 'cameraInitError', detail: e.detail?.errMsg ?? 'camera init failed' });
+  cameraInitializationError = e.detail?.errMsg ?? 'camera init failed'
+  state.cameraError = cameraInitializationError
+  rejectCameraContextWaiters(new Error(cameraInitializationError))
+  props.onStatus?.({ type: 'cameraInitError', detail: cameraInitializationError });
 }
 
 defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, startRecord, stopRecord, setOverlayFrame, takePhotoWithQuality });
