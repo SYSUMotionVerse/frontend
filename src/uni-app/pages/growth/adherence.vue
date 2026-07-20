@@ -87,7 +87,7 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
         <span v-for="label in weekdayLabels" :key="label" class="weekday-label">{{ label }}</span>
       </view>
       <AdherenceHeatmap :days="calendarDays" />
-      <p class="detail-page__note">每个方块代表一天，颜色越深表示达标。</p>
+      <p class="detail-page__note">每个方块代表一天，训练次数越多颜色越深，3 次即达标。</p>
     </section>
   </UniGrowthPageShell>
 </template>
