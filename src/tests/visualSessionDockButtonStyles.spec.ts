@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('visual session dock button styles', () => {
   it('clears the native mini-program button after border on dock actions', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
 

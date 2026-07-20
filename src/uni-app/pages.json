@@ -37,12 +37,6 @@
       }
     },
     {
-      "path": "pages/training/visual-session",
-      "style": {
-        "navigationBarTitleText": "可视化训练"
-      }
-    },
-    {
       "path": "pages/training/stair-session",
       "style": {
         "navigationBarTitleText": "阶梯训练"
@@ -89,6 +83,19 @@
       "style": {
         "navigationBarTitleText": "历史记录"
       }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "subpackages/training",
+      "pages": [
+        {
+          "path": "visual-session",
+          "style": {
+            "navigationBarTitleText": "可视化训练"
+          }
+        }
+      ]
     }
   ],
   "globalStyle": {

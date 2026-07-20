@@ -1,4 +1,4 @@
-import type { DetectResult, Pose } from './PoseDetectModel'
+import type { DetectResult, Pose } from '../../../subpackages/training/components/pose/PoseDetectModel'
 
 export const STANDARD_POSE_LANDMARK_NAMES = [
   'left_shoulder',

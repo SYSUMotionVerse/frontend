@@ -5,7 +5,7 @@ import {
   BLAZEPOSE_MODEL_NAME,
   DEFAULT_POSE_MODEL_BASE_URL,
   createBlazePoseModelConfig
-} from '../uni-app/components/pose/PoseDetectModel'
+} from '../subpackages/training/components/pose/PoseDetectModel'
 
 describe('createBlazePoseModelConfig', () => {
   afterEach(() => {
@@ -39,7 +39,7 @@ describe('createBlazePoseModelConfig', () => {
   it('keeps oversized model payloads out of src so WeChat preview can upload the package', () => {
     const generatedModelData = resolve(process.cwd(), 'src/uni-app/components/pose/model-data.gen.ts')
     const staticModelDir = resolve(process.cwd(), 'src/static/models')
-    const poseModelSource = resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectModel.ts')
+    const poseModelSource = resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectModel.ts')
 
     expect(existsSync(generatedModelData)).toBe(false)
     expect(existsSync(staticModelDir)).toBe(false)

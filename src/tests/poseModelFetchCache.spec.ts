@@ -65,7 +65,7 @@ describe('pose model fetch cache', () => {
     vi.stubEnv('VITE_POSE_MODEL_VERSION', 'blazepose-lite-v1')
     const { files, wx } = createWxMock()
     vi.stubGlobal('wx', wx)
-    const { fetchFunc } = await import('../uni-app/components/pose/fetch')
+    const { fetchFunc } = await import('../subpackages/training/components/pose/fetch')
     const url = 'https://models.example.com/pose/detector/model.json'
 
     const first = await fetchFunc(url)
@@ -90,7 +90,7 @@ describe('pose model fetch cache', () => {
       env: wx.env,
       request: wx.request,
     })
-    const { fetchFunc } = await import('../uni-app/components/pose/fetch')
+    const { fetchFunc } = await import('../subpackages/training/components/pose/fetch')
 
     const response = await fetchFunc(
       'https://models.example.com/pose/landmark_lite/model.json',
@@ -104,7 +104,7 @@ describe('pose model fetch cache', () => {
     vi.stubEnv('VITE_POSE_MODEL_VERSION', 'blazepose-lite-v1')
     const { files, wx } = createWxMock()
     vi.stubGlobal('wx', wx)
-    const { fetchFunc } = await import('../uni-app/components/pose/fetch')
+    const { fetchFunc } = await import('../subpackages/training/components/pose/fetch')
     const url = 'https://models.sport-snack.cn/pose/detector/model.json'
 
     await fetchFunc(url)
@@ -131,7 +131,7 @@ describe('pose model fetch cache', () => {
       }),
     )
     vi.stubGlobal('wx', wx)
-    const { fetchFunc } = await import('../uni-app/components/pose/fetch')
+    const { fetchFunc } = await import('../subpackages/training/components/pose/fetch')
     const url =
       'https://models.sport-snack.cn/pose/detector/group1-shard2of2.bin'
 
@@ -147,7 +147,7 @@ describe('pose model fetch cache', () => {
   it('does not persist non-GET responses in the model cache', async () => {
     const { files, wx } = createWxMock()
     vi.stubGlobal('wx', wx)
-    const { fetchFunc } = await import('../uni-app/components/pose/fetch')
+    const { fetchFunc } = await import('../subpackages/training/components/pose/fetch')
 
     await fetchFunc('https://models.sport-snack.cn/pose/detector/model.json', {
       method: 'POST',

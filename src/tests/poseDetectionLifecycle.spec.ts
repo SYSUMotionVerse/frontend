@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('pose detector lifecycle disposal', () => {
   const source = readFileSync(
-    resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+    resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
     'utf8'
   )
 
@@ -18,7 +18,7 @@ describe('pose detector lifecycle disposal', () => {
     expect(source).toContain('isMounted = false')
     // Guards after each await point
     expect(source).toMatch(/await tf\.ready\(\)[\s\S]*if \(!isMounted\) return/)
-    expect(source).toMatch(/loadedDetector = await createDetector[\s\S]*if \(!isMounted\)[\s\S]*loadedDetector\.dispose/)
+    expect(source).toMatch(/loadedDetector = await loadBlazePose[\s\S]*if \(!isMounted\)[\s\S]*loadedDetector\.dispose/)
   })
 
   it('waits for native camera init before allocating the WebGL backend', () => {
@@ -29,8 +29,11 @@ describe('pose detector lifecycle disposal', () => {
     expect(webglAllocation).toBeGreaterThan(cameraReadyGate)
   })
 
-  it('stops the sampling fallback timer on unmount', () => {
-    expect(source).toMatch(/onUnmounted\([\s\S]*stopSamplingFallback\(\)/)
+  it('does not retain a sampling fallback timer on unmount', () => {
+    // The sampling-fallback timer machinery has been removed; unmount
+    // cleans up via detector.dispose() and poseCamera.stopCamera() only.
+    expect(source).not.toContain('samplingFallbackTimer')
+    expect(source).not.toContain('stopSamplingFallback')
   })
 
   it('stops the camera on unmount', () => {

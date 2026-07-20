@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('PoseCamera overlay display size', () => {
   it('initializes overlay display size from the mounted node rect instead of sampled inference dimensions', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('VisualTrainingPanel mini-program styles', () => {
   it('does not use attribute selectors forbidden in component WXSS', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
 
@@ -14,7 +14,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
 
   it('keeps a single native camera lifecycle instead of replacing a preview camera', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('PoseCamera overlay scaling', () => {
   it('keeps the overlay visually full-size even when internal sampling resolution is reduced', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 

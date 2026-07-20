@@ -4,7 +4,7 @@
  *
  * Manages the full inference lifecycle:
  *   1. setupWechatPlatform() — initialise TFJS + WebGL
- *   2. createDetector()      — load embedded BlazePose-Lite model handlers
+ *   2. loadBlazePose()       — load only the BlazePose TFJS implementation
  *   3. warmModel()           — first dummy inference to JIT-compile kernels
  *   4. single-shot analyze   — takePhoto → decode → estimatePoses → overlay
  *
@@ -12,16 +12,16 @@
  *   onResult  — called with { pose, inferMs, ts } when a pose is detected
  *   onStats   — called with { status, loadMs, warmMs, inferMs, fps }
  */
-import { createDetector, type PoseDetector } from '@tensorflow-models/pose-detection';
+import { load as loadBlazePose } from '@tensorflow-models/pose-detection/dist/blazepose_tfjs/detector';
+import type { PoseDetector } from '@tensorflow-models/pose-detection/dist/pose_detector';
 import * as tf from '@tensorflow/tfjs-core';
 import * as webgl from '@tensorflow/tfjs-backend-webgl';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { BLAZEPOSE_MODEL_NAME, createBlazePoseModelConfig } from './PoseDetectModel';
+import { createBlazePoseModelConfig } from './PoseDetectModel';
 import { setupWechatPlatform } from './wechat_platform';
 import { fetchFunc } from './fetch';
 import type { DetectResult, Frame } from './PoseDetectModel';
-import { buildPoseAngleFrame } from './poseAnalysis'
-import { getNextSamplingDelayMs } from './poseSamplingSchedule'
+import { buildPoseAngleFrame } from '../../../../uni-app/components/pose/poseAnalysis'
 import PoseCamera from './PoseCamera.vue';
 
 const props = defineProps<{
@@ -75,8 +75,6 @@ let lastFrameTime = 0;
 let fps = 0;
 let liveInferenceInFlight = false;
 let emittedFrameIndex = 0
-let samplingFallbackTimer: ReturnType<typeof setTimeout> | null = null
-let usingSamplingFallback = false
 
 // ───────────────────────────────────────────
 //  Detector lifecycle
@@ -107,7 +105,7 @@ onMounted(async () => {
 
     // 2. Load detector
     const config = await createBlazePoseModelConfig();
-    const loadedDetector = await createDetector(BLAZEPOSE_MODEL_NAME as any, config as any);
+    const loadedDetector = await loadBlazePose(config as any);
 
     // Guard: unmount may have fired during detector load
     if (!isMounted) {
@@ -126,13 +124,12 @@ onMounted(async () => {
     // Guard: unmount may have fired during warm-up
     if (!isMounted) return;
 
-    // 4. Production defaults to bounded photo sampling. Realtime frame
-    // callbacks remain available in debug mode for device compatibility tests.
-    if (isDebugMode.value) {
-      poseCamera.value?.startCamera()
-    } else {
-      startSamplingFallback('production-safe-mode')
-    }
+    // 4. Start the continuous camera frame listener. Both production and
+    // debug consume CameraContext.onCameraFrame() throttled to the selected
+    // fps via PoseCamera's FrameAdapter. The repeated native takePhoto()
+    // shutter that caused the bright/cream overlay flash is no longer used
+    // for automatic recognition.
+    poseCamera.value?.startCamera()
     emitStats('ready');
   } catch (err: any) {
     if (!isMounted) return;
@@ -152,7 +149,6 @@ onMounted(async () => {
 onUnmounted(() => {
   isMounted = false;
   rejectCameraReady?.(new Error('pose detector unmounted before camera ready'))
-  stopSamplingFallback();
   // Dispose the TF.js detector to free WebGL/GPU resources.
   if (detector) {
     try { detector.dispose(); } catch { /* detector may already be disposed */ }
@@ -288,74 +284,6 @@ async function runPhotoInference() {
   }
 }
 
-function startSamplingFallback(reason?: string) {
-  if (samplingFallbackTimer || usingSamplingFallback) {
-    return
-  }
-
-  usingSamplingFallback = true
-  if (reason === 'production-safe-mode') {
-    console.info('[pose] using sampled inference for production stability')
-  } else {
-    console.warn('[pose] realtime camera frames unavailable, switching to sampled inference', reason ?? '')
-  }
-
-  scheduleNextSamplingFrame(0)
-
-  emitStats('sampling-fallback')
-}
-
-function scheduleNextSamplingFrame(delayMs: number) {
-  samplingFallbackTimer = setTimeout(async () => {
-    samplingFallbackTimer = null
-    if (!usingSamplingFallback) return
-
-    const startedAt = Date.now()
-    await sampleFallbackFrame()
-    if (!usingSamplingFallback) return
-
-    const elapsedMs = Date.now() - startedAt
-    scheduleNextSamplingFrame(getNextSamplingDelayMs(samplingFps.value, elapsedMs))
-  }, delayMs)
-}
-
-function stopSamplingFallback() {
-  if (samplingFallbackTimer) {
-    clearTimeout(samplingFallbackTimer)
-    samplingFallbackTimer = null
-  }
-
-  usingSamplingFallback = false
-}
-
-async function sampleFallbackFrame() {
-  if (analyzing.value || liveInferenceInFlight || !detector || !poseCamera.value) {
-    return
-  }
-
-  liveInferenceInFlight = true
-  const startedAt = Date.now()
-
-  try {
-    await runPhotoInference()
-
-    frameCount++
-    if (lastFrameTime === 0) lastFrameTime = startedAt
-    const elapsed = startedAt - lastFrameTime
-    if (elapsed >= 1000) {
-      fps = Math.round((frameCount * 1000) / elapsed)
-      frameCount = 0
-      lastFrameTime = startedAt
-    }
-
-    emitStats('sampling')
-  } catch (err: any) {
-    console.warn('[pose] sampled inference failed:', err?.message ?? err)
-  } finally {
-    liveInferenceInFlight = false
-  }
-}
-
 // ───────────────────────────────────────────
 //  Camera frame pump (live listener path)
 // ───────────────────────────────────────────
@@ -453,11 +381,11 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
       break;
     }
     case 'cameraFail':
+      // Surface a stable, non-flashing error state. Do not fall back to
+      // repeated takePhoto() — the native shutter causes the bright overlay.
       cameraError.value = evt.detail ?? '';
-      startSamplingFallback(evt.detail)
       break;
     case 'firstFrame':
-      stopSamplingFallback()
       firstFrameReceived.value = true;
       break;
   }

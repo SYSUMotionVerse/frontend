@@ -70,7 +70,7 @@ function chooseMode(modality: TrainingModality) {
   }
 
   void uni.navigateTo({
-    url: `/pages/training/visual-session?modality=${modality}`
+    url: `/subpackages/training/visual-session?modality=${modality}`
   })
 }
 </script>

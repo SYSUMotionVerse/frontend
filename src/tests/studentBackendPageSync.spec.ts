@@ -180,7 +180,7 @@ vi.mock('../uni-app/platform/trainingFeedback', () => ({
   notifyTrainingComplete
 }))
 
-vi.mock('../uni-app/components/pose/PoseDetectionView.vue', () => ({
+vi.mock('../subpackages/training/components/pose/PoseDetectionView.vue', () => ({
   default: defineComponent({
     name: 'PoseDetectionView',
     props: {
@@ -808,7 +808,7 @@ describe('page-level backend sync wiring', () => {
       }
     })
 
-    const VisualSessionPage = (await import('../pages/training/visual-session.vue')).default
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
     const wrapper = mount(VisualSessionPage, {
       global: {
         stubs: {
@@ -869,7 +869,7 @@ describe('page-level backend sync wiring', () => {
   it('blocks visual completion when the backend has no playable video', async () => {
     studentBackendSync.loadVisualExerciseVideo.mockResolvedValue(null)
 
-    const VisualSessionPage = (await import('../pages/training/visual-session.vue')).default
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
     const wrapper = mount(VisualSessionPage, {
       global: {
         stubs: {

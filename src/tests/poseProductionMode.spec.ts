@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('PoseDetectionView production mode', () => {
   it('keeps analyze controls debug-only and exposes recording methods', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 
@@ -16,7 +16,7 @@ describe('PoseDetectionView production mode', () => {
 
   it('passes a debug sampling fps selector into the pose camera', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 
@@ -30,7 +30,7 @@ describe('PoseDetectionView production mode', () => {
 
   it('surfaces detector load failures in the camera error banner', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 

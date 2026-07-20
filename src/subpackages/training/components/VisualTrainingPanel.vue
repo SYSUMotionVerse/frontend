@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from 'vue'
-import PoseDetectionView from '../../uni-app/components/pose/PoseDetectionView.vue'
-import type { DetectResult } from '../../uni-app/components/pose/PoseDetectModel'
+import PoseDetectionView from './pose/PoseDetectionView.vue'
+import type { DetectResult } from './pose/PoseDetectModel'
 
 const props = defineProps<{
   title: string

@@ -9,7 +9,7 @@
  * Model weights are loaded over HTTP so the WeChat preview source package
  * stays under the 4 MB upload limit.
  */
-import type { PoseAngleFrame } from './poseAnalysis'
+import type { PoseAngleFrame } from '../../../../uni-app/components/pose/poseAnalysis'
 
 export const BLAZEPOSE_MODEL_NAME = 'BlazePose' as const
 export const DEFAULT_POSE_MODEL_BASE_URL = 'http://127.0.0.1:8765'

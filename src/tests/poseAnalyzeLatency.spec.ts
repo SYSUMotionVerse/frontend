@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('PoseDetectionView analyze latency', () => {
   it('uses the inferFromCanvas latency from the captured photo instead of the last live frame', () => {
     const source = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DetectResult } from '../uni-app/components/pose/PoseDetectModel'
+import type { DetectResult } from '../subpackages/training/components/pose/PoseDetectModel'
 import { buildStandardPoseSequence } from '../uni-app/components/pose/standardPoseSequence'
 
 function createDetectResult(input: {

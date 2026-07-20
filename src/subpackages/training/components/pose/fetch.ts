@@ -1,5 +1,5 @@
 /**
- * TFJS fetch polyfill for WeChat Miniprogram.
+ * TFJS fetch polyfill for the WeChat Miniprogram.
  *
  * Model files are fetched from the configured object storage origin on first use,
  * then persisted under wx.env.USER_DATA_PATH. Later detector startups read the

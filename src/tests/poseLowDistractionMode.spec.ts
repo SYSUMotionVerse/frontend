@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest'
 describe('Pose low-distraction fallback mode', () => {
   it('shows sampled keypoints and a quiet explicit status during fallback', () => {
     const poseViewSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
     const sessionSource = readFileSync(
-      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
 

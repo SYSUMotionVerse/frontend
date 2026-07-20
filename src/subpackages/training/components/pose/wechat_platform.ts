@@ -1,5 +1,5 @@
 /**
- * Minimal TensorFlow.js + WebGL setup for WeChat Miniprogram.
+ * Minimal TensorFlow.js + WebGL setup for the WeChat Miniprogram.
  *
  * Adapted from the reference implementation:
  *   /tmp/MultiPose-MiniProgram/src/tfjs-plugin/wechat_platform.ts

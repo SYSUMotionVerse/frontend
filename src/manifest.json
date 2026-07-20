@@ -7,6 +7,9 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wx9c6cccd49637b32e",
+    "optimization": {
+      "subPackages": true
+    },
     "setting": {
       "urlCheck": true
     }

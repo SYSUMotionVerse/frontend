@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest'
 describe('visual training camera layout chain', () => {
   it('gives every custom-component host between the stage and camera an explicit size', () => {
     const panelSource = readFileSync(
-      resolve(process.cwd(), 'src/components/training/VisualTrainingPanel.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
     const detectorSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 

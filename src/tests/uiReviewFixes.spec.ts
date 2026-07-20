@@ -84,7 +84,7 @@ describe('ui review fixes', () => {
       'src/components/training/TrainingModeCard.vue',
       'src/components/training/DailyProgressCard.vue',
       'src/components/training/StairTrainingPanel.vue',
-      'src/components/training/VisualTrainingPanel.vue',
+      'src/subpackages/training/components/VisualTrainingPanel.vue',
       'src/components/training/ShortQuestionnaireForm.vue'
     ]
 
@@ -497,7 +497,7 @@ describe('ui review fixes', () => {
 
   it('keeps training panels and miniapp shells on low-risk layout and motion primitives', () => {
     const visualTrainingPanel = readFileSync(
-      resolve('src/components/training/VisualTrainingPanel.vue'),
+      resolve('src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
     const stairTrainingPanel = readFileSync(

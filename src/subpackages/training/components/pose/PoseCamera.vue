@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * PoseCamera — Camera frame pump for WeChat Miniprogram.
+ * PoseCamera — camera frame pump for WeChat Miniprogram.
  *
  * Wraps:
  *   <camera> + wx.createCameraContext().onCameraFrame() → FrameAdapter
@@ -232,10 +232,16 @@ async function takePhotoWithQuality(quality: 'high' | 'normal' | 'low'): Promise
 
 function setOverlayFrame(width: number, height: number) {
   if (!overlayCanvas) return
-  overlayCanvas.width = width
-  overlayCanvas.height = height
-  state.canvasW = width
-  state.canvasH = height
+  // Updating a native canvas backing size resets and reallocates its render
+  // surface. Camera frames normally keep a stable size, so doing this for
+  // every pose result creates avoidable native-layer churn (and can visibly
+  // flash on real devices). Resize only when the incoming dimensions change.
+  if (state.canvasW !== width || state.canvasH !== height) {
+    overlayCanvas.width = width
+    overlayCanvas.height = height
+    state.canvasW = width
+    state.canvasH = height
+  }
   if (canvasCtx) {
     canvasCtx.clearRect(0, 0, width, height)
   }

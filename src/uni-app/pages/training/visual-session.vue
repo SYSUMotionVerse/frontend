@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import VisualSessionPage from '../../../pages/training/visual-session.vue'
+import VisualSessionPage from '../../../subpackages/training/visual-session.vue'
 </script>
 
 <template>

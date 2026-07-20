@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Pose } from '../uni-app/components/pose/PoseDetectModel'
+import type { Pose } from '../subpackages/training/components/pose/PoseDetectModel'
 import { buildPoseAngleFrame } from '../uni-app/components/pose/poseAnalysis'
 
 function createPose(scoreOverrides: Partial<Record<string, number>> = {}): Pose {

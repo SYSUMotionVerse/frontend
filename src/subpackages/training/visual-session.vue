@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { shallowRef } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import VisualTrainingPanel from '../../components/training/VisualTrainingPanel.vue'
+import VisualTrainingPanel from './components/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../domain/student/types'
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
 import {

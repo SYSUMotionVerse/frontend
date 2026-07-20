@@ -1,4 +1,4 @@
-import type { Pose } from './PoseDetectModel'
+import type { Pose } from '../../../subpackages/training/components/pose/PoseDetectModel'
 
 export const DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD = 0.5
 

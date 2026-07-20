@@ -1,7 +1,7 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import PoseCamera from '../uni-app/components/pose/PoseCamera.vue'
-import { createComponentContext } from '../uni-app/components/pose/utils'
+import PoseCamera from '../subpackages/training/components/pose/PoseCamera.vue'
+import { createComponentContext } from '../subpackages/training/components/pose/utils'
 
 describe('PoseCamera native readiness', () => {
   afterEach(() => {
@@ -93,5 +93,51 @@ describe('PoseCamera native readiness', () => {
 
     expect(createCameraContext).toHaveBeenCalledWith(nativeComponentScope)
     expect(context).toEqual({ id: 'camera-context' })
+  })
+
+  it('does not resize the native overlay canvas again when frame dimensions are unchanged', async () => {
+    let canvasWidth = 0
+    let canvasHeight = 0
+    const setCanvasWidth = vi.fn((value: number) => { canvasWidth = value })
+    const setCanvasHeight = vi.fn((value: number) => { canvasHeight = value })
+    const clearRect = vi.fn()
+    const overlayCanvas = {
+      get width() { return canvasWidth },
+      set width(value: number) { setCanvasWidth(value) },
+      get height() { return canvasHeight },
+      set height(value: number) { setCanvasHeight(value) },
+      getContext: vi.fn(() => ({ clearRect }))
+    }
+    const selectorQuery = {
+      in: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      fields: vi.fn().mockReturnThis(),
+      exec: vi.fn((callback: (result: unknown[]) => void) => callback([
+        { node: overlayCanvas, width: 320, height: 480 }
+      ]))
+    }
+
+    vi.stubGlobal('wx', {
+      createSelectorQuery: vi.fn(() => selectorQuery)
+    })
+
+    const wrapper = mount(PoseCamera, {
+      props: {
+        onFrame: vi.fn()
+      }
+    })
+    await flushPromises()
+
+    const camera = wrapper.vm as unknown as {
+      setOverlayFrame: (width: number, height: number) => void
+    }
+    camera.setOverlayFrame(192, 144)
+    camera.setOverlayFrame(192, 144)
+
+    expect(setCanvasWidth).toHaveBeenCalledTimes(1)
+    expect(setCanvasHeight).toHaveBeenCalledTimes(1)
+    expect(clearRect).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
   })
 })

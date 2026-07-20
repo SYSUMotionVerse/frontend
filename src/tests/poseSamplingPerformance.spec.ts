@@ -3,13 +3,13 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('PoseDetectionView sampling performance', () => {
-  it('uses a lightweight sampled-photo path for fallback inference', () => {
+  it('retains a lightweight single-shot photo path for debug user-triggered analysis', () => {
     const viewSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
     const cameraSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 
@@ -26,7 +26,7 @@ describe('PoseDetectionView sampling performance', () => {
 
   it('accepts a configurable target sampling fps for live camera throttling', () => {
     const cameraSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 
@@ -38,11 +38,11 @@ describe('PoseDetectionView sampling performance', () => {
 
   it('defaults live recognition to the lower 5fps mode on mobile preview', () => {
     const viewSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
     const cameraSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 
@@ -52,11 +52,11 @@ describe('PoseDetectionView sampling performance', () => {
 
   it('uses small camera frames and avoids copying full frames into the overlay canvas during live inference', () => {
     const viewSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseDetectionView.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
     const cameraSource = readFileSync(
-      resolve(process.cwd(), 'src/uni-app/components/pose/PoseCamera.vue'),
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseCamera.vue'),
       'utf8'
     )
 

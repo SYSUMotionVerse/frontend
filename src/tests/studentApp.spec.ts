@@ -1,7 +1,12 @@
 describe('student miniapp route map', () => {
   it('defines the required student flow pages in the uni-app manifest', async () => {
     const pagesManifest = await import('../uni-app/pages.json')
-    const routePaths = pagesManifest.pages.map(page => page.path)
+    const routePaths = [
+      ...pagesManifest.pages.map(page => page.path),
+      ...pagesManifest.subPackages.flatMap(subPackage =>
+        subPackage.pages.map(page => `${subPackage.root}/${page.path}`)
+      )
+    ]
 
     expect(routePaths).toEqual(
       expect.arrayContaining([
@@ -10,7 +15,7 @@ describe('student miniapp route map', () => {
         'pages/access/questionnaire-result',
         'pages/training/home',
         'pages/training/select',
-        'pages/training/visual-session',
+        'subpackages/training/visual-session',
         'pages/training/stair-session',
         'pages/training/short-questionnaire',
         'pages/training/feedback',
