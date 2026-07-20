@@ -189,14 +189,6 @@ Create or update `.env.local` in the frontend repository:
 VITE_API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
-If avatar upload is still using a separate endpoint, you can also set:
-
-如果头像上传仍然走单独接口，也可以同时设置：
-
-```bash
-VITE_AVATAR_UPLOAD_URL=your_upload_url
-```
-
 ### 3. Start frontend development / 启动前端开发
 
 ```bash

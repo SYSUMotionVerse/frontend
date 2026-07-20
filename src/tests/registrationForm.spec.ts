@@ -1,21 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import RegistrationForm from '../components/access/RegistrationForm.vue'
-
-const avatarController = {
-  avatarUrl: '',
-  avatarSource: '' as '' | 'wechat' | 'album' | 'camera',
-  uploadState: 'idle' as 'idle' | 'uploading' | 'success' | 'error',
-  errorMessage: '',
-  isWechatMiniProgram: true,
-  supportsWechatAvatarSelection: true,
-  handleWechatAvatarChoice: vi.fn(),
-  handleLocalAvatarChoice: vi.fn()
-}
-
-vi.mock('../uni-app/composables/useRegistrationAvatar', () => ({
-  useRegistrationAvatar: () => avatarController
-}))
 
 function mountForm() {
   return mount(RegistrationForm, {
@@ -41,17 +26,7 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
 }
 
 describe('registration form', () => {
-  beforeEach(() => {
-    avatarController.avatarUrl = ''
-    avatarController.avatarSource = ''
-    avatarController.uploadState = 'idle'
-    avatarController.errorMessage = ''
-    avatarController.supportsWechatAvatarSelection = true
-    avatarController.handleWechatAvatarChoice.mockReset()
-    avatarController.handleLocalAvatarChoice.mockReset()
-  })
-
-  it('emits submit with a default avatar when no upload has happened', async () => {
+  it('emits profile data without personal avatar metadata', async () => {
     const wrapper = mountForm()
     await fillValidProfileFields(wrapper)
 
@@ -64,12 +39,12 @@ describe('registration form', () => {
           name: 'Lin',
           major: 'Sports Science',
           gender: '女',
-          grade: '一年级',
-          avatarUrl: expect.any(String),
-          avatarSource: ''
+          grade: '一年级'
         })
       ]
     ])
+    expect(wrapper.emitted('submit')?.[0]?.[0]).not.toHaveProperty('avatarUrl')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).not.toHaveProperty('avatarSource')
   })
 
   it('does not emit submit when student id is not exactly 8 digits', async () => {
@@ -107,47 +82,4 @@ describe('registration form', () => {
     ])
   })
 
-  it('emits avatar metadata once upload succeeds', async () => {
-    avatarController.avatarUrl = 'https://cdn.example.com/avatar.png'
-    avatarController.avatarSource = 'wechat'
-    avatarController.uploadState = 'success'
-
-    const wrapper = mountForm()
-    await fillValidProfileFields(wrapper)
-
-    await wrapper.get('form').trigger('submit')
-
-    expect(wrapper.emitted('submit')).toEqual([
-      [
-        expect.objectContaining({
-          studentId: '20260001',
-          name: 'Lin',
-          major: 'Sports Science',
-          gender: '女',
-          grade: '一年级',
-          avatarUrl: 'https://cdn.example.com/avatar.png',
-          avatarSource: 'wechat'
-        })
-      ]
-    ])
-  })
-
-  it('keeps submit available with a default avatar when chooseAvatar is unsupported', async () => {
-    avatarController.supportsWechatAvatarSelection = false
-    avatarController.errorMessage = '游客模式下暂不支持直接选择微信头像。'
-
-    const wrapper = mountForm()
-    await fillValidProfileFields(wrapper)
-
-    await wrapper.get('form').trigger('submit')
-
-    expect(wrapper.emitted('submit')).toEqual([
-      [
-        expect.objectContaining({
-          avatarUrl: expect.any(String),
-          avatarSource: ''
-        })
-      ]
-    ])
-  })
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 import ShortQuestionnaireForm from '../../../components/training/ShortQuestionnaireForm.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
@@ -10,6 +10,10 @@ const latestResponse = shallowRef<{ energyLevel: number; confidence: number; enj
 const isSubmitting = shallowRef(false)
 const statusMessage = shallowRef('')
 const latestSessionId = computed(() => store.getSnapshot().sessions.at(-1)?.id ?? '')
+
+onMounted(() => {
+  void studentBackendSync.retryPendingShortQuestionnaires()
+})
 
 async function submitResponse(payload: { energyLevel: number; confidence: number; enjoyment: number }) {
   if (isSubmitting.value) {
@@ -30,8 +34,9 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
       ...payload
     })
   } catch {
-    store.submitShortQuestionnaireForLatestSession(payload)
-    statusMessage.value = '反馈已安全保存在本机，但暂未同步。请返回首页继续使用。'
+    // The durable save itself may have failed (quota/storage or validation).
+    // Do not claim the data was safely stored — give a truthful retry message.
+    statusMessage.value = '反馈保存失败，请重试。'
     return
   } finally {
     isSubmitting.value = false
@@ -39,7 +44,9 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
 
   store.submitShortQuestionnaireForLatestSession(payload)
   if (!result.synced) {
-    statusMessage.value = '反馈已安全保存在本机，待后端开放接口后再同步。请返回首页继续使用。'
+    statusMessage.value = result.reason === 'network-error'
+      ? '反馈已安全保存在本机，网络恢复后将自动重试。请返回首页继续使用。'
+      : '反馈已安全保存在本机，待后端开放接口后再同步。请返回首页继续使用。'
     return
   }
 

@@ -15,7 +15,6 @@ import {
 } from './growthBackendModels'
 import { DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD, type PoseAngleFrame } from '../components/pose/poseAnalysis'
 import type {
-  AvatarUploadResult,
   BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseType,
@@ -24,9 +23,9 @@ import type {
   ExerciseVideoSummary,
   LongQuestionnaireSyncResult,
   LongQuestionnaireSyncInput,
-  ProfileAvatarSyncResult,
   RegistrationSyncInput,
   ShortQuestionnaireSyncInput,
+  ShortQuestionnaireCreatePayload,
   ShortQuestionnaireSyncResult,
   StairSessionSummary,
   StairSessionSyncInput,
@@ -134,7 +133,10 @@ export function mapStudentProfileToUserUpdatePayload(profile: RegistrationSyncIn
     student_id: profile.studentId.trim() || undefined,
     major: profile.major.trim() || undefined,
     height: profile.heightCm > 0 ? profile.heightCm : undefined,
-    weight: profile.weightKg > 0 ? profile.weightKg : undefined
+    weight: profile.weightKg > 0 ? profile.weightKg : undefined,
+    age: profile.age > 0 ? profile.age : undefined,
+    grade: profile.grade.trim() || undefined,
+    resting_heart_rate: profile.restingHeartRate > 0 ? profile.restingHeartRate : undefined
   })
 }
 
@@ -145,9 +147,7 @@ export function buildRegistrationSurveyRecordPayload(profile: RegistrationSyncIn
       source: 'registration',
       age: profile.age,
       grade: profile.grade,
-      restingHeartRate: profile.restingHeartRate,
-      avatarUrl: profile.avatarUrl,
-      avatarSource: profile.avatarSource
+      restingHeartRate: profile.restingHeartRate
     })
   }
 }
@@ -332,13 +332,6 @@ function resolveBackendGenderLabel(gender: BackendCurrentUser['gender']): Studen
   return ''
 }
 
-function shouldUploadAvatar(profile: RegistrationSyncInput) {
-  return (
-    profile.avatarSource !== '' &&
-    profile.avatarUrl.trim().startsWith('wxfile://')
-  )
-}
-
 function resolveVisualSessionSummary(
   fallback: {
     qualityScore: number
@@ -367,7 +360,10 @@ export function isBackendProfileComplete(user: BackendCurrentUser) {
     hasTextValue(user.student_id) &&
     hasTextValue(user.major) &&
     toPositiveNumber(user.height) !== null &&
-    toPositiveNumber(user.weight) !== null
+    toPositiveNumber(user.weight) !== null &&
+    toPositiveNumber(user.age) !== null &&
+    hasTextValue(user.grade) &&
+    toPositiveNumber(user.resting_heart_rate) !== null
   )
 }
 
@@ -385,19 +381,21 @@ export function mapBackendCurrentUserToStudentProfile(
 ): StudentProfile {
   const heightCm = toPositiveNumber(user.height)
   const weightKg = toPositiveNumber(user.weight)
-  const backendAvatarUrl = hasTextValue(user.avatar) ? user.avatar.trim() : ''
-  const hasBackendAvatar = backendAvatarUrl.length > 0
+  const age = toPositiveNumber(user.age)
+  const restingHeartRate = toPositiveNumber(user.resting_heart_rate)
+  const grade = hasTextValue(user.grade) ? user.grade.trim() : ''
 
   return {
     ...seedProfile,
-    avatarUrl: hasBackendAvatar ? backendAvatarUrl : seedProfile.avatarUrl,
-    avatarSource: hasBackendAvatar ? '' : seedProfile.avatarSource,
     studentId: hasTextValue(user.student_id) ? user.student_id.trim() : '',
     name: hasTextValue(user.name) ? user.name.trim() : '',
     gender: resolveBackendGenderLabel(user.gender),
     major: hasTextValue(user.major) ? user.major.trim() : '',
     heightCm: heightCm ?? 0,
     weightKg: weightKg ?? 0,
+    age: age ?? seedProfile.age,
+    grade: grade || seedProfile.grade,
+    restingHeartRate: restingHeartRate ?? seedProfile.restingHeartRate,
     completed: isBackendProfileComplete(user)
   }
 }
@@ -421,6 +419,28 @@ function buildRegistrationAccessResult(): BootstrapAccessResult {
   return {
     targetPage: 'register',
     targetPageUrl: '/pages/access/register'
+  }
+}
+
+function isShortQuestionnaireRating(value: number) {
+  return Number.isInteger(value) && value >= 1 && value <= 5
+}
+
+function buildShortQuestionnairePayload(
+  input: ShortQuestionnaireSyncInput
+): ShortQuestionnaireCreatePayload {
+  if (
+    !isShortQuestionnaireRating(input.energyLevel) ||
+    !isShortQuestionnaireRating(input.confidence) ||
+    !isShortQuestionnaireRating(input.enjoyment)
+  ) {
+    throw new Error('Short questionnaire responses must be integers between 1 and 5.')
+  }
+  return {
+    training_session_id: input.sessionId,
+    energy_level: input.energyLevel,
+    confidence: input.confidence,
+    enjoyment: input.enjoyment
   }
 }
 
@@ -515,6 +535,49 @@ export function createStudentBackendSync(
     ...resolveDefaultSubmissionOptions(),
     ...submissionOverrides
   } satisfies StudentBackendSubmissionOptions
+  let shortQuestionnaireOperation = Promise.resolve()
+
+  function enqueueShortQuestionnaireOperation<T>(operation: () => Promise<T>) {
+    const result = shortQuestionnaireOperation.then(operation, operation)
+    shortQuestionnaireOperation = result.then(() => undefined, () => undefined)
+    return result
+  }
+
+  async function retryPendingShortQuestionnairesNow() {
+    const submissions = submissionOptions.pendingShortQuestionnaires.list()
+    const submitShortQuestionnaire = dependencies.submitShortQuestionnaire
+    if (
+      !dependencies.isEnabled() ||
+      !submitShortQuestionnaire ||
+      submissions.length === 0
+    ) {
+      return { attempted: 0, succeeded: 0 }
+    }
+
+    try {
+      await dependencies.ensureSession()
+    } catch {
+      return { attempted: submissions.length, succeeded: 0 }
+    }
+
+    let succeeded = 0
+    for (const submission of submissions) {
+      try {
+        await submitShortQuestionnaire({
+          training_session_id: submission.sessionId,
+          energy_level: submission.response.energyLevel,
+          confidence: submission.response.confidence,
+          enjoyment: submission.response.enjoyment
+        })
+        submissionOptions.pendingShortQuestionnaires.remove(submission.sessionId)
+        succeeded += 1
+      } catch {
+        // Keep failed and ambiguous submissions durable for a later retry.
+      }
+    }
+
+    return { attempted: submissions.length, succeeded }
+  }
 
   async function submitPendingTrainingJob(
     submission: Extract<PendingTrainingSubmission, { kind: 'visual' }>
@@ -551,48 +614,6 @@ export function createStudentBackendSync(
 
   return {
     isEnabled: dependencies.isEnabled,
-    async uploadAvatar(
-      filePath: string,
-      source: Exclude<StudentProfile['avatarSource'], ''>
-    ): Promise<AvatarUploadResult> {
-      if (!dependencies.isEnabled()) {
-        return {
-          avatarUrl: filePath
-        }
-      }
-
-      await dependencies.ensureSession()
-      return dependencies.uploadAvatar(filePath, source)
-    },
-    async syncProfileAvatarChange(
-      filePath: string,
-      source: Exclude<StudentProfile['avatarSource'], ''>,
-      seedProfile: StudentProfile
-    ): Promise<ProfileAvatarSyncResult> {
-      if (!dependencies.isEnabled()) {
-        return {
-          avatarUrl: filePath,
-          profile: {
-            ...seedProfile,
-            avatarUrl: filePath,
-            avatarSource: source
-          }
-        }
-      }
-
-      await dependencies.ensureSession()
-      const uploadResult = await dependencies.uploadAvatar(filePath, source)
-      const profile = {
-        ...seedProfile,
-        avatarUrl: uploadResult.avatarUrl,
-        avatarSource: source
-      }
-
-      return {
-        avatarUrl: uploadResult.avatarUrl,
-        profile
-      }
-    },
     async bootstrapAccess() {
       if (!dependencies.isEnabled()) {
         return buildRegistrationAccessResult()
@@ -622,6 +643,9 @@ export function createStudentBackendSync(
           completedQuestionnaireCheckpoints: [],
           activeCheckpoint: 'baseline'
         })
+        // After a successful authenticated bootstrap, retry any pending short
+        // questionnaires non-blockingly (not only when the page mounts).
+        void enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
         return buildRegistrationAccessResult()
       }
 
@@ -637,15 +661,20 @@ export function createStudentBackendSync(
       if (registeredProfileHasNoPsychologyRecords && dueCheckpoint !== 'baseline') {
         throw new Error('Backend checkpoint order is invalid: baseline questionnaire is not completed.')
       }
-      if (!dueCheckpoint && completedCheckpoints.size < 4) {
-        throw new Error('Backend reports all questionnaires completed but checkpoint records are incomplete.')
-      }
 
       bootstrapAccess.hydrateAccessState({
         profile,
         completedQuestionnaireCheckpoints: [...completedCheckpoints],
         activeCheckpoint: dueCheckpoint ?? 'baseline'
       })
+
+      // After a successful authenticated bootstrap, retry any pending short
+      // questionnaires non-blockingly (not only when the short-questionnaire
+      // page mounts). This is a release blocker for questionnaire server
+      // collection: the backend endpoint must make training_session_id
+      // idempotent/unique and treat repeats as success before the env var
+      // can be enabled. See docs/mini-program-production-release.md.
+      void enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
 
       return buildBootstrapAccessResult(dueCheckpoint)
     },
@@ -672,25 +701,17 @@ export function createStudentBackendSync(
     async syncRegistration(profile: RegistrationSyncInput) {
       return runIfEnabled(dependencies.isEnabled(), async () => {
         await dependencies.ensureSession()
-        let syncedProfile = profile
-
-        if (shouldUploadAvatar(profile)) {
-          const uploadResult = await dependencies.uploadAvatar(profile.avatarUrl, profile.avatarSource)
-          syncedProfile = {
-            ...profile,
-            avatarUrl: uploadResult.avatarUrl
-          }
-        }
-
-        await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(syncedProfile))
-        await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(syncedProfile))
-        submissionOptions.registrationProfileStorage.save(syncedProfile)
+        await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(profile))
+        await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(profile))
+        submissionOptions.registrationProfileStorage.save(profile)
       })
     },
     async syncShortQuestionnaire(
       input: ShortQuestionnaireSyncInput
     ): Promise<ShortQuestionnaireSyncResult> {
-      submissionOptions.pendingShortQuestionnaires.save({
+      buildShortQuestionnairePayload(input) // validates 1..5 domain early (synchronous, no storage)
+
+      const submission: { sessionId: string; response: { energyLevel: number; confidence: number; enjoyment: number }; queuedAt: string } = {
         sessionId: input.sessionId,
         response: {
           energyLevel: input.energyLevel,
@@ -698,16 +719,33 @@ export function createStudentBackendSync(
           enjoyment: input.enjoyment
         },
         queuedAt: new Date().toISOString()
-      })
-
-      if (!dependencies.isEnabled() || !dependencies.submitShortQuestionnaire) {
-        return { synced: false, reason: 'pending-backend-endpoint' }
+      }
+      const submitShortQuestionnaire = dependencies.submitShortQuestionnaire
+      if (!dependencies.isEnabled() || !submitShortQuestionnaire) {
+        // Serialize the durable save with retry/remove so an in-flight retry
+        // keyed by sessionId cannot delete a newly saved response.
+        return enqueueShortQuestionnaireOperation(async () => {
+          submissionOptions.pendingShortQuestionnaires.save(submission)
+          return { synced: false, reason: 'pending-backend-endpoint' } as const
+        })
       }
 
-      await dependencies.ensureSession()
-      await dependencies.submitShortQuestionnaire(input)
-      submissionOptions.pendingShortQuestionnaires.remove(input.sessionId)
-      return { synced: true }
+      return enqueueShortQuestionnaireOperation(async () => {
+        // Save before network, but inside the serialized queue so an older
+        // in-flight retry/remove cannot delete this newly saved response.
+        submissionOptions.pendingShortQuestionnaires.save(submission)
+        try {
+          await dependencies.ensureSession()
+          await submitShortQuestionnaire(buildShortQuestionnairePayload(input))
+          submissionOptions.pendingShortQuestionnaires.remove(input.sessionId)
+          return { synced: true } as const
+        } catch {
+          // Network/submit failed but the durable save succeeded.
+          // Return a truthful result so the page does not claim server
+          // completion, and the response stays durable for a later retry.
+          return { synced: false, reason: 'network-error' } as const
+        }
+      })
     },
     async syncLongQuestionnaire(input: LongQuestionnaireSyncInput) {
       if (!dependencies.isEnabled()) {
@@ -810,6 +848,9 @@ export function createStudentBackendSync(
         attempted: submissions.length,
         succeeded
       }
+    },
+    async retryPendingShortQuestionnaires() {
+      return enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
     },
     async loadGrowthHistory() {
       if (!dependencies.isEnabled()) {

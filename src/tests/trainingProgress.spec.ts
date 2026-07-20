@@ -44,20 +44,10 @@ vi.mock('../uni-app/composables/useStudentStore', () => ({
     setReminderSource: vi.fn(),
     refreshReminderEligibility: vi.fn(),
     state: {
-      profile: { avatarUrl: '', name: '小林' },
+      profile: { name: '小林' },
       dailyAdherence: { validCheckIns: 3, reminderEligible: false },
       weeklyAdherence: { qualifyingDays: 3 }
     }
-  })
-}))
-
-vi.mock('../uni-app/composables/useProfileAvatarEditor', () => ({
-  useProfileAvatarEditor: () => ({
-    uploadState: 'idle',
-    errorMessage: '',
-    isWechatMiniProgram: false,
-    supportsWechatAvatarSelection: false,
-    handleWechatAvatarChoice: vi.fn()
   })
 }))
 

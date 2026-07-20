@@ -19,7 +19,9 @@ function createBackendUser(overrides: Partial<BackendCurrentUser> = {}): Backend
     major: 'Sports Science',
     height: 160,
     weight: 45,
-    avatar: null,
+    age: 15,
+    grade: '高一',
+    resting_heart_rate: 68,
     ...overrides
   }
 }
@@ -65,12 +67,8 @@ describe('startup access bootstrap', () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
 
     const profile = mapBackendCurrentUserToStudentProfile(
-      createBackendUser({
-        avatar: 'http://127.0.0.1:8000/media/avatars/backend-avatar.png'
-      }),
+      createBackendUser(),
       createSeedProfile({
-        avatarUrl: 'https://cdn.example.com/avatar.png',
-        avatarSource: 'wechat',
         age: 15,
         grade: '高一',
         restingHeartRate: 68
@@ -85,68 +83,12 @@ describe('startup access bootstrap', () => {
         major: 'Sports Science',
         heightCm: 160,
         weightKg: 45,
-        avatarUrl: 'http://127.0.0.1:8000/media/avatars/backend-avatar.png',
-        avatarSource: '',
         age: 15,
         grade: '高一',
         restingHeartRate: 68,
         completed: true
       })
     )
-  })
-
-  it('keeps local avatar values when the backend user has no avatar', async () => {
-    const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
-
-    const profile = mapBackendCurrentUserToStudentProfile(
-      createBackendUser({
-        avatar: null
-      }),
-      createSeedProfile({
-        avatarUrl: 'https://cdn.example.com/avatar.png',
-        avatarSource: 'wechat'
-      })
-    )
-
-    expect(profile.avatarUrl).toBe('https://cdn.example.com/avatar.png')
-    expect(profile.avatarSource).toBe('wechat')
-  })
-
-  it('keeps a backend avatar authoritative over locally stored registration metadata', async () => {
-    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
-    const hydrateAccessState = vi.fn()
-    const sync = createStudentBackendSync(
-      {
-        isEnabled: () => true,
-        ensureSession: vi.fn().mockResolvedValue(undefined),
-        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser({
-          avatar: 'https://api.example.com/media/current.png'
-        })),
-        listPsychologyRecords: vi.fn().mockResolvedValue([]),
-        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(1))
-      },
-      {
-        hydrateAccessState,
-        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
-      },
-      {
-        registrationProfileStorage: {
-          load: vi.fn().mockReturnValue(createCompleteSeedProfile({
-            avatarUrl: 'https://cdn.example.com/legacy.png',
-            avatarSource: 'wechat'
-          })),
-          save: vi.fn()
-        }
-      }
-    )
-
-    await sync.bootstrapAccess()
-    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
-      profile: expect.objectContaining({
-        avatarUrl: 'https://api.example.com/media/current.png',
-        avatarSource: ''
-      })
-    }))
   })
 
   it('marks profile incomplete when required backend fields are missing', async () => {
@@ -292,7 +234,7 @@ describe('startup access bootstrap', () => {
     })
   })
 
-  it('hydrates study-required registration metadata from durable local storage', async () => {
+  it('uses backend study fields as authoritative over durable local storage', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const hydrateAccessState = vi.fn()
     const sync = createStudentBackendSync(
@@ -314,7 +256,8 @@ describe('startup access bootstrap', () => {
             grade: '高二',
             restingHeartRate: 66
           })),
-          save: vi.fn()
+          save: vi.fn(),
+          clear: vi.fn()
         }
       }
     )
@@ -324,10 +267,57 @@ describe('startup access bootstrap', () => {
     })
     expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
       profile: expect.objectContaining({
+        age: 15,
+        grade: '高一',
+        restingHeartRate: 68,
+        completed: true
+      })
+    }))
+  })
+
+  it('falls back to local storage study fields when backend does not provide them', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser({
+          age: null,
+          grade: null,
+          resting_heart_rate: null
+        })),
+        listPsychologyRecords: vi.fn().mockResolvedValue([]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue(createScale(1))
+      },
+      {
+        hydrateAccessState,
+        resolveLocalProfile: vi.fn().mockReturnValue(createSeedProfile())
+      },
+      {
+        registrationProfileStorage: {
+          load: vi.fn().mockReturnValue(createCompleteSeedProfile({
+            age: 16,
+            grade: '高二',
+            restingHeartRate: 66
+          })),
+          save: vi.fn(),
+          clear: vi.fn()
+        }
+      }
+    )
+
+    // Backend is missing study fields, so isBackendProfileComplete returns false,
+    // routing to registration to collect them and sync to the backend.
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: '/pages/access/register'
+    })
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      profile: expect.objectContaining({
         age: 16,
         grade: '高二',
         restingHeartRate: 66,
-        completed: true
+        completed: false
       })
     }))
   })
@@ -356,6 +346,33 @@ describe('startup access bootstrap', () => {
     await expect(sync.bootstrapAccess()).resolves.toMatchObject({
       targetPageUrl: '/pages/training/home'
     })
+  })
+
+  it('routes home when the only configured baseline scale is completed', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([
+          createCompletedScaleRecord(1)
+        ]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({ message: '所有量表已完成' })
+      },
+      {
+        hydrateAccessState,
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: '/pages/training/home'
+    })
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      completedQuestionnaireCheckpoints: ['baseline']
+    }))
   })
 
   it('hydrates completed checkpoint records by their backend scale order', async () => {
@@ -468,6 +485,65 @@ describe('startup access bootstrap', () => {
     )
 
     await expect(sync.bootstrapAccess()).rejects.toThrow('baseline questionnaire is not completed')
+  })
+
+  it('triggers a non-blocking retry of pending short questionnaires after a successful authenticated bootstrap', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    type PSubmission = import('../uni-app/platform/pendingShortQuestionnaires').PendingShortQuestionnaireSubmission
+    const entries = new Map<string, PSubmission>([
+      ['pending-session', {
+        sessionId: 'pending-session',
+        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        queuedAt: '2026-07-18T10:00:00.000Z'
+      }]
+    ])
+    const pendingShortQuestionnaires = {
+      list: vi.fn(() => [...entries.values()]),
+      save: vi.fn((entry: PSubmission) => entries.set(entry.sessionId, entry)),
+      remove: vi.fn((sessionId: string) => entries.delete(sessionId)),
+      clear: vi.fn(() => entries.clear())
+    }
+    const submitShortQuestionnaire = vi.fn().mockResolvedValue({
+      id: 1,
+      training_session_id: 'pending-session',
+      energy_level: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([
+          createCompletedScaleRecord(1),
+          createCompletedScaleRecord(2),
+          createCompletedScaleRecord(3),
+          createCompletedScaleRecord(4)
+        ]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({ message: '所有量表已完成' }),
+        submitShortQuestionnaire
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      },
+      { pendingShortQuestionnaires }
+    )
+
+    await sync.bootstrapAccess()
+
+    // The non-blocking retry should have been triggered and succeeded,
+    // removing the pending submission from the durable store.
+    await vi.waitFor(() => {
+      expect(submitShortQuestionnaire).toHaveBeenCalledWith({
+        training_session_id: 'pending-session',
+        energy_level: 4,
+        confidence: 5,
+        enjoyment: 3
+      })
+      expect(entries.has('pending-session')).toBe(false)
+    })
   })
 })
 

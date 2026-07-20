@@ -15,7 +15,6 @@ const store = {
   refreshReminderEligibility: vi.fn(),
   state: {
     profile: {
-      avatarUrl: '',
       name: ''
     },
     dailyAdherence: {
@@ -36,6 +35,10 @@ const studentBackendSync = {
   syncShortQuestionnaire: vi.fn().mockResolvedValue({
     synced: false,
     reason: 'pending-backend-endpoint'
+  }),
+  retryPendingShortQuestionnaires: vi.fn().mockResolvedValue({
+    attempted: 0,
+    succeeded: 0
   }),
   loadLongQuestionnaire: vi.fn().mockResolvedValue({
     scaleId: 1,
@@ -395,8 +398,6 @@ describe('page-level backend sync wiring', () => {
             template: '<button class="submit-registration" @click="$emit(\'submit\', payload)">submit</button>',
             data: () => ({
               payload: {
-                avatarUrl: 'https://cdn.example.com/avatar.png',
-                avatarSource: 'wechat',
                 studentId: '20260001',
                 name: 'Lin',
                 gender: '女',
@@ -442,8 +443,6 @@ describe('page-level backend sync wiring', () => {
             template: '<button class="submit-registration" @click="$emit(\'submit\', payload)">submit</button>',
             data: () => ({
               payload: {
-                avatarUrl: '',
-                avatarSource: '',
                 studentId: '20260002',
                 name: 'Wei',
                 gender: '男',
@@ -663,6 +662,99 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/feedback?sessionId=session-short-1'
     })
+  })
+
+  it('shows a truthful retry message and does not claim safe storage when the durable save fails', async () => {
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [{
+        id: 'session-short-save-fail',
+        modality: 'hiit',
+        date: '2026-07-18',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 88,
+          summary: '节奏稳定',
+          capturedBy: 'camera'
+        }
+      }]
+    })
+    // Simulate a durable save / validation failure (quota, storage, or validation)
+    studentBackendSync.syncShortQuestionnaire.mockRejectedValueOnce(
+      new Error('storage quota exceeded')
+    )
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    // Must NOT claim the data was safely stored
+    expect(wrapper.text()).not.toContain('已安全保存在本机')
+    expect(wrapper.text()).toContain('保存失败')
+    expect(wrapper.text()).toContain('重试')
+    // Must not update the in-memory store when the save itself failed
+    expect(store.submitShortQuestionnaireForLatestSession).not.toHaveBeenCalled()
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps the short questionnaire visibly pending with a truthful message after a network sync failure', async () => {
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [{
+        id: 'session-short-network-fail',
+        modality: 'hiit',
+        date: '2026-07-18',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 88,
+          summary: '节奏稳定',
+          capturedBy: 'camera'
+        }
+      }]
+    })
+    // Durable save succeeded but network submission failed
+    studentBackendSync.syncShortQuestionnaire.mockResolvedValue({
+      synced: false,
+      reason: 'network-error'
+    })
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    // The durable save DID succeed, so the truthful message says it is saved locally
+    expect(wrapper.text()).toContain('反馈已安全保存在本机')
+    expect(wrapper.text()).toContain('网络恢复后将自动重试')
+    expect(wrapper.text()).not.toContain('待后端开放接口')
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
   })
 
   it('continues to feedback when the short questionnaire backend seam succeeds', async () => {

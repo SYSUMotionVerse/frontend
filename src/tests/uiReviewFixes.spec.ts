@@ -175,7 +175,6 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(selectionPage).toContain('const profileAvatarUrl = computed(() =>')
     expect(selectionPage).toContain("const displayName = computed(() => store.state.profile.name.trim() || '同学')")
     expect(selectionPage).toContain('TrainingHomeHeader')
     expect(selectionPage).toContain("mini-tag=\"SELECT A SNACK\"")
@@ -799,27 +798,22 @@ describe('ui review fixes', () => {
     expect(miniappGrowthPage).toContain('padding: 40rpx;')
   })
 
-  it('wires the register avatar flow to WeChat avatar selection and shared backend upload', () => {
-    const avatarField = readFileSync(
-      resolve('src/components/access/RegistrationAvatarField.vue'),
+  it('uses one built-in default user icon without personal avatar controls', () => {
+    const registrationForm = readFileSync(
+      resolve('src/components/access/RegistrationForm.vue'),
       'utf8'
     )
-    const avatarComposable = readFileSync(
-      resolve('src/uni-app/composables/useRegistrationAvatar.ts'),
+    const homeHeader = readFileSync(
+      resolve('src/components/training/TrainingHomeHeader.vue'),
       'utf8'
     )
 
-    expect(avatarField).toContain('avatar-field__trigger')
-    expect(avatarField).toContain('justify-content: center;')
-    expect(avatarField).toContain('avatar-field__source-actions')
-    expect(avatarField).toContain('avatar-field__source-action--wechat')
-    expect(avatarField).toContain('avatar-field__source-action--upload')
-    expect(avatarField).toContain('open-type="chooseAvatar"')
-    expect(avatarField).toContain("@chooseavatar=\"emit('chooseWechatAvatar', $event)\"")
-    expect(avatarComposable).toContain('detail?.avatarUrl')
-    expect(avatarComposable).toContain('studentBackendSync.uploadAvatar')
-    expect(avatarComposable).toContain('uni.chooseImage')
-    expect(avatarComposable).toContain("sourceType: ['album']")
-    expect(avatarComposable).not.toContain('selectImageSource')
+    expect(homeHeader).toContain('DEFAULT_AVATAR_URL')
+    expect(homeHeader).toContain('aria-label="默认用户头像"')
+    expect(homeHeader).not.toContain('chooseAvatar')
+    expect(registrationForm).not.toContain('RegistrationAvatarField')
+    expect(existsSync(resolve('src/components/access/RegistrationAvatarField.vue'))).toBe(false)
+    expect(existsSync(resolve('src/uni-app/composables/useRegistrationAvatar.ts'))).toBe(false)
+    expect(existsSync(resolve('src/uni-app/composables/useProfileAvatarEditor.ts'))).toBe(false)
   })
 })

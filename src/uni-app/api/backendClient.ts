@@ -1,5 +1,4 @@
 import type {
-  AvatarUploadResult,
   BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseScoreTrendResponse,
@@ -23,6 +22,8 @@ import type {
   BackendUnreadNotifications,
   BackendReminderReturn,
   BackendReminderReturnPayload,
+  BackendShortQuestionnaireRecord,
+  ShortQuestionnaireCreatePayload,
 } from './studentBackendTypes'
 import type {
   ReminderAuthorizationConfig,
@@ -62,7 +63,6 @@ export class BackendRequestError extends Error {
 
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 const defaultApiBaseUrl = 'http://127.0.0.1:8000/api'
-const avatarUploadTimeoutMs = 15000
 const requestTimeoutMs = 15000
 
 function normalizeBaseUrl(input: string) {
@@ -72,6 +72,53 @@ function normalizeBaseUrl(input: string) {
 function resolveBaseUrl() {
   const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? ''
   return normalizeBaseUrl(configuredBaseUrl || defaultApiBaseUrl)
+}
+
+function resolveShortQuestionnaireEndpoint() {
+  const endpoint = import.meta.env.VITE_SHORT_QUESTIONNAIRE_ENDPOINT?.trim() ?? ''
+  if (!endpoint) {
+    return ''
+  }
+
+  if (
+    !endpoint.startsWith('/') ||
+    endpoint.startsWith('//') ||
+    /^[a-z][a-z0-9+.-]*:/i.test(endpoint) ||
+    endpoint.includes('://') ||
+    endpoint.includes('?') ||
+    endpoint.includes('#') ||
+    endpoint.includes('\\') ||
+    endpoint.includes('..')
+  ) {
+    throw new Error(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must be a same-backend relative path beginning with one slash, ' +
+      'with no scheme, host, query, fragment, traversal, or backslash.'
+    )
+  }
+
+  // Reject empty path (just '/' or slashes only)
+  const pathContent = endpoint.replace(/^\/+|\/+$/g, '')
+  if (!pathContent) {
+    throw new Error(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not be an empty path ("/").'
+    )
+  }
+
+  // Reject whitespace or control characters
+  if (/[\s\x00-\x1f\x7f]/.test(endpoint)) {
+    throw new Error(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not contain whitespace or control characters.'
+    )
+  }
+
+  // Reject percent-encoded traversal/backslash variants that could bypass checks
+  if (/%2e|%2f|%5c/i.test(endpoint)) {
+    throw new Error(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not include percent-encoded path traversal or backslash.'
+    )
+  }
+
+  return `/${pathContent}/`
 }
 
 function resolveSetCookie(header: unknown) {
@@ -150,85 +197,8 @@ function unwrapCollectionResponse<T>(payload: unknown): T[] {
   return Array.isArray(record.results) ? record.results : []
 }
 
-function resolveBaseOrigin(baseUrl: string) {
-  const matched = baseUrl.match(/^(https?:\/\/[^/]+)/i)
-  return matched?.[1] ?? ''
-}
-
-function resolveAbsoluteUrl(value: string | null | undefined, baseUrl: string) {
-  if (typeof value !== 'string') {
-    return value ?? null
-  }
-
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return ''
-  }
-
-  if (/^https?:\/\//.test(trimmed)) {
-    return trimmed
-  }
-
-  if (!trimmed.startsWith('/')) {
-    return trimmed
-  }
-
-  const origin = resolveBaseOrigin(baseUrl)
-  return origin ? `${origin}${trimmed}` : trimmed
-}
-
-function normalizeCurrentUser(user: BackendCurrentUser, baseUrl: string): BackendCurrentUser {
-  return {
-    ...user,
-    avatar: resolveAbsoluteUrl(user.avatar, baseUrl)
-  }
-}
-
-function resolveUploadedAvatarUrl(payload: unknown, baseUrl: string) {
-  if (!payload || typeof payload !== 'object') {
-    return ''
-  }
-
-  const record = payload as {
-    avatarUrl?: unknown
-    data?: unknown
-    user?: {
-      avatar?: unknown
-    }
-  }
-
-  if (typeof record.avatarUrl === 'string' && record.avatarUrl.trim().length > 0) {
-    return resolveAbsoluteUrl(record.avatarUrl, baseUrl) ?? ''
-  }
-
-  if (record.data && typeof record.data === 'object') {
-    const nestedAvatarUrl = (record.data as { avatarUrl?: unknown }).avatarUrl
-    if (typeof nestedAvatarUrl === 'string' && nestedAvatarUrl.trim().length > 0) {
-      return resolveAbsoluteUrl(nestedAvatarUrl, baseUrl) ?? ''
-    }
-  }
-
-  const userAvatar = record.user?.avatar
-  if (typeof userAvatar === 'string' && userAvatar.trim().length > 0) {
-    return resolveAbsoluteUrl(userAvatar, baseUrl) ?? ''
-  }
-
-  return ''
-}
-
-function parseUploadResponse(data: unknown) {
-  if (typeof data !== 'string') {
-    return data
-  }
-
-  try {
-    return JSON.parse(data) as unknown
-  } catch {
-    return data
-  }
-}
-
 export function createBackendClient(baseUrl = resolveBaseUrl()) {
+  const shortQuestionnaireEndpoint = resolveShortQuestionnaireEndpoint()
   let sessionCookie = ''
   let hasAuthenticatedSession = false
   const cookieJar = new Map<string, string>()
@@ -362,86 +332,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     hasAuthenticatedSession = true
   }
 
-  async function uploadAvatar(filePath: string): Promise<AvatarUploadResult> {
-    await ensureSession()
-
-    if (typeof uni === 'undefined') {
-      throw new Error('Avatar upload is not available in this environment.')
-    }
-
-    const csrfToken = cookieJar.get('csrftoken')
-
-    return new Promise<AvatarUploadResult>((resolve, reject) => {
-      let settled = false
-      const timeoutId = setTimeout(() => {
-        if (settled) {
-          return
-        }
-
-        settled = true
-        reject(new Error('Avatar upload timed out.'))
-      }, avatarUploadTimeoutMs)
-
-      function settleWith(
-        action: 'resolve' | 'reject',
-        payload: AvatarUploadResult | Error
-      ) {
-        if (settled) {
-          return
-        }
-
-        settled = true
-        clearTimeout(timeoutId)
-
-        if (action === 'resolve') {
-          resolve(payload as AvatarUploadResult)
-          return
-        }
-
-        reject(payload as Error)
-      }
-
-      uni.uploadFile({
-        url: `${baseUrl}/users/upload_avatar/`,
-        filePath,
-        name: 'file',
-        header: {
-          ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        success(result) {
-          if ((result.statusCode ?? 0) < 200 || (result.statusCode ?? 0) >= 300) {
-            settleWith('reject', new Error(`Avatar upload failed with ${result.statusCode}`))
-            return
-          }
-
-          const avatarUrl = resolveUploadedAvatarUrl(parseUploadResponse(result.data), baseUrl)
-          if (!avatarUrl) {
-            settleWith('reject', new Error('Avatar upload response did not include avatar url.'))
-            return
-          }
-
-          settleWith('resolve', { avatarUrl })
-        },
-        fail(error) {
-          settleWith(
-            'reject',
-            error instanceof Error ? error : new Error(resolveErrorMessage(error, 'Avatar upload failed.'))
-          )
-        }
-      })
-    })
-  }
-
   return {
     isEnabled,
     ensureSession,
     getCurrentUser() {
-      return request<BackendCurrentUser>('/users/me/').then(user =>
-        normalizeCurrentUser(user, baseUrl)
-      )
+      return request<BackendCurrentUser>('/users/me/')
     },
-    uploadAvatar,
     updateProfile(payload: UserUpdatePayload) {
       return request('/users/update_profile/', {
         method: 'PATCH',
@@ -468,6 +364,16 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         data: payload
       })
     },
+    ...(shortQuestionnaireEndpoint
+      ? {
+          submitShortQuestionnaire(payload: ShortQuestionnaireCreatePayload) {
+            return request<BackendShortQuestionnaireRecord>(shortQuestionnaireEndpoint, {
+              method: 'POST',
+              data: payload
+            })
+          }
+        }
+      : {}),
     listExerciseVideos(exerciseType: BackendExerciseType) {
       return request<ExerciseVideoSummary[] | PaginatedResponse<ExerciseVideoSummary>>(
         `/exercises/videos/?exercise_type=${exerciseType}`

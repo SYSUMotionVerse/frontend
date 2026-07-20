@@ -4,8 +4,6 @@ import type { PendingTrainingSubmission } from '../uni-app/platform/pendingTrain
 
 function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
   return {
-    avatarUrl: 'https://cdn.example.com/avatar.png',
-    avatarSource: 'wechat',
     studentId: '20260001',
     name: 'Lin',
     gender: '女',
@@ -32,7 +30,8 @@ describe('student backend sync orchestration', () => {
         }),
         remove: vi.fn((sessionId: string) => {
           entries.delete(sessionId)
-        })
+        }),
+        clear: vi.fn(() => entries.clear())
       }
     }
   }
@@ -63,7 +62,7 @@ describe('student backend sync orchestration', () => {
     expect(createSurveyRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         survey_type: 1,
-        analysis: expect.stringContaining('https://cdn.example.com/avatar.png')
+        analysis: expect.stringContaining('"source":"registration"')
       })
     )
   })
@@ -87,97 +86,6 @@ describe('student backend sync orchestration', () => {
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(updateProfile).toHaveBeenCalledTimes(1)
     expect(createSurveyRecord).toHaveBeenCalledTimes(1)
-  })
-
-  it('uploads local avatar files during registration before writing the survey record', async () => {
-    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
-
-    const ensureSession = vi.fn().mockResolvedValue(undefined)
-    const uploadAvatar = vi.fn().mockResolvedValue({
-      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
-    })
-    const updateProfile = vi.fn().mockResolvedValue(undefined)
-    const createSurveyRecord = vi.fn().mockResolvedValue(undefined)
-
-    const sync = createStudentBackendSync({
-      isEnabled: () => true,
-      ensureSession,
-      uploadAvatar,
-      updateProfile,
-      createSurveyRecord
-    })
-
-    await sync.syncRegistration(
-      createProfile({
-        avatarUrl: 'wxfile://avatar.png'
-      })
-    )
-
-    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://avatar.png', 'wechat')
-    expect(createSurveyRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        analysis: expect.stringContaining('https://api.example.com/media/avatars/avatar.png')
-      })
-    )
-  })
-
-  it('exposes avatar upload through the shared backend sync client', async () => {
-    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
-
-    const ensureSession = vi.fn().mockResolvedValue(undefined)
-    const backendUploadAvatar = vi.fn().mockResolvedValue({
-      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
-    })
-
-    const sync = createStudentBackendSync({
-      isEnabled: () => true,
-      ensureSession,
-      uploadAvatar: backendUploadAvatar
-    })
-
-    const result = await sync.uploadAvatar('wxfile://avatar.png', 'wechat')
-
-    expect(ensureSession).toHaveBeenCalledTimes(1)
-    expect(backendUploadAvatar).toHaveBeenCalledWith('wxfile://avatar.png', 'wechat')
-    expect(result).toEqual({
-      avatarUrl: 'https://api.example.com/media/avatars/avatar.png'
-    })
-  })
-
-  it('updates the logged-in profile avatar immediately after a direct avatar change', async () => {
-    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
-
-    const ensureSession = vi.fn().mockResolvedValue(undefined)
-    const uploadAvatar = vi.fn().mockResolvedValue({
-      avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png'
-    })
-    const updateProfile = vi.fn().mockResolvedValue(undefined)
-
-    const sync = createStudentBackendSync({
-      isEnabled: () => true,
-      ensureSession,
-      uploadAvatar,
-      updateProfile
-    })
-
-    const result = await sync.syncProfileAvatarChange(
-      'wxfile://header-avatar.png',
-      'wechat',
-      createProfile()
-    )
-
-    expect(ensureSession).toHaveBeenCalledTimes(1)
-    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://header-avatar.png', 'wechat')
-    expect(updateProfile).not.toHaveBeenCalled()
-    expect(result).toEqual({
-      avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png',
-      profile: expect.objectContaining({
-        avatarUrl: 'https://api.example.com/media/avatars/new-avatar.png',
-        name: 'Lin',
-        studentId: '20260001',
-        avatarSource: 'wechat'
-      })
-    })
   })
 
   it('syncs a long questionnaire as a survey record', async () => {

@@ -40,8 +40,6 @@ The current frontend collects fields that the backend user model does not expose
 - `age`
 - `grade`
 - `restingHeartRate`
-- `avatarUrl`
-- `avatarSource`
 
 The frontend writes them as JSON in `analysis` with `survey_type = 1`.
 Registration is not considered complete unless this write succeeds. The mini-program also keeps
@@ -53,8 +51,10 @@ different device, so a new device fails closed and asks the student to complete 
 
 Startup treats `GET /psychology/scales/next_scale/` as the authoritative due-checkpoint signal
 and cross-checks it against the completed psychology records. An unknown message, a skipped
-baseline, a duplicate completed checkpoint, or an incomplete record set reported as “all
-completed” blocks entry instead of silently routing to training.
+baseline, a duplicate completed checkpoint, or non-sequential records block entry instead of
+silently routing to training. When the backend reports all configured scales complete, a
+sequential record set beginning at baseline is accepted; the frontend does not assume that four
+scales are configured.
 
 The current long questionnaire is still frontend-defined and does not yet use the backend psychology scale question IDs. Because of that, the frontend does not call `POST /psychology/records/submit/` yet.
 
@@ -114,7 +114,6 @@ Treat the Django code as the source of truth when docs and implementation disagr
 
 ### Missing backend support
 
-- No backend avatar upload endpoint is present in the repo. Avatar upload still depends on `VITE_AVATAR_UPLOAD_URL`.
 - No dedicated student-side POST endpoint exists for the short post-training questionnaire.
   The frontend therefore writes each response to the durable mini-program storage key
   `sport-snack:pending-short-questionnaires` and reports it as pending; it does not claim a

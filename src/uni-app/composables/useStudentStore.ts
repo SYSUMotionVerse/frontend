@@ -48,14 +48,6 @@ export function createStudentStore(initialState: StudentAppState = createInitial
     Object.assign(state, completeStudentProfile(getSnapshot(), profile))
   }
 
-  function updateProfileAvatar(profile: StudentProfile) {
-    const nextState = getSnapshot()
-    nextState.profile = {
-      ...profile
-    }
-    Object.assign(state, nextState)
-  }
-
   function hydrateAccessState(input: StudentAccessHydrationInput) {
     const nextState = getSnapshot()
     nextState.profile = { ...input.profile }
@@ -122,7 +114,6 @@ export function createStudentStore(initialState: StudentAppState = createInitial
   return {
     state: readonly(state),
     completeProfile,
-    updateProfileAvatar,
     hydrateAccessState,
     setActiveCheckpoint,
     setReminderSource,

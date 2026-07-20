@@ -31,25 +31,9 @@ function createUniMock(responses: MockRequestResponse[]) {
     })
   })
 
-  const uploadFile = vi.fn((options: UniApp.UploadFileOption) => {
-    options.success?.({
-      data: JSON.stringify({
-        message: '头像上传成功',
-        user: {
-          avatar: '/media/avatars/avatar.png'
-        }
-      }),
-      errMsg: 'uploadFile:ok',
-      statusCode: 200
-    })
-
-    return {} as UniApp.UploadTask
-  })
-
   return {
     login,
-    request,
-    uploadFile
+    request
   }
 }
 
@@ -161,6 +145,120 @@ describe('backend client session handling', () => {
     })
   })
 
+  it('rejects an invalid VITE_SHORT_QUESTIONNAIRE_ENDPOINT at client construction', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', 'https://api.example.com/short-questionnaires')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must be a same-backend relative path'
+    )
+  })
+
+  it('rejects a query string in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises/short-questionnaires?foo=bar')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must be a same-backend relative path'
+    )
+  })
+
+  it('rejects path traversal in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises/../admin/short-questionnaires')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must be a same-backend relative path'
+    )
+  })
+
+  it('rejects an empty path ("/") in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not be an empty path'
+    )
+  })
+
+  it('rejects whitespace in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises /short-questionnaires')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not contain whitespace or control characters'
+    )
+  })
+
+  it('rejects percent-encoded path traversal in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises/%2e%2e/admin')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not include percent-encoded path traversal or backslash'
+    )
+  })
+
+  it('rejects percent-encoded backslash in VITE_SHORT_QUESTIONNAIRE_ENDPOINT', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises%5cadmin')
+    ;(globalThis as { uni?: unknown }).uni = createUniMock([])
+
+    const { createBackendClient } = await import('../uni-app/api/backendClient')
+
+    expect(() => createBackendClient('http://api.example.com')).toThrow(
+      'VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not include percent-encoded path traversal or backslash'
+    )
+  })
+
+  it('exposes the short questionnaire POST only through an explicit endpoint contract', async () => {
+    vi.stubEnv('VITE_SHORT_QUESTIONNAIRE_ENDPOINT', '/exercises/short-questionnaires')
+    const uniMock = createUniMock([{
+      statusCode: 201,
+      data: {
+        id: 9,
+        user: 1,
+        training_session_id: 'session-9',
+        energy_level: 4,
+        confidence: 5,
+        enjoyment: 3,
+        created_at: '2026-07-19T10:00:00Z',
+        updated_at: '2026-07-19T10:00:00Z'
+      }
+    }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await client.submitShortQuestionnaire?.({
+      training_session_id: 'session-9',
+      energy_level: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+
+    expect(uniMock.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://api.example.com/exercises/short-questionnaires/',
+      method: 'POST',
+      data: {
+        training_session_id: 'session-9',
+        energy_level: 4,
+        confidence: 5,
+        enjoyment: 3
+      }
+    }))
+  })
+
   it('synchronizes reminder authorization through the authenticated reminder endpoint', async () => {
     const uniMock = createUniMock([
       {
@@ -228,8 +326,7 @@ describe('backend client session handling', () => {
       student_id: '20260003',
       major: '运动训练',
       height: '170.00',
-      weight: '62.00',
-      avatar: '/media/avatars/avatar.png'
+      weight: '62.00'
     }
 
     const uniMock = createUniMock([
@@ -258,10 +355,7 @@ describe('backend client session handling', () => {
     await client.ensureSession()
     const user = await client.getCurrentUser()
 
-    expect(user).toEqual({
-      ...currentUser,
-      avatar: 'http://api.example.com/media/avatars/avatar.png'
-    })
+    expect(user).toEqual(currentUser)
     expect(uniMock.request.mock.calls[1]?.[0].url).toBe('http://api.example.com/users/me/')
     expect(uniMock.request.mock.calls[1]?.[0].header).toMatchObject({
       Cookie: 'csrftoken=test-csrf-token; sessionid=test-session'
@@ -309,141 +403,6 @@ describe('backend client session handling', () => {
       }
     })
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe('http://api.example.com/exercises/records/score_trend/')
-  })
-
-  it('normalizes relative avatar urls without relying on the URL constructor in mini-program runtimes', async () => {
-    const originalUrl = (globalThis as { URL?: unknown }).URL
-    ;(globalThis as { URL?: unknown }).URL = undefined
-
-    const currentUser = {
-      id: 3,
-      name: 'Lin',
-      gender: 1,
-      student_id: '20260003',
-      major: '运动训练',
-      height: '170.00',
-      weight: '62.00',
-      avatar: '/media/avatars/avatar.png'
-    }
-
-    const uniMock = createUniMock([
-      {
-        statusCode: 200,
-        data: {
-          user: {
-            id: 3
-          }
-        },
-        cookies: [
-          'csrftoken=test-csrf-token; Path=/; SameSite=Lax',
-          'sessionid=test-session; Path=/; HttpOnly; SameSite=Lax'
-        ]
-      },
-      {
-        statusCode: 200,
-        data: currentUser
-      }
-    ])
-
-    ;(globalThis as { uni?: unknown }).uni = uniMock
-
-    const client = createBackendClient('http://api.example.com/base/path')
-    await client.ensureSession()
-    const user = await client.getCurrentUser()
-
-    expect(user).toEqual({
-      ...currentUser,
-      avatar: 'http://api.example.com/media/avatars/avatar.png'
-    })
-
-    ;(globalThis as { URL?: unknown }).URL = originalUrl
-  })
-
-  it('uploads avatar with session cookie and csrf token, then resolves an absolute avatar url', async () => {
-    const uniMock = createUniMock([
-      {
-        statusCode: 200,
-        data: {
-          user: {
-            id: 5
-          }
-        },
-        cookies: [
-          'csrftoken=test-csrf-token; Path=/; SameSite=Lax',
-          'sessionid=test-session; Path=/; HttpOnly; SameSite=Lax'
-        ]
-      }
-    ])
-
-    ;(globalThis as { uni?: unknown }).uni = uniMock
-
-    const client = createBackendClient('http://api.example.com')
-
-    await client.ensureSession()
-    const result = await client.uploadAvatar('wxfile://avatar.png')
-
-    expect(uniMock.uploadFile).toHaveBeenCalledTimes(1)
-    expect(uniMock.uploadFile.mock.calls[0]?.[0]).toMatchObject({
-      url: 'http://api.example.com/users/upload_avatar/',
-      filePath: 'wxfile://avatar.png',
-      name: 'file',
-      header: {
-        Cookie: 'csrftoken=test-csrf-token; sessionid=test-session',
-        'X-CSRFToken': 'test-csrf-token'
-      }
-    })
-    expect(result).toEqual({
-      avatarUrl: 'http://api.example.com/media/avatars/avatar.png'
-    })
-  })
-
-  it('rejects avatar upload when the mini-program upload callback never returns', async () => {
-    vi.useFakeTimers()
-
-    const request = vi.fn((options: UniApp.RequestOptions) => {
-      options.success?.({
-        statusCode: 200,
-        data: {
-          user: {
-            id: 5
-          }
-        },
-        cookies: [
-          'csrftoken=test-csrf-token; Path=/; SameSite=Lax',
-          'sessionid=test-session; Path=/; HttpOnly; SameSite=Lax'
-        ]
-      } as never)
-
-      return {} as UniApp.RequestTask
-    })
-
-    const login = vi.fn((options: UniApp.LoginOptions) => {
-      options.success?.({
-        authResult: '',
-        code: 'wechat-code',
-        errMsg: 'login:ok'
-      })
-    })
-
-    const uploadFile = vi.fn(() => ({} as UniApp.UploadTask))
-
-    ;(globalThis as { uni?: unknown }).uni = {
-      request,
-      login,
-      uploadFile
-    }
-
-    const client = createBackendClient('http://api.example.com')
-
-    await client.ensureSession()
-
-    const uploadPromise = client.uploadAvatar('wxfile://avatar.png')
-    const rejectionExpectation = expect(uploadPromise).rejects.toThrow('Avatar upload timed out.')
-    await vi.advanceTimersByTimeAsync(15001)
-
-    await rejectionExpectation
-
-    vi.useRealTimers()
   })
 
   it('unwraps paginated psychology scale lists into arrays', async () => {

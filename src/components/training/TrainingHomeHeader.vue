@@ -1,33 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { DEFAULT_AVATAR_URL } from '../../constants/defaultAvatar'
 
 const props = withDefaults(defineProps<{
-  avatarUrl: string
   displayName: string
   reminderLabel: string
   miniTag?: string
   title?: string
   titlePill?: string
   variant?: 'home' | 'compact'
-  avatarUploadState?: 'idle' | 'uploading' | 'success' | 'error'
-  avatarErrorMessage?: string
-  isWechatMiniProgram?: boolean
-  supportsWechatAvatarSelection?: boolean
   unreadCount?: number
 }>(), {
   miniTag: "TODAY'S QUEST",
   title: '今天先完成主线任务',
   titlePill: '训练首页',
   variant: 'home',
-  avatarUploadState: 'idle',
-  avatarErrorMessage: '',
-  isWechatMiniProgram: false,
-  supportsWechatAvatarSelection: false,
   unreadCount: 0
 })
 
 const emit = defineEmits<{
-  chooseWechatAvatar: [event: { detail?: { avatarUrl?: string } }]
   openNotifications: []
 }>()
 const headerClasses = computed(() => ['home-header', `home-header--${props.variant}`])
@@ -37,18 +28,9 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   <view :class="headerClasses">
     <view class="home-header__topbar">
       <view class="home-header__profile">
-        <button
-          class="home-header__avatar-trigger"
-          :open-type="props.isWechatMiniProgram && props.supportsWechatAvatarSelection ? 'chooseAvatar' : undefined"
-          @chooseavatar="emit('chooseWechatAvatar', $event)"
-        >
-          <view class="home-header__avatar-shell">
-            <image class="home-header__avatar" :src="props.avatarUrl" mode="aspectFill" />
-            <text v-if="props.avatarUploadState === 'uploading'" class="home-header__avatar-overlay">
-              上传中
-            </text>
-          </view>
-        </button>
+        <view class="home-header__avatar-shell" aria-label="默认用户头像">
+          <image class="home-header__avatar" :src="DEFAULT_AVATAR_URL" mode="aspectFit" />
+        </view>
 
         <view class="home-header__copy">
           <text class="home-header__name">你好，{{ props.displayName }}</text>
@@ -75,9 +57,6 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
       <text class="home-header__title">{{ props.title }}</text>
     </view>
 
-    <text v-if="props.avatarErrorMessage" class="home-header__avatar-message">
-      {{ props.avatarErrorMessage }}
-    </text>
   </view>
 </template>
 
@@ -130,17 +109,6 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   box-shadow: 0 14rpx 24rpx rgba(37, 47, 61, 0.06);
 }
 
-.home-header__avatar-trigger {
-  display: inline-flex;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.home-header__avatar-trigger::after {
-  border: none;
-}
-
 .home-header--compact .home-header__avatar-shell {
   width: 76rpx;
   height: 76rpx;
@@ -152,20 +120,6 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   height: 100%;
   border-radius: 9999px;
   background: #ffd8a3;
-}
-
-.home-header__avatar-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: rgba(32, 48, 66, 0.48);
-  color: #ffffff;
-  font-size: 18rpx;
-  line-height: 1.2;
-  font-weight: 900;
 }
 
 .home-header__copy {
@@ -327,10 +281,4 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   font-size: 14rpx;
 }
 
-.home-header__avatar-message {
-  color: #92400E;
-  font-size: 22rpx;
-  line-height: 1.45;
-  font-weight: 700;
-}
 </style>

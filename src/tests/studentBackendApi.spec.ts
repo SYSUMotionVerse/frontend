@@ -3,8 +3,6 @@ import type { StudentProfile } from '../types/student'
 
 function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
   return {
-    avatarUrl: 'https://cdn.example.com/avatar.png',
-    avatarSource: 'wechat',
     studentId: '20260001',
     name: 'Lin',
     gender: '女',
@@ -31,11 +29,14 @@ describe('student backend API payload mapping', () => {
       student_id: '20260001',
       major: 'Sports Science',
       height: 160,
-      weight: 45
+      weight: 45,
+      age: 12,
+      grade: '一年级',
+      resting_heart_rate: 72
     })
   })
 
-  it('builds a registration survey record to preserve frontend-only fields', async () => {
+  it('builds a registration survey record for research profile fields', async () => {
     const { buildRegistrationSurveyRecordPayload } = await import('../uni-app/api/studentBackend')
 
     const payload = buildRegistrationSurveyRecordPayload(createProfile())
@@ -48,9 +49,7 @@ describe('student backend API payload mapping', () => {
         source: 'registration',
         grade: '一年级',
         age: 12,
-        restingHeartRate: 72,
-        avatarUrl: 'https://cdn.example.com/avatar.png',
-        avatarSource: 'wechat'
+        restingHeartRate: 72
       })
     )
   })

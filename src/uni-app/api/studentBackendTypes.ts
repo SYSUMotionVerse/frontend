@@ -22,7 +22,9 @@ export interface UserUpdatePayload {
   major?: string
   height?: number
   weight?: number
-  avatar?: string
+  age?: number | null
+  grade?: string | null
+  resting_heart_rate?: number | null
 }
 
 export interface BackendCurrentUser {
@@ -33,17 +35,10 @@ export interface BackendCurrentUser {
   major: string | null
   height: number | string | null
   weight: number | string | null
-  avatar?: string | null
+  age?: number | null
+  grade?: string | null
+  resting_heart_rate?: number | null
   [key: string]: unknown
-}
-
-export interface AvatarUploadResult {
-  avatarUrl: string
-}
-
-export interface ProfileAvatarSyncResult {
-  avatarUrl: string
-  profile: StudentProfile
 }
 
 export interface SurveyRecordCreatePayload {
@@ -319,9 +314,27 @@ export interface ShortQuestionnaireSyncInput {
   enjoyment: number
 }
 
+export interface ShortQuestionnaireCreatePayload {
+  training_session_id: string
+  energy_level: number
+  confidence: number
+  enjoyment: number
+}
+
+export interface BackendShortQuestionnaireRecord {
+  id: number
+  user: number
+  training_session_id: string
+  energy_level: number
+  confidence: number
+  enjoyment: number
+  created_at: string
+  updated_at: string
+}
+
 export type ShortQuestionnaireSyncResult =
   | { synced: true }
-  | { synced: false, reason: 'pending-backend-endpoint' }
+  | { synced: false, reason: 'pending-backend-endpoint' | 'network-error' }
 
 export interface GrowthTrainingHistoryItem {
   id: string
@@ -350,10 +363,6 @@ export interface StudentBackendSyncDependencies {
   isEnabled: () => boolean
   ensureSession: () => Promise<void>
   getCurrentUser: () => Promise<BackendCurrentUser>
-  uploadAvatar: (
-    filePath: string,
-    source: StudentProfile['avatarSource']
-  ) => Promise<AvatarUploadResult>
   updateProfile: (payload: UserUpdatePayload) => Promise<unknown>
   createSurveyRecord: (payload: SurveyRecordCreatePayload) => Promise<unknown>
   listExerciseVideos: (exerciseType: BackendExerciseType) => Promise<ExerciseVideoSummary[]>
@@ -375,7 +384,9 @@ export interface StudentBackendSyncDependencies {
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
   resolveReminderReturn: (payload: BackendReminderReturnPayload) => Promise<BackendReminderReturn>
-  submitShortQuestionnaire?: (input: ShortQuestionnaireSyncInput) => Promise<unknown>
+  submitShortQuestionnaire?: (
+    payload: ShortQuestionnaireCreatePayload
+  ) => Promise<BackendShortQuestionnaireRecord>
 }
 
 export interface BackendStationNotification {

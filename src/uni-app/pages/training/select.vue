@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed, unref } from 'vue'
+import { computed } from 'vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingModeCard from '../../../components/training/TrainingModeCard.vue'
-import { DEFAULT_AVATAR_URL } from '../../../constants/defaultAvatar'
 import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
-import { useProfileAvatarEditor } from '../../composables/useProfileAvatarEditor'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 type TrainingModeSummary = {
@@ -57,22 +55,12 @@ const trainingModes: TrainingModeSummary[] = [
 ]
 
 const store = useStudentStore()
-const avatarEditor = useProfileAvatarEditor()
-
-const profileAvatarUrl = computed(() =>
-  store.state.profile.avatarUrl.trim() || DEFAULT_AVATAR_URL
-)
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 
 const reminderLabel = computed(() =>
   store.state.dailyAdherence.reminderEligible ? '18:00 提醒中' : '今日已达标'
 )
-const avatarUploadState = computed(() => unref(avatarEditor.uploadState) ?? 'idle')
-const avatarErrorMessage = computed(() => unref(avatarEditor.errorMessage) ?? '')
-const isWechatMiniProgram = computed(() => Boolean(unref(avatarEditor.isWechatMiniProgram)))
-const supportsWechatAvatarSelection = computed(() => Boolean(unref(avatarEditor.supportsWechatAvatarSelection)))
-
 function chooseMode(modality: TrainingModality) {
   if (modality === 'stair') {
     void uni.navigateTo({
@@ -91,18 +79,12 @@ function chooseMode(modality: TrainingModality) {
   <UniTrainingPageShell dock-tab="playground">
     <view class="select-page">
       <TrainingHomeHeader
-        :avatar-url="profileAvatarUrl"
         :display-name="displayName"
         :reminder-label="reminderLabel"
-        :avatar-upload-state="avatarUploadState"
-        :avatar-error-message="avatarErrorMessage"
-        :is-wechat-mini-program="isWechatMiniProgram"
-        :supports-wechat-avatar-selection="supportsWechatAvatarSelection"
         mini-tag="SELECT A SNACK"
         title="准备开练了吗？"
         title-pill="训练游乐场"
         variant="compact"
-        @choose-wechat-avatar="avatarEditor.handleWechatAvatarChoice"
       />
 
       <view class="select-page__trail select-page__trail--top" />

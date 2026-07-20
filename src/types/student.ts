@@ -3,8 +3,6 @@ export type CheckpointKey = 'baseline' | 'week4' | 'week8' | 'week12'
 export type TrainingModality = 'wushu' | 'hiit' | 'stair'
 
 export interface StudentProfile {
-  avatarUrl: string
-  avatarSource: '' | 'wechat' | 'album' | 'camera'
   studentId: string
   name: string
   gender: string
