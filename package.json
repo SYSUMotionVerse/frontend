@@ -2,6 +2,11 @@
   "name": "sport-snack-student-app",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=24.6.0 <25",
+    "pnpm": "11.12.0"
+  },
   "scripts": {
     "dev": "uni -p mp-weixin",
     "dev:mp-weixin": "uni -p mp-weixin",
@@ -9,6 +14,8 @@
     "build": "uni build -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
     "build:mp-weixin:production": "node scripts/build-production.mjs",
+    "release:check": "node scripts/build-production.mjs --check-config",
+    "audit:production": "pnpm audit --prod --audit-level high",
     "build:mp-weixin-cf": "node scripts/pose-model-tunnel.mjs build",
     "pose:cos:upload": "node scripts/upload-pose-models-cos.mjs",
     "serve:pose-models": "python3 -m http.server 8765 --directory models/pose",

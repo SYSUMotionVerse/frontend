@@ -1,0 +1,40 @@
+# Audit ignore list — see "依赖审计例外" in docs/mini-program-production-release.md
+# for full justification, expiry conditions, and invalidation triggers.
+#
+# Review-by date: 2026-10-18
+# A calendar review is required by this date regardless of whether @dcloudio/*
+# has been upgraded.  Re-run `pnpm audit --prod` without this file, diff the
+# GHSA list, remove fixed advisories, and re-evaluate remaining ones.
+#
+# Each GHSA below is a high-severity advisory in a DCloud/uni-app build-time
+# dependency (not runtime mini-program code).  They cannot be overridden
+# without breaking compiler internals.  `pnpm audit:production` still fails
+# CI for any NEW high or critical advisory not listed here.
+#
+# Build-only verification: a generated-bundle search of
+# dist/build/mp-weixin/ confirms none of jpeg-js, jimp, @intlify/*,
+# picomatch, adm-zip, or the ws npm package appear in the runtime code.
+#
+# Review checklist (mandatory on every @dcloudio/* upgrade AND by the review-by date):
+#   1. Run `pnpm audit --prod` without this file and diff the GHSA list.
+#   2. Remove any GHSA that is no longer reported.
+#   3. Re-evaluate whether each remaining GHSA still only affects build-time.
+#   4. If a listed dependency enters runtime code, remove its GHSA immediately.
+#   5. Update the review-by date to 3 months from the review date.
+auditConfig:
+  ignoreGhsas:
+    # GHSA-xvf7-4v9q-58w6 — jpeg-js infinite loop (high)
+    # Path: @dcloudio/uni-mp-weixin → jimp → @jimp/jpeg → jpeg-js  (build-time image processing)
+    - GHSA-xvf7-4v9q-58w6
+    # GHSA-p2ph-7g93-hw3m — Vue I18n prototype pollution (high)
+    # Path: @dcloudio/uni-app → uni-cli-shared → @intlify/core-base and @intlify/message-resolver  (build-time i18n)
+    - GHSA-p2ph-7g93-hw3m
+    # GHSA-c2c7-rcm5-vvqj — picomatch ReDoS (high)
+    # Path: @dcloudio/uni-app → uni-cli-shared → @rollup/pluginutils and anymatch → picomatch  (build-time glob)
+    - GHSA-c2c7-rcm5-vvqj
+    # GHSA-96hv-2xvq-fx4p — ws memory exhaustion DoS (high)
+    # Path: @dcloudio/uni-mp-weixin → ws  (build-time dev server, not in runtime bundle)
+    - GHSA-96hv-2xvq-fx4p
+    # GHSA-xcpc-8h2w-3j85 — adm-zip 4GB memory allocation (high)
+    # Path: @dcloudio/uni-app → uni-cli-shared → adm-zip  (build-time zip handling)
+    - GHSA-xcpc-8h2w-3j85

@@ -12,12 +12,13 @@
 ## Agent 进入仓库后的最小动作
 
 1. 阅读 `README.md` 和本文件，确认项目脚本、输出目录和联调方式。
-2. 安装依赖：`pnpm install`。
-3. 如需本地联调微信小程序，启动：`pnpm dev`。
-4. 如需验证改动，优先运行：
+2. 使用 `mise install` 安装 `mise.toml` 固定的 Node.js 与 pnpm 版本。
+3. 安装依赖：`pnpm install`（CI 必须使用 `pnpm install --frozen-lockfile`）。
+4. 如需本地联调微信小程序，启动：`pnpm dev`。
+5. 如需验证改动，优先运行：
    - `pnpm test`
    - `npx vue-tsc --noEmit`
-5. 如需在微信开发者工具中查看效果，导入 `dist/build/mp-weixin`。
+6. 如需在微信开发者工具中查看效果，导入 `dist/build/mp-weixin`。
 
 ## 开发流程
 
@@ -127,7 +128,7 @@ pnpm pose:tunnel:stop
 
 ## 生产发布
 
-生产包使用 `pnpm build:mp-weixin:production`。该命令要求 API 和姿态模型均为 HTTPS 地址，并阻止本地地址进入上传包。BlazePose 模型应放在腾讯云 COS/CDN，通过 `pnpm pose:cos:upload` 上传；小程序首次下载后会保存到微信用户文件目录，同一模型版本后续直接本地读取。详细步骤见 [`mini-program-production-release.md`](mini-program-production-release.md)。
+生产包使用 `pnpm build:mp-weixin:production`。该命令要求 API 和姿态模型均为 HTTPS 地址，并阻止本地地址进入上传包；它还会在构建前后分别确认 `urlCheck` 已开启，并拒绝 `touristappid`。BlazePose 模型应放在腾讯云 COS/CDN，通过 `pnpm pose:cos:upload` 上传；小程序首次下载后会保存到微信用户文件目录，同一模型版本后续直接本地读取。详细步骤见 [`mini-program-production-release.md`](mini-program-production-release.md)。
 
 ## 推荐交付格式
 

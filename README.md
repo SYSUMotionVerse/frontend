@@ -25,12 +25,19 @@ The current product flow is organized around three feature areas:
 
 ## Prerequisites / 环境准备
 
-Install the following tools before you start:
+Install [mise](https://mise.jdx.dev/) first, then let the checked-in
+`mise.toml` install the exact runtime and package-manager versions:
+
+```bash
+mise install
+```
+
+The pinned toolchain is:
 
 开始前请准备以下工具：
 
-- `Node.js 18+`
-- `pnpm`
+- `Node.js 24.6.0`
+- `pnpm 11.12.0`
 - WeChat DevTools for previewing generated mini-program bundles / 用于预览生成后的小程序产物的微信开发者工具
 
 ## Project Structure / 项目结构
@@ -158,9 +165,13 @@ After the build completes, open WeChat DevTools and import `dist/build/mp-weixin
 
 ## Delivery Notes / 交付说明
 
-This repository currently documents a local development and build workflow only. There is no checked-in CI/CD workflow, Docker deployment configuration, or hosted environment configuration in the repository at this time.
+The checked-in production-readiness workflow installs from the frozen lockfile,
+runs tests and TypeScript checks, validates production configuration, audits
+the production dependency graph, and builds the `mp-weixin` bundle. Uploading
+still happens manually through WeChat DevTools.
 
-当前仓库只包含本地开发和本地构建流程说明。仓库中暂未提交 CI/CD 工作流、Docker 部署配置或线上环境配置，因此文档也不对这些流程做臆测性说明。
+仓库内的生产门禁工作流会以 frozen lockfile 安装依赖，运行测试、类型检查、
+生产配置校验、生产依赖审计与 `mp-weixin` 构建。上传仍需通过微信开发者工具手工完成。
 
 ## Common Commands / 常用命令
 
