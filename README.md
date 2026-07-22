@@ -178,9 +178,37 @@ still happens manually through WeChat DevTools.
 ```bash
 pnpm install
 pnpm dev
+pnpm dev:action-tool
 pnpm test
 pnpm build:mp-weixin
+pnpm build:action-tool
 ```
+
+## Appendix: Action Standard File Tool / 附录：动作标准文件工具
+
+The repository includes a local browser tool that extracts pose angles from standard-action videos and exports one schema 0.4 JSON file per video. Video decoding, BlazePose inference, and ZIP generation all run locally; the tool does not upload videos or results to the backend, OSS, or COS.
+
+仓库内置了一个本地浏览器工具，可从标准动作视频提取姿态角度，并为每个视频导出一个 schema 0.4 JSON 文件。视频解码、BlazePose 推理和 ZIP 生成全部在本机完成，不会把视频或结果上传到后端、OSS 或 COS。
+
+Start the tool from the repository root:
+
+在仓库根目录启动工具：
+
+```bash
+pnpm dev:action-tool
+```
+
+Then open `http://127.0.0.1:4174/action-tool.html`. Import one or more videos, complete the action metadata and trim range, run the analysis, and use the export button to download all completed JSON files in one ZIP archive.
+
+然后打开 `http://127.0.0.1:4174/action-tool.html`。导入一个或多个视频，填写动作信息和截取范围，运行分析，再通过导出按钮将所有已完成的 JSON 文件下载为一个 ZIP 压缩包。
+
+The tool is independent of the WeChat Mini Program runtime. It does not require WeChat DevTools and is not limited by `touristappid`.
+
+该工具独立于微信小程序运行时，不需要微信开发者工具，也不受 `touristappid` 限制。
+
+See the complete Chinese guide: [`docs/action-standard-tool.md`](docs/action-standard-tool.md).
+
+完整中文使用手册：[`docs/action-standard-tool.md`](docs/action-standard-tool.md)。
 
 ## Agent Prompt / 给 Agent 的 Prompt
 
