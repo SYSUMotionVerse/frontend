@@ -2,7 +2,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInitialStudentState } from '../domain/student/state'
 
+vi.mock('@dcloudio/uni-app', () => ({
+  onShow: vi.fn()
+}))
+
+const growthState = createInitialStudentState()
 const store = {
+  state: growthState,
   getSnapshot: vi.fn(() => createInitialStudentState())
 }
 
@@ -26,7 +32,8 @@ vi.mock('../uni-app/api/studentBackend', async (importOriginal) => ({
 describe('production growth reads', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    store.getSnapshot.mockReturnValue(createInitialStudentState())
+    Object.assign(store.state, createInitialStudentState())
+    store.getSnapshot.mockReturnValue(store.state)
     studentBackendSync.isEnabled.mockReturnValue(true)
     studentBackendSync.loadGrowthHistory.mockResolvedValue({
       assessments: [
@@ -137,7 +144,8 @@ describe('production growth reads', () => {
     localState.physicalMetrics = [
       { label: '握力', unit: 'kg', values: [24.5] }
     ]
-    store.getSnapshot.mockReturnValue(localState)
+    Object.assign(store.state, localState)
+    store.getSnapshot.mockReturnValue(store.state)
     studentBackendSync.isEnabled.mockReturnValue(false)
 
     const GrowthPage = (await import('../pages/growth/index.vue')).default

@@ -318,6 +318,53 @@ describe('backend client session handling', () => {
     )
   })
 
+  it('loads arrangement summaries and then its item detail', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          count: 1,
+          results: [{
+            id: 7,
+            title: '武术基本功入门',
+            exercise_type: 'MARTIAL_ARTS',
+            item_count: 2,
+            total_duration: 60,
+            is_active: true,
+            order: 1
+          }]
+        }
+      },
+      {
+        statusCode: 200,
+        data: {
+          id: 7,
+          title: '武术基本功入门',
+          exercise_type: 'MARTIAL_ARTS',
+          item_count: 1,
+          total_duration: 30,
+          is_active: true,
+          order: 1,
+          items: []
+        }
+      }
+    ])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    const summaries = await client.listExerciseArrangements('MARTIAL_ARTS')
+    const detail = await client.getExerciseArrangement(7)
+
+    expect(summaries[0]?.id).toBe(7)
+    expect(detail.id).toBe(7)
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/arrangements/?exercise_type=MARTIAL_ARTS'
+    )
+    expect(uniMock.request.mock.calls[1]?.[0].url).toBe(
+      'http://api.example.com/exercises/arrangements/7/'
+    )
+  })
+
   it('fetches current user from /users/me/ with session cookie after bootstrap', async () => {
     const currentUser = {
       id: 3,

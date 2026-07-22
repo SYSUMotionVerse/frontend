@@ -11,6 +11,8 @@ import type {
   BackendStairRecord,
   ExerciseRecordCreatePayload,
   ExerciseVideoSummary,
+  ExerciseArrangementDetail,
+  ExerciseArrangementSummary,
   StairsRecordCreatePayload,
   SurveyRecordCreatePayload,
   UserUpdatePayload,
@@ -378,6 +380,14 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       return request<ExerciseVideoSummary[] | PaginatedResponse<ExerciseVideoSummary>>(
         `/exercises/videos/?exercise_type=${exerciseType}`
       ).then(response => unwrapCollectionResponse<ExerciseVideoSummary>(response))
+    },
+    listExerciseArrangements(exerciseType: BackendExerciseType) {
+      return request<ExerciseArrangementSummary[] | PaginatedResponse<ExerciseArrangementSummary>>(
+        `/exercises/arrangements/?exercise_type=${exerciseType}`
+      ).then(response => unwrapCollectionResponse<ExerciseArrangementSummary>(response))
+    },
+    getExerciseArrangement(id: number) {
+      return request<ExerciseArrangementDetail>(`/exercises/arrangements/${id}/`)
     },
     createExerciseRecord(payload: ExerciseRecordCreatePayload) {
       return request<BackendExerciseRecord>('/exercises/records/', {

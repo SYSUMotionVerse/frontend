@@ -8,6 +8,7 @@ import type {
 } from '../../api/studentBackendTypes'
 import { studentBackendSync } from '../../api/studentBackend'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
+import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { CHECKPOINT_LABELS } from '../../../features/access/questionnaire'
 
@@ -61,8 +62,11 @@ onMounted(async () => {
 
 <template>
   <UniGrowthPageShell dock-tab="growth">
-    <h1 class="detail-page__title">训练与评估历史</h1>
-    <p class="detail-page__subtitle">训练亮点与长问卷评估点。</p>
+    <UniPageHeading
+      eyebrow="成长"
+      title="训练与评估历史"
+      description="集中查看训练记录与长问卷评估。"
+    />
 
     <section class="detail-page__card">
       <h2 class="detail-page__heading">训练记录</h2>
@@ -77,8 +81,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.detail-page__title { margin: 0; color: #1d366b; }
-.detail-page__subtitle { margin: 0; color: #576988; font-size: 0.88rem; }
-.detail-page__card { border: 1px solid #dbe5f7; border-radius: 12px; padding: 0.9rem; background: #fff; }
-.detail-page__heading { margin: 0 0 0.65rem; color: #223f70; font-size: 0.95rem; }
+.detail-page__card { border: 2rpx solid rgba(255, 211, 132, 0.3); border-radius: 28rpx; padding: 32rpx; background: rgba(255, 255, 255, 0.94); }
+.detail-page__heading { margin: 0 0 20rpx; color: #203042; font-size: 32rpx; }
 </style>

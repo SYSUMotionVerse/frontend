@@ -65,7 +65,7 @@ describe('training home reminder return orchestration', () => {
     showPage = undefined
   })
 
-  it('resolves the untrusted route before loading fresh three-modality progress', async () => {
+  it('resolves the untrusted route before loading fresh training progress', async () => {
     const HomePage = (await import('../uni-app/pages/training/home.vue')).default
     mount(HomePage, {
       global: {
@@ -94,7 +94,7 @@ describe('training home reminder return orchestration', () => {
     expect(setReminderSource).toHaveBeenCalledWith('wechat-reminder')
   })
 
-  it('manual entry still loads fresh progress without recording a reminder return', async () => {
+  it('manual entry loads fresh progress without recording a reminder return', async () => {
     const HomePage = (await import('../uni-app/pages/training/home.vue')).default
     mount(HomePage, {
       global: {
@@ -118,7 +118,7 @@ describe('training home reminder return orchestration', () => {
     expect(setReminderSource).not.toHaveBeenCalled()
   })
 
-  it('waits for a shared return resolution before concurrent shows refresh progress', async () => {
+  it('waits for a shared return resolution and coalesces concurrent progress refreshes', async () => {
     let completeResolution: (() => void) | undefined
     resolveReminderReturn.mockImplementationOnce(() => {
       calls.push('resolve')
@@ -154,6 +154,6 @@ describe('training home reminder return orchestration', () => {
     completeResolution?.()
     await Promise.all([firstShow, secondShow])
 
-    expect(calls).toEqual(['resolve', 'progress', 'progress'])
+    expect(calls).toEqual(['resolve', 'progress'])
   })
 })

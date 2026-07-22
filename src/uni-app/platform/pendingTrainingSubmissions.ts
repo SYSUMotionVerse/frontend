@@ -10,6 +10,9 @@ export type PendingTrainingSubmission =
       sessionId: string
       modality: Exclude<TrainingModality, 'stair'>
       durationSeconds: number
+      videoId?: number
+      score?: number
+      comment?: string
       poseAnalysis?: VisualPoseAnalysisPayload
       queuedAt: string
     }
@@ -68,7 +71,20 @@ function isPendingTrainingSubmission(value: unknown): value is PendingTrainingSu
   }
 
   if (submission.kind === 'visual') {
-    return submission.modality === 'wushu' || submission.modality === 'hiit'
+    const hasValidVideoId = submission.videoId === undefined || (
+      isFiniteNumber(submission.videoId) &&
+      Number.isInteger(submission.videoId) &&
+      submission.videoId > 0
+    )
+    const hasValidScore = submission.score === undefined || (
+      isFiniteNumber(submission.score) &&
+      submission.score >= minQualityScore &&
+      submission.score <= maxQualityScore
+    )
+    const hasValidComment = submission.comment === undefined || typeof submission.comment === 'string'
+    return hasValidVideoId && hasValidScore && hasValidComment && (
+      submission.modality === 'wushu' || submission.modality === 'hiit'
+    )
   }
 
   return submission.kind === 'stairs' &&

@@ -3,6 +3,7 @@ import { computed, onMounted, shallowRef } from 'vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import { buildGrowthSummary } from '../../../domain/student/growth'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
+import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
@@ -42,8 +43,11 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
 <template>
   <UniGrowthPageShell dock-tab="growth">
-    <h1 class="detail-page__title">达标详情</h1>
-    <p class="detail-page__subtitle">训练坚持记录与依从性分析。</p>
+    <UniPageHeading
+      eyebrow="成长"
+      title="达标记录"
+      description="训练坚持记录与依从性分析。"
+    />
 
     <section v-if="complianceLoaded" class="detail-page__stats">
       <view class="stat-item">
@@ -93,46 +97,45 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 </template>
 
 <style scoped>
-.detail-page__title { margin: 0; color: #1d366b; }
-.detail-page__subtitle { margin: 0.25rem 0 0.5rem; color: #576988; font-size: 0.88rem; }
-.detail-page__section-title { margin: 0 0 0.6rem; color: #1d366b; font-size: 0.92rem; }
+.detail-page__section-title { margin: 0 0 20rpx; color: #203042; font-size: 32rpx; }
 
 .detail-page__card {
-  border: 1px solid #dbe5f7;
-  border-radius: 12px;
-  padding: 0.9rem;
-  background: #fff;
-  margin-bottom: 0.8rem;
+  border: 2rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 28rpx;
+  padding: 32rpx;
+  background: rgba(255, 255, 255, 0.94);
+  margin-bottom: 28rpx;
 }
 
 .detail-page__stats {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 28rpx;
 }
 .stat-item {
-  flex: 1;
-  background: #fff;
-  border: 1px solid #dbe5f7;
-  border-radius: 10px;
-  padding: 0.6rem;
+  flex: 1 1 140rpx;
+  background: rgba(255, 255, 255, 0.78);
+  border: 2rpx solid rgba(137, 207, 255, 0.2);
+  border-radius: 20rpx;
+  padding: 20rpx 12rpx;
   text-align: center;
 }
 .stat-value {
   display: block;
-  font-size: 1.2rem;
+  font-size: 34rpx;
   font-weight: 800;
   color: #1d366b;
 }
 .stat-value--done {
   color: #22c55e;
-  font-size: 1.4rem;
+  font-size: 38rpx;
 }
 .stat-label {
   display: block;
-  font-size: 0.7rem;
-  color: #8899b4;
-  margin-top: 0.15rem;
+  font-size: 20rpx;
+  color: #718096;
+  margin-top: 6rpx;
 }
 
 .trend-bars {
@@ -182,5 +185,5 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
   color: #8899b4;
 }
 
-.detail-page__note { margin: 0.65rem 0 0; color: #5a6b89; font-size: 0.8rem; }
+.detail-page__note { margin: 20rpx 0 0; color: #718096; font-size: 22rpx; line-height: 1.5; }
 </style>

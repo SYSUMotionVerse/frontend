@@ -35,6 +35,28 @@ const modalityLabel = computed(() => {
 
 const qualityScore = computed(() => session.value?.analysis.qualityScore ?? 0)
 const sessionBadge = computed(() => session.value ? buildSessionBadge(session.value) : null)
+const previousComparableSession = computed(() => {
+  if (!session.value) return null
+  const sessions = store.getSnapshot().sessions
+  const currentIndex = sessions.findIndex(item => item.id === session.value?.id)
+  const earlierSessions = currentIndex >= 0 ? sessions.slice(0, currentIndex) : sessions.slice(0, -1)
+  return earlierSessions.reverse().find(item => item.modality === session.value?.modality) ?? null
+})
+const scoreChangeLabel = computed(() => {
+  const previousScore = previousComparableSession.value?.analysis.qualityScore
+  if (previousScore === undefined) return '首次训练基线'
+  const difference = qualityScore.value - previousScore
+  if (difference > 0) return `较上次提升 ${difference} 分`
+  if (difference < 0) return `较上次 ${difference} 分`
+  return '与上次持平'
+})
+const scoreChangeTone = computed(() => {
+  const previousScore = previousComparableSession.value?.analysis.qualityScore
+  if (previousScore === undefined) return 'baseline'
+  if (qualityScore.value > previousScore) return 'improved'
+  if (qualityScore.value < previousScore) return 'declined'
+  return 'steady'
+})
 
 const feedbackSummary = computed(() => (
   session.value?.analysis.summary?.trim() || '动作完成得很稳定，继续保持这个节奏。'
@@ -99,30 +121,17 @@ onShareAppMessage((options) => {
 </script>
 
 <template>
-  <!-- Uses a bespoke result-page composition while staying in the UniAccessPageShell result-page family. -->
   <view class="feedback-page">
     <view class="feedback-page__halo feedback-page__halo--peach" />
     <view class="feedback-page__halo feedback-page__halo--sky" />
 
     <view class="feedback-page__inner">
-      <view class="feedback-page__topbar">
-        <text class="feedback-page__topbar-title">训练反馈</text>
-      </view>
-
       <view class="feedback-page__hero">
-        <view class="feedback-page__hero-badge">
-          <text class="feedback-page__hero-emoji">🎉</text>
-        </view>
-
-        <view class="feedback-page__sticker">
-          <text>{{ qualityScore >= 85 ? '太棒了！' : qualityScore >= 70 ? '继续加油！' : '再接再厉！' }}</text>
-        </view>
-
         <view class="feedback-page__heading">
-          <text class="feedback-page__headline">训练已完成</text>
-          <text class="feedback-page__title">{{ modalityLabel }}反馈</text>
+          <text class="feedback-page__eyebrow">训练已记录</text>
+          <text class="feedback-page__title">{{ modalityLabel }}训练完成</text>
           <text class="feedback-page__subtitle">
-            你的本次训练已记录完成，继续关注动作质量，训练效果会更稳定。
+            {{ statusText }}，继续关注动作质量，训练效果会更稳定。
           </text>
         </view>
       </view>
@@ -137,6 +146,9 @@ onShareAppMessage((options) => {
 
         <text class="feedback-page__score-label">质量考评</text>
         <text class="feedback-page__score-value">{{ qualityScore }}</text>
+        <view class="feedback-page__score-change" :class="`feedback-page__score-change--${scoreChangeTone}`">
+          <text>{{ scoreChangeLabel }}</text>
+        </view>
         <text class="feedback-page__score-copy">{{ scoreDescription }}</text>
       </view>
 
@@ -252,86 +264,35 @@ onShareAppMessage((options) => {
   padding: 48rpx 40rpx 88rpx;
 }
 
-.feedback-page__topbar {
-  display: flex;
-  justify-content: center;
-  padding-top: 8rpx;
-}
-
-.feedback-page__topbar-title {
-  font-size: 34rpx;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: #2c3b4d;
-}
-
 .feedback-page__hero {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  margin-top: 28rpx;
-  text-align: center;
-}
-
-.feedback-page__hero-badge {
-  display: inline-flex;
-  width: 148rpx;
-  height: 148rpx;
-  align-items: center;
-  justify-content: center;
-  border: 8rpx solid var(--feedback-line);
-  border-radius: 9999px;
-  background: linear-gradient(180deg, #fff0ce 0%, #ffd684 100%);
-  box-shadow: 0 18rpx 0 rgba(255, 197, 105, 0.34);
-}
-
-.feedback-page__hero-emoji {
-  font-size: 72rpx;
-}
-
-.feedback-page__sticker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 24rpx;
-  padding: 14rpx 32rpx;
-  border: 4rpx solid #fff8e8;
-  border-radius: 9999px;
-  background: var(--feedback-sun);
-  box-shadow: 0 12rpx 0 rgba(255, 190, 84, 0.28);
-  color: #6a4a00;
-  font-size: 28rpx;
-  font-weight: 900;
-  line-height: 1;
-  transform: rotate(-4deg);
 }
 
 .feedback-page__heading {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
-  align-items: center;
-  margin-top: 36rpx;
+  gap: 10rpx;
 }
 
-.feedback-page__headline {
-  font-size: 54rpx;
-  font-weight: 900;
-  line-height: 1.05;
-  color: #263447;
+.feedback-page__eyebrow {
+  color: #c76b5b;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .feedback-page__title {
-  font-size: 48rpx;
-  font-weight: 800;
-  line-height: 1.08;
+  font-size: 44rpx;
+  font-weight: 900;
+  line-height: 1.15;
   color: #263447;
 }
 
 .feedback-page__subtitle {
-  max-width: 620rpx;
-  font-size: 29rpx;
-  line-height: 1.7;
+  max-width: 600rpx;
+  font-size: 24rpx;
+  line-height: 1.55;
   color: var(--feedback-muted);
 }
 
@@ -341,46 +302,23 @@ onShareAppMessage((options) => {
   flex-direction: column;
   align-items: center;
   gap: 16rpx;
-  margin-top: 44rpx;
-  padding: 42rpx 40rpx 46rpx;
-  border: 6rpx solid rgba(255, 255, 255, 0.92);
-  border-radius: 44rpx;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, #fff4e8 100%);
+  margin-top: 28rpx;
+  padding: 32rpx 40rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.36);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 20rpx 44rpx rgba(241, 167, 130, 0.14);
   text-align: center;
 }
 
-.feedback-page__score-decor {
-  position: absolute;
-  top: 46rpx;
-  display: inline-flex;
-  width: 56rpx;
-  height: 56rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: rgba(255, 217, 124, 0.26);
-  color: #f59b23;
-  font-size: 28rpx;
-  font-weight: 900;
-}
-
-.feedback-page__score-decor--left {
-  left: 42rpx;
-}
-
-.feedback-page__score-decor--right {
-  right: 42rpx;
-}
-
 .feedback-page__score-label {
-  font-size: 30rpx;
+  font-size: 22rpx;
   font-weight: 800;
   color: #7c8897;
 }
 
 .feedback-page__score-value {
-  font-size: 144rpx;
+  font-size: 96rpx;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.05em;
@@ -389,9 +327,37 @@ onShareAppMessage((options) => {
 }
 
 .feedback-page__score-copy {
-  font-size: 28rpx;
-  line-height: 1.7;
+  font-size: 24rpx;
+  line-height: 1.55;
   color: var(--feedback-muted);
+}
+
+.feedback-page__score-change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #edf1f5;
+  color: #596b7f;
+  font-size: 22rpx;
+  font-weight: 900;
+  padding: 10rpx 18rpx;
+}
+
+.feedback-page__score-change--improved {
+  background: #e4f4ed;
+  color: #28766a;
+}
+
+.feedback-page__score-change--declined {
+  background: #fff0ed;
+  color: #a24f44;
+}
+
+.feedback-page__score-change--steady,
+.feedback-page__score-change--baseline {
+  background: #edf1f5;
+  color: #596b7f;
 }
 
 .feedback-page__badge-card {

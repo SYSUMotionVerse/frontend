@@ -11,6 +11,7 @@ describe('visual session dock button styles', () => {
 
     expect(source).toMatch(/\.visual-session__secondary::after[\s\S]*border:\s*none;/)
     expect(source).toMatch(/\.visual-session__record::after[\s\S]*border:\s*none;/)
-    expect(source).toMatch(/\.visual-session__complete::after[\s\S]*border:\s*none;/)
+    expect(source).toMatch(/\.visual-session__playback-control::after[\s\S]*border:\s*none;/)
+    expect(source).toMatch(/\.visual-session__completion-retry::after[\s\S]*border:\s*none;/)
   })
 })

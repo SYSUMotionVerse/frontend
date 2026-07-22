@@ -129,7 +129,7 @@ describe('ui review fixes', () => {
     expect(resultPage).toContain('uni.reLaunch')
   })
 
-  it('uses uni-app navigation semantics for the primary training flow', () => {
+  it('keeps the home training view progress-first and uses uni-app navigation elsewhere', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
@@ -143,14 +143,14 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(homePage).toContain('<navigator')
-    expect(homePage).toContain('url="/pages/training/select"')
-    expect(homePage).toContain('url="/pages/growth/index"')
+    expect(homePage).not.toContain('<navigator')
+    expect(homePage).not.toContain('url="/pages/training/select"')
+    expect(homePage).not.toContain('url="/pages/growth/index"')
     expect(selectionPage).toContain('uni.navigateTo')
     expect(feedbackPage).toContain('uni.redirectTo')
   })
 
-  it('restyles the training playground selection page as a level-based flow', () => {
+  it('restyles the training playground selection page as a level-based flow with the shared tab header', () => {
     const selectionPage = readFileSync(
       resolve('src/uni-app/pages/training/select.vue'),
       'utf8'
@@ -160,13 +160,25 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(selectionPage).toContain('准备开练了吗？')
-    expect(selectionPage).toContain('今天想挑战哪一种训练小零食？')
-    expect(selectionPage).toContain('再完成 1 次训练，就能点亮 3 天连击。')
+    expect(selectionPage).toContain('mini-tag="训练游乐场"')
+    expect(selectionPage).toContain('从还没点亮的赛道开始，直接开练。')
+    expect(selectionPage).toContain('完成任一训练后，将更新今日达标状态。')
     expect(selectionPage).toContain('trainingModes')
-    expect(selectionPage).toContain('select-page__streak-card')
+    expect(selectionPage).toContain('select-page__launch-list')
+    expect(selectionPage).toContain('@click="chooseMode(mode.modality)"')
+    expect(selectionPage).toContain('select-page__launch-trail')
+    expect(selectionPage).toContain(':type="mode.icon"')
+    expect(selectionPage).toContain('select-page__launch-completion')
+    expect(selectionPage).not.toContain('TrainingProgressSnapshot')
+    expect(selectionPage).toContain('gap: 48rpx;')
+    expect(selectionPage).not.toContain('TrainingModeCard')
+    expect(selectionPage).toContain('select-page__streak-note')
     expect(trainingModeCard).toContain('training-level-card__poster')
     expect(trainingModeCard).toContain('training-level-card__cta')
+    expect(trainingModeCard).toContain('min-height: 296rpx;')
+    expect(trainingModeCard).toContain('training-level-card--${props.modality}')
+    expect(trainingModeCard).toContain('.training-level-card--hiit .training-level-card__poster')
+    expect(trainingModeCard).toContain('.training-level-card--stair .training-level-card__poster')
   })
 
   it('adds a profile greeting header to the training playground', () => {
@@ -177,8 +189,9 @@ describe('ui review fixes', () => {
 
     expect(selectionPage).toContain("const displayName = computed(() => store.state.profile.name.trim() || '同学')")
     expect(selectionPage).toContain('TrainingHomeHeader')
-    expect(selectionPage).toContain("mini-tag=\"SELECT A SNACK\"")
-    expect(selectionPage).toContain('variant="compact"')
+    expect(selectionPage).toContain('mini-tag="训练游乐场"')
+    expect(selectionPage).toContain('variant="home"')
+    expect(selectionPage).toContain(':unread-count="stationNotifications.unreadCount.value"')
   })
 
   it('wires a shared floating dock across training and growth shells while excluding rating pages', () => {
@@ -221,26 +234,29 @@ describe('ui review fixes', () => {
     expect(trainingHomePage).toContain('dock-tab="home"')
     expect(trainingSelectPage).toContain('dock-tab="playground"')
     expect(growthIndexPage).toContain('dock-tab="growth"')
+    expect(growthIndexPage).toContain('TrainingHomeHeader')
     expect(shortQuestionnairePage).toContain(':show-dock="false"')
-    expect(feedbackPage).toContain('UniAccessPageShell')
+    expect(feedbackPage).toContain('feedback-page__title')
     expect(feedbackPage).not.toContain('UniTrainingPageShell')
   })
 
-  it('rebuilds the training home page as a quest and content feed', () => {
+  it('keeps home high-level and reserves modality details for the playground', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
     )
 
     expect(homePage).toContain('TrainingHomeHeader')
-    expect(homePage).toContain('TrainingHomeQuestPanel')
-    expect(homePage).toContain('TrainingHomeFeatureCard')
     expect(homePage).toContain('TrainingHomeCoachCard')
-    expect(homePage).toContain('今日任务')
-    expect(homePage).toContain('边练边学')
-    expect(homePage).toContain('教练角')
-    expect(homePage).toContain('开始训练')
-    expect(homePage).toContain('url="/pages/growth/index"')
+    expect(homePage).toContain('TrainingHomeProgressOverview')
+    expect(homePage).toContain('教练建议')
+    expect(homePage).toContain('useTrainingProgress')
+    expect(homePage).not.toContain('TrainingHomeQuestPanel')
+    expect(homePage).not.toContain('选择训练')
+    expect(homePage).not.toContain('DailyProgressCard')
+    expect(homePage).not.toContain('TrainingHomeFeatureCard')
+    expect(homePage).not.toContain('动作提示')
+    expect(homePage).not.toContain('url="/pages/growth/index"')
   })
 
   it('registers miniapp growth detail pages that the growth hub navigates to', () => {
@@ -290,9 +306,14 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(growthIndexPage).toContain('uni.navigateTo')
+    expect(growthIndexPage).toContain('<navigator')
     expect(growthIndexPage).toContain('.growth-page__link:active')
-    expect(growthIndexPage).toContain('growth-page__link--current')
+    expect(growthIndexPage).toContain('growth-page__overview')
+    expect(growthIndexPage).not.toContain('growth-page__buddy')
+    expect(growthIndexPage).toContain('--growth-space-4: 56rpx;')
+    expect(growthIndexPage).toContain('border-radius: 44rpx;')
+    expect(growthIndexPage).toContain(':color="stat.iconColor"')
+    expect(growthIndexPage).toContain(':color="link.iconColor"')
     expect(metricsPage).toContain("const emptyStateHint = computed(() => metricsState.value.hasMetrics ? '' : metricsState.value.message)")
     expect(metricsPage).toContain('{{ emptyStateHint }}')
   })
@@ -400,9 +421,9 @@ describe('ui review fixes', () => {
     expect(trainingModeCard).not.toContain('@keydown.enter.prevent')
     expect(trainingModeCard).not.toContain('@keydown.space.prevent')
 
-    expect(miniappHomePage).toContain('<navigator')
-    expect(miniappHomePage).toContain('url="/pages/training/select"')
-    expect(miniappHomePage).toContain('url="/pages/growth/index"')
+    expect(miniappHomePage).not.toContain('<navigator')
+    expect(miniappHomePage).not.toContain('url="/pages/training/select"')
+    expect(miniappHomePage).not.toContain('url="/pages/growth/index"')
     expect(miniappHomePage).not.toContain('role="button"')
     expect(miniappHomePage).not.toContain('tabindex="0"')
     expect(miniappHomePage).not.toContain('@keydown.enter.prevent')
@@ -586,17 +607,18 @@ describe('ui review fixes', () => {
 
     expect(headerCard).toContain('home-header__mini-tag')
     expect(headerCard).toContain('home-header__bell-badge')
+    expect(headerCard).toContain('home-header__reminder-action')
     expect(headerCard).toContain("variant?: 'home' | 'compact'")
     expect(headerCard).toContain('width: 88rpx;')
-    expect(headerCard).toContain('font-size: 46rpx;')
-    expect(headerCard).toContain('font-size: 18rpx;')
+    expect(headerCard).toContain('font-size: 36rpx;')
+    expect(headerCard).toContain('font-size: 16rpx;')
     expect(questPanel).toContain('quest-panel__item-status')
     expect(questPanel).toContain('quest-panel__item--done')
     expect(questPanel).toContain('quest-panel__item--highlight')
-    expect(questPanel).toContain('EPIC')
+    expect(questPanel).toContain('进行中')
   })
 
-  it('uses the shared header in both home and playground while keeping the playground one size smaller', () => {
+  it('uses one shared header size across home, playground, and growth', () => {
     const headerCard = readFileSync(
       resolve('src/components/training/TrainingHomeHeader.vue'),
       'utf8'
@@ -609,17 +631,24 @@ describe('ui review fixes', () => {
       resolve('src/uni-app/pages/training/select.vue'),
       'utf8'
     )
+    const growthPage = readFileSync(
+      resolve('src/uni-app/pages/growth/index.vue'),
+      'utf8'
+    )
 
     expect(homePage).toContain('TrainingHomeHeader')
     expect(homePage).toContain('variant="home"')
     expect(selectionPage).toContain('TrainingHomeHeader')
-    expect(selectionPage).toContain('variant="compact"')
-    expect(headerCard).toContain('home-header--compact')
-    expect(headerCard).toContain('width: 76rpx;')
-    expect(headerCard).toContain('font-size: 40rpx;')
+    expect(selectionPage).toContain('variant="home"')
+    expect(selectionPage).toContain(':show-headline="false"')
+    expect(growthPage).toContain('TrainingHomeHeader')
+    expect(growthPage).toContain('variant="home"')
+    expect(growthPage).toContain(':show-headline="false"')
+    expect(headerCard).toContain('width: 88rpx;')
+    expect(headerCard).toContain('font-size: 36rpx;')
   })
 
-  it('compresses the home header rhythm and promotes the active quest into a clearer main mission card', () => {
+  it('keeps the home header informational and leaves task hierarchy to the training panel', () => {
     const headerCard = readFileSync(
       resolve('src/components/training/TrainingHomeHeader.vue'),
       'utf8'
@@ -628,17 +657,22 @@ describe('ui review fixes', () => {
       resolve('src/components/training/TrainingHomeQuestPanel.vue'),
       'utf8'
     )
+    const homePage = readFileSync(
+      resolve('src/uni-app/pages/training/home.vue'),
+      'utf8'
+    )
 
-    expect(headerCard).toContain('home-header__headline')
-    expect(headerCard).toContain('home-header__hint-pill')
-    expect(headerCard).toContain('今天先完成主线任务')
-    expect(questPanel).toContain('quest-panel__item-kicker')
-    expect(questPanel).toContain('quest-panel__item-cta')
-    expect(questPanel).toContain('当前主线')
-    expect(questPanel).toContain('继续推进')
+    expect(homePage).toContain(':show-headline="false"')
+    expect(homePage).not.toContain('ReminderAuthorizationStatus')
+    expect(homePage).toContain('show-reminder-control')
+    expect(headerCard).toContain('showHeadline?: boolean')
+    expect(headerCard).toContain('v-if="props.showHeadline"')
+    expect(questPanel).not.toContain('quest-panel__item-kicker')
+    expect(questPanel).not.toContain('quest-panel__item-cta')
+    expect(questPanel).toContain('进行中')
   })
 
-  it('aligns the lower home sections and content pills with the playground typography system', () => {
+  it('uses restrained typography for supporting home sections', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
@@ -652,10 +686,8 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(homePage).toContain('home-page__section-kicker')
-    expect(homePage).toContain('LEARN & PLAY')
-    expect(homePage).toContain("COACH'S CORNER")
-    expect(homePage).toContain('font-size: 52rpx;')
+    expect(homePage).not.toContain('home-page__section-kicker')
+    expect(homePage).toContain('font-size: 36rpx;')
     expect(featureCard).toContain('feature-card__eyebrow')
     expect(featureCard).toContain('font-size: 18rpx;')
     expect(featureCard).toContain('letter-spacing: 0.14em;')
@@ -664,20 +696,19 @@ describe('ui review fixes', () => {
     expect(coachCard).toContain('letter-spacing: 0.14em;')
   })
 
-  it('aligns the today quest heading block with the playground section title system', () => {
+  it('keeps today training as the only prominent task heading', () => {
     const questPanel = readFileSync(
       resolve('src/components/training/TrainingHomeQuestPanel.vue'),
       'utf8'
     )
 
     expect(questPanel).toContain('quest-panel__head-copy')
-    expect(questPanel).toContain("TODAY'S QUEST")
-    expect(questPanel).toContain('font-size: 52rpx;')
-    expect(questPanel).toContain('font-size: 20rpx;')
-    expect(questPanel).toContain('letter-spacing: 0.08em;')
+    expect(questPanel).not.toContain("TODAY'S QUEST")
+    expect(questPanel).toContain('font-size: 40rpx;')
+    expect(questPanel).toContain('font-size: 22rpx;')
   })
 
-  it('aligns the home cta and quest status pills with the playground button language', () => {
+  it('keeps today-training status labels compact without a home CTA', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
@@ -687,25 +718,22 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(homePage).toContain('font-size: 34rpx;')
-    expect(homePage).toContain('box-shadow:')
-    expect(homePage).toContain('0 12rpx 0 rgba(224, 111, 120, 0.9);')
-    expect(questPanel).toContain('min-height: 38rpx;')
-    expect(questPanel).toContain('padding: 8rpx 14rpx;')
-    expect(questPanel).toContain('font-size: 16rpx;')
-    expect(questPanel).toContain('letter-spacing: 0.14em;')
+    expect(homePage).not.toContain('home-page__cta')
+    expect(homePage).not.toContain('选择训练')
+    expect(questPanel).toContain('min-height: 34rpx;')
+    expect(questPanel).toContain('padding: 6rpx 10rpx;')
+    expect(questPanel).toContain('font-size: 18rpx;')
   })
 
-  it('loosens the home page layout with a dedicated content stack instead of packing sections tightly', () => {
+  it('keeps the home-page content stack compact without crowding', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
     )
 
     expect(homePage).toContain('class="home-page"')
-    expect(homePage).toContain('gap: 48rpx;')
-    expect(homePage).toContain('gap: 28rpx;')
-    expect(homePage).toContain('gap: 34rpx;')
+    expect(homePage).toContain('gap: 40rpx;')
+    expect(homePage).toContain('gap: 24rpx;')
   })
 
 
@@ -786,16 +814,15 @@ describe('ui review fixes', () => {
     expect(accessShell).toContain('padding: 56rpx 48rpx 216rpx;')
     expect(accessShell).toContain('gap: 56rpx;')
     expect(uniAccessShell).toContain('padding: 56rpx 48rpx 120rpx;')
-    expect(uniAccessShell).toContain('gap: 40rpx;')
+    expect(uniAccessShell).toContain('gap: 32rpx;')
     expect(uniTrainingShell).toContain('padding: 56rpx 32rpx 216rpx;')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
     expect(uniGrowthShell).toContain('padding: 56rpx 32rpx 216rpx;')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
-    expect(miniappHomePage).toContain('gap: 48rpx;')
-    expect(miniappHomePage).toContain('gap: 28rpx;')
-    expect(miniappHomePage).toContain('gap: 34rpx;')
-    expect(miniappGrowthPage).toContain('gap: 28rpx;')
-    expect(miniappGrowthPage).toContain('padding: 40rpx;')
+    expect(miniappHomePage).toContain('gap: 40rpx;')
+    expect(miniappHomePage).toContain('gap: 24rpx;')
+    expect(miniappGrowthPage).toContain('--growth-space-4: 56rpx;')
+    expect(miniappGrowthPage).toContain('padding: 28rpx 26rpx;')
   })
 
   it('uses one built-in default user icon without personal avatar controls', () => {

@@ -17,7 +17,11 @@ withDefaults(defineProps<{
     <view class="growth-shell__halo growth-shell__halo--coral" />
     <view class="growth-shell__halo growth-shell__halo--gold" />
     <view class="growth-shell__inner">
-      <slot />
+      <transition name="shell-enter" appear>
+        <view class="growth-shell__content">
+          <slot />
+        </view>
+      </transition>
     </view>
     <FloatingDock v-if="showDock" :active-tab="dockTab" />
   </view>
@@ -62,5 +66,21 @@ withDefaults(defineProps<{
   display: flex;
   flex-direction: column;
   gap: 40rpx;
+}
+
+.growth-shell__content {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+.shell-enter-enter-active {
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+.shell-enter-enter-from {
+  opacity: 0;
+  transform: translateY(12rpx);
 }
 </style>

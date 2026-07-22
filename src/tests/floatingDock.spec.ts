@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import FloatingDock from '../uni-app/components/navigation/FloatingDock.vue'
 
 describe('floating dock', () => {
-  it('renders custom glyph icons instead of short text placeholders', () => {
+  it('renders shared uni-icons instead of short text placeholders', () => {
     const wrapper = mount(FloatingDock, {
       global: {
         stubs: {
@@ -22,21 +22,21 @@ describe('floating dock', () => {
       }
     })
 
-    expect(wrapper.findAll('.floating-dock__glyph')).toHaveLength(3)
+    expect(wrapper.findAllComponents({ name: 'UniIcons' })).toHaveLength(3)
     expect(wrapper.find('.floating-dock__item--active').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('家')
     expect(wrapper.text()).not.toContain('玩')
   })
 
-  it('stores dock items with icon metadata instead of short labels', () => {
+  it('stores dock items with shared icon-library metadata instead of short labels', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/uni-app/components/navigation/FloatingDock.vue'),
       'utf8'
     )
 
-    expect(source).toContain("icon: 'home'")
-    expect(source).toContain("icon: 'spark'")
-    expect(source).toContain("icon: 'sprout'")
+    expect(source).toContain("icon: 'home-filled'")
+    expect(source).toContain("icon: 'fire-filled'")
+    expect(source).toContain("icon: 'medal-filled'")
     expect(source).not.toContain('shortLabel')
   })
 })

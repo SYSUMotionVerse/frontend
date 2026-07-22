@@ -1,6 +1,7 @@
 import type { CheckpointKey, StudentProfile, TrainingModality } from '../../types/student'
 import type { GrowthCalendarDay } from '../../domain/student/growth'
 import type { PhysicalMetricTrend } from '../../domain/student/types'
+import type { ScoredActionResult } from '../../domain/training/actionScoringTypes'
 
 export type BackendExerciseType = 'MARTIAL_ARTS' | 'HIIT' | 'STAIRS'
 export type BackendQuestionType = 'SINGLE' | 'MULTIPLE' | 'TEXT'
@@ -133,12 +134,20 @@ export interface VisualPoseAnalysisPayload {
   angle_unit: 'radian'
   angle_names: VisualPoseAngleName[]
   frames: VisualPoseAnalysisSequenceFrame[]
+  scoringSource?: 'client'
+  scoringVersion?: string
+  actionScores?: ScoredActionResult[]
+  scoringWarnings?: string[]
+  scoreDetails?: ExerciseScoreDetails
 }
 
 export interface VisualSessionSyncInput {
   sessionId: string
   modality: Exclude<TrainingModality, 'stair'>
   durationSeconds: number
+  videoId?: number
+  score?: number
+  comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
 }
 
@@ -170,6 +179,8 @@ export interface ExerciseVideoSummary {
   exercise_type: BackendExerciseType
   /** 标准动作视频文件 URL（可为 null，需用 resolveAbsoluteUrl 拼接完整地址） */
   video_file?: string | null
+  /** 标准动作识别数据 URL */
+  standard_data_url?: string | null
   /** 缩略图 URL */
   thumbnail?: string | null
   /** 视频描述 */
@@ -178,6 +189,34 @@ export interface ExerciseVideoSummary {
   duration?: number
   /** 难度等级 1-5 */
   difficulty?: number
+  order?: number
+  is_active?: boolean
+}
+
+export interface ExerciseArrangementSummary {
+  id: number
+  title: string
+  description?: string
+  exercise_type: BackendExerciseType
+  item_count: number
+  total_duration: number
+  is_active: boolean
+  order: number
+}
+
+export interface ExerciseArrangementItem {
+  id: number
+  video_id: number
+  video: ExerciseVideoSummary
+  expected_duration: number
+  countdown_duration: number
+  rest_duration: number
+  standard_data_url?: string | null
+  order: number
+}
+
+export interface ExerciseArrangementDetail extends ExerciseArrangementSummary {
+  items: ExerciseArrangementItem[]
 }
 
 export interface ExerciseScoreDimension {
@@ -279,6 +318,8 @@ export interface ExerciseRecordCreatePayload {
   video: number
   duration: number
   training_session_id: string
+  score?: number
+  comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
 }
 
@@ -366,6 +407,10 @@ export interface StudentBackendSyncDependencies {
   updateProfile: (payload: UserUpdatePayload) => Promise<unknown>
   createSurveyRecord: (payload: SurveyRecordCreatePayload) => Promise<unknown>
   listExerciseVideos: (exerciseType: BackendExerciseType) => Promise<ExerciseVideoSummary[]>
+  listExerciseArrangements: (
+    exerciseType: BackendExerciseType
+  ) => Promise<ExerciseArrangementSummary[]>
+  getExerciseArrangement: (id: number) => Promise<ExerciseArrangementDetail>
   createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<BackendExerciseRecord>
   getExerciseScoreTrend: () => Promise<BackendExerciseScoreTrendResponse>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>

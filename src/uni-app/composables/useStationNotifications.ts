@@ -5,23 +5,31 @@ import {
   mapStationNotification,
   type StationNotificationViewModel
 } from '../api/stationNotificationModels'
+import { createRequestCache } from './useRequestCache'
 
 export type StationNotificationState =
   | { status: 'loading'; notifications: StationNotificationViewModel[] }
   | { status: 'ready'; notifications: StationNotificationViewModel[] }
   | { status: 'error'; notifications: StationNotificationViewModel[]; message: string }
 
-export function useStationNotifications() {
-  const state = shallowRef<StationNotificationState>({
-    status: 'loading',
-    notifications: []
-  })
-  const unreadCount = shallowRef(0)
+const state = shallowRef<StationNotificationState>({
+  status: 'loading',
+  notifications: []
+})
+const unreadCount = shallowRef(0)
+const notificationsCache = createRequestCache({
+  ttlMs: 60_000,
+  load: () => studentBackendSync.loadStationNotifications()
+})
 
-  async function refresh() {
-    state.value = { status: 'loading', notifications: state.value.notifications }
+export function useStationNotifications() {
+
+  async function refresh(options: { force?: boolean } = {}) {
+    if (state.value.status !== 'ready') {
+      state.value = { status: 'loading', notifications: state.value.notifications }
+    }
     try {
-      const result = await studentBackendSync.loadStationNotifications()
+      const result = await notificationsCache.get(options)
       unreadCount.value = result.count
       state.value = {
         status: 'ready',
@@ -41,6 +49,7 @@ export function useStationNotifications() {
     if (!notification.isRead) {
       try {
         await studentBackendSync.markStationNotificationRead(notification.id)
+        notificationsCache.invalidate()
         unreadCount.value = Math.max(0, unreadCount.value - 1)
         state.value = {
           ...state.value,
@@ -76,6 +85,7 @@ export function useStationNotifications() {
     state: readonly(state),
     unreadCount: computed(() => unreadCount.value),
     refresh,
+    invalidate: notificationsCache.invalidate,
     open,
     openList
   }

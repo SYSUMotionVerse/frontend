@@ -1,6 +1,11 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
 import { DEFAULT_AVATAR_URL } from '../../constants/defaultAvatar'
+import type {
+  ReminderAuthorizationStatus,
+  ReminderSyncState
+} from '../../uni-app/platform/reminderConsent'
 
 const props = withDefaults(defineProps<{
   displayName: string
@@ -10,18 +15,38 @@ const props = withDefaults(defineProps<{
   titlePill?: string
   variant?: 'home' | 'compact'
   unreadCount?: number
+  showHeadline?: boolean
+  showReminderControl?: boolean
+  reminderStatus?: ReminderAuthorizationStatus
+  reminderSyncState?: ReminderSyncState
+  reminderWorking?: boolean
 }>(), {
   miniTag: "TODAY'S QUEST",
   title: '今天先完成主线任务',
   titlePill: '训练首页',
   variant: 'home',
-  unreadCount: 0
+  unreadCount: 0,
+  showHeadline: true,
+  showReminderControl: false,
+  reminderStatus: 'not_requested',
+  reminderSyncState: 'idle',
+  reminderWorking: false
 })
 
 const emit = defineEmits<{
   openNotifications: []
+  authorizeReminders: []
 }>()
 const headerClasses = computed(() => ['home-header', `home-header--${props.variant}`])
+const reminderActionLabel = computed(() => {
+  if (!props.showReminderControl) return null
+  if (props.reminderWorking) return '请求中'
+  if (props.reminderSyncState === 'failed') return '重试提醒'
+  if (['not_requested', 'rejected', 'banned', 'unsupported'].includes(props.reminderStatus)) {
+    return '开提醒'
+  }
+  return null
+})
 </script>
 
 <template>
@@ -38,21 +63,32 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
         </view>
       </view>
 
-      <button
-        class="home-header__bell-shell"
-        aria-label="查看训练提醒"
-        @click="emit('openNotifications')"
-      >
-        <text v-if="props.unreadCount > 0" class="home-header__bell-badge">
-          {{ props.unreadCount > 99 ? '99+' : props.unreadCount }}
-        </text>
-        <text class="home-header__bell">铃</text>
-      </button>
+      <view class="home-header__notification">
+        <button
+          class="home-header__bell-shell"
+          aria-label="查看训练提醒"
+          @click="emit('openNotifications')"
+        >
+          <text v-if="props.unreadCount > 0" class="home-header__bell-badge">
+            {{ props.unreadCount > 99 ? '99+' : props.unreadCount }}
+          </text>
+          <uni-icons type="notification-filled" size="25" color="#ff8c93" />
+        </button>
+        <button
+          v-if="reminderActionLabel"
+          class="home-header__reminder-action"
+          :disabled="props.reminderWorking"
+          @click="emit('authorizeReminders')"
+        >
+          <text class="home-header__reminder-action-dot" />
+          <text>{{ reminderActionLabel }}</text>
+        </button>
+      </view>
     </view>
 
     <text class="home-header__status">{{ props.reminderLabel }}</text>
 
-    <view class="home-header__headline">
+    <view v-if="props.showHeadline" class="home-header__headline">
       <text class="home-header__hint-pill">{{ props.titlePill }}</text>
       <text class="home-header__title">{{ props.title }}</text>
     </view>
@@ -89,6 +125,15 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   min-width: 0;
   align-items: center;
   gap: 18rpx;
+}
+
+.home-header__notification {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
 }
 
 .home-header--compact .home-header__profile {
@@ -136,20 +181,20 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
 .home-header__name {
   display: block;
   color: #203042;
-  font-size: 46rpx;
-  line-height: 1.06;
-  font-weight: 900;
-  letter-spacing: -0.05em;
+  font-size: 36rpx;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 .home-header--compact .home-header__name {
-  font-size: 40rpx;
+  font-size: 34rpx;
 }
 
 .home-header__mini-tag {
   display: block;
   color: #ff8b8b;
-  font-size: 18rpx;
+  font-size: 16rpx;
   line-height: 1.2;
   font-weight: 900;
   letter-spacing: 0.14em;
@@ -207,22 +252,43 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   right: 16rpx;
 }
 
-.home-header__bell {
-  color: #ff8c93;
-  font-size: 36rpx;
-  line-height: 1;
+.home-header__reminder-action {
+  display: inline-flex;
+  min-height: 34rpx;
+  margin: -2rpx 0 0;
+  padding: 0 10rpx;
+  align-items: center;
+  gap: 6rpx;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(255, 236, 199, 0.72);
+  color: #b17c24;
+  font-size: 16rpx;
+  line-height: 1.2;
   font-weight: 900;
 }
 
-.home-header--compact .home-header__bell {
-  font-size: 30rpx;
+.home-header__reminder-action::after {
+  border: none;
+}
+
+.home-header__reminder-action:disabled {
+  opacity: 0.66;
+}
+
+.home-header__reminder-action-dot {
+  display: block;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 9999px;
+  background: #ff9d82;
 }
 
 .home-header__status {
   display: block;
   margin-top: -16rpx;
   color: #9b896e;
-  font-size: 20rpx;
+  font-size: 18rpx;
   line-height: 1.4;
   font-weight: 800;
   text-align: right;
@@ -247,7 +313,7 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
   display: block;
   max-width: 460rpx;
   color: #203042;
-  font-size: 52rpx;
+  font-size: 42rpx;
   line-height: 1.08;
   font-weight: 900;
   letter-spacing: -0.05em;
@@ -255,7 +321,7 @@ const headerClasses = computed(() => ['home-header', `home-header--${props.varia
 
 .home-header--compact .home-header__title {
   max-width: 420rpx;
-  font-size: 44rpx;
+  font-size: 38rpx;
 }
 
 .home-header__hint-pill {

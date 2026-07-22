@@ -177,6 +177,8 @@ describe('station notifications', () => {
   })
 
   it('offers an explicit retry after notification loading fails', async () => {
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    useStationNotifications().invalidate()
     loadStationNotifications.mockRejectedValueOnce(new Error('offline'))
     const NotificationPage = (await import('../uni-app/pages/notifications/index.vue')).default
     const wrapper = mount(NotificationPage, {

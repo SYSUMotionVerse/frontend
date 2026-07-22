@@ -28,32 +28,23 @@ export function useTrainingHomeProgressViewModel(
   })
 
   const quests = computed(() => {
-    const dailyCount = progress.value?.dailyCount ?? 0
-    const qualifyingDays = progress.value?.week.qualifyingDayCount ?? 0
-    return [
-      {
-        id: 'daily-first',
-        title: '完成 1 次有效打卡',
-        detail: dailyCount > 0 ? `今天已经完成 ${dailyCount} 次有效打卡。` : '先完成一次短训练，把今天的状态点亮。',
-        completed: dailyCount >= 1,
-        highlight: false
-      },
-      {
-        id: 'daily-three',
-        title: '今日累计 3 次有效打卡',
-        detail: `当前进度 ${dailyCount}/3，完成后就能保持今日满格节奏。`,
-        completed: dailyCount >= 3,
-        highlight: dailyCount < 3
-      },
-      {
-        id: 'weekly-streak',
-        title: '本周达标 3 天',
-        detail: `目前已达标 ${qualifyingDays} 天，再稳住节奏就能拿下本周目标。`,
-        completed: qualifyingDays >= 3,
-        highlight: dailyCount >= 3 && qualifyingDays < 3
-      }
-    ]
+    const modalities = progress.value?.modalities ?? []
+    const firstPendingId = modalities.find(item => !item.completed)?.id
+
+    return modalities.map(item => ({
+      id: item.id,
+      title: item.label,
+      detail: item.completed
+        ? '今天已完成，可以按自己的节奏继续练习。'
+        : '完成一轮训练，点亮今天的进度。',
+      completed: item.completed,
+      highlight: item.id === firstPendingId
+    }))
   })
+
+  const weeklyQualifyingDayCount = computed(() =>
+    progress.value?.week.qualifyingDayCount ?? 0
+  )
 
   const completedQuestCount = computed(() =>
     quests.value.filter(quest => quest.completed).length
@@ -85,6 +76,7 @@ export function useTrainingHomeProgressViewModel(
     reminderLabel,
     quests,
     completedQuestCount,
+    weeklyQualifyingDayCount,
     coachCards
   }
 }

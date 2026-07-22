@@ -201,6 +201,8 @@ describe('student backend sync orchestration', () => {
       sessionId: 'visual-session-123',
       modality: 'wushu',
       durationSeconds: 30,
+      score: 88.5,
+      comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',
         sequence_id: 'student_123',
@@ -233,6 +235,8 @@ describe('student backend sync orchestration', () => {
       video: 9,
       duration: 30,
       training_session_id: 'visual-session-123',
+      score: 88.5,
+      comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',
         sequence_id: 'student_123',
@@ -270,28 +274,69 @@ describe('student backend sync orchestration', () => {
     })
   })
 
-  it('loads the first playable visual exercise video for the selected modality', async () => {
+  it('loads the first playable arrangement and resolves nested asset URLs', async () => {
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/api')
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const ensureSession = vi.fn().mockResolvedValue(undefined)
-    const listExerciseVideos = vi.fn().mockResolvedValue([
-      { id: 8, exercise_type: 'HIIT', title: '未上传文件', video_file: null },
-      { id: 9, exercise_type: 'HIIT', title: '间歇训练', video_file: '/media/hiit.mp4' }
+    const listExerciseArrangements = vi.fn().mockResolvedValue([
+      {
+        id: 6,
+        title: 'HIIT 入门',
+        exercise_type: 'HIIT',
+        item_count: 1,
+        total_duration: 30,
+        is_active: true,
+        order: 1
+      }
     ])
+    const getExerciseArrangement = vi.fn().mockResolvedValue({
+      id: 6,
+      title: 'HIIT 入门',
+      exercise_type: 'HIIT',
+      item_count: 1,
+      total_duration: 30,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 61,
+        video_id: 9,
+        video: {
+          id: 9,
+          exercise_type: 'HIIT',
+          title: '徒手深蹲',
+          video_file: '/media/hiit.mp4',
+          standard_data_url: '/media/hiit.json'
+        },
+        expected_duration: 30,
+        countdown_duration: 3,
+        rest_duration: 10,
+        standard_data_url: '/media/hiit.json',
+        order: 1
+      }]
+    })
     const sync = createStudentBackendSync({
       isEnabled: () => true,
       ensureSession,
-      listExerciseVideos
+      listExerciseArrangements,
+      getExerciseArrangement
     })
 
-    await expect(sync.loadVisualExerciseVideo('hiit')).resolves.toEqual({
-      id: 9,
+    await expect(sync.loadVisualExerciseArrangement('hiit')).resolves.toMatchObject({
+      id: 6,
       exercise_type: 'HIIT',
-      title: '间歇训练',
-      video_file: 'https://api.example.com/media/hiit.mp4'
+      items: [{
+        video: {
+          id: 9,
+          title: '徒手深蹲',
+          video_file: 'https://api.example.com/media/hiit.mp4',
+          standard_data_url: 'https://api.example.com/media/hiit.json'
+        },
+        standard_data_url: 'https://api.example.com/media/hiit.json'
+      }]
     })
     expect(ensureSession).toHaveBeenCalledTimes(1)
-    expect(listExerciseVideos).toHaveBeenCalledWith('HIIT')
+    expect(listExerciseArrangements).toHaveBeenCalledWith('HIIT')
+    expect(getExerciseArrangement).toHaveBeenCalledWith(6)
     vi.unstubAllEnvs()
   })
 

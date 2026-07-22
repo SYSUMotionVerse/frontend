@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import StationNotificationList from '../../../components/notifications/StationNotificationList.vue'
+import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStationNotifications } from '../../composables/useStationNotifications'
 
@@ -16,18 +17,18 @@ onShow(() => {
 <template>
   <UniTrainingPageShell :show-dock="false">
     <view class="notification-page">
-      <view class="notification-page__heading">
-        <text class="notification-page__kicker">TRAINING REMINDERS</text>
-        <text class="notification-page__title">训练提醒</text>
-        <text class="notification-page__subtitle">查看午间和晚间提醒，继续完成今天的三项训练。</text>
-      </view>
+      <UniPageHeading
+        eyebrow="训练提醒"
+        title="提醒中心"
+        description="查看午间和晚间提醒，安排今天的训练。"
+      />
 
       <view v-if="stationNotifications.state.value.status === 'loading'" class="notification-page__status">
         <text>正在同步提醒…</text>
       </view>
       <view v-else-if="stationNotifications.state.value.status === 'error'" class="notification-page__status">
         <text>{{ stationNotifications.state.value.message }}</text>
-        <button class="notification-page__retry" @click="stationNotifications.refresh">
+        <button class="notification-page__retry" @click="stationNotifications.refresh({ force: true })">
           重新加载
         </button>
       </view>
@@ -52,27 +53,6 @@ onShow(() => {
   padding: 20rpx 32rpx 80rpx;
 }
 
-.notification-page__heading {
-  gap: 10rpx;
-}
-
-.notification-page__kicker {
-  color: #e37373;
-  font-size: 18rpx;
-  line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-}
-
-.notification-page__title {
-  color: #203042;
-  font-size: 52rpx;
-  line-height: 1.1;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-}
-
-.notification-page__subtitle,
 .notification-page__status {
   color: #7b8798;
   font-size: 24rpx;

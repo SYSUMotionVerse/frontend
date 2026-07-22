@@ -3,6 +3,7 @@ defineProps<{
   title: string
   completedCount: number
   totalCount: number
+  weekQualifyingDayCount: number
   quests: Array<{
     id: string
     title: string
@@ -17,13 +18,14 @@ defineProps<{
   <view class="quest-panel">
     <view class="quest-panel__head">
       <view class="quest-panel__head-copy">
-        <text class="quest-panel__kicker">TODAY'S QUEST</text>
         <text class="quest-panel__title">{{ title }}</text>
       </view>
       <view class="quest-panel__meter">
-        <text>{{ completedCount }} / {{ totalCount }} 已完成</text>
+        <text>{{ completedCount }} / {{ totalCount }}</text>
       </view>
     </view>
+
+    <text class="quest-panel__weekly-summary">本周已达标 {{ weekQualifyingDayCount }} 天</text>
 
     <view class="quest-panel__list">
       <view
@@ -40,15 +42,10 @@ defineProps<{
         </view>
 
         <view class="quest-panel__copy">
-          <view v-if="quest.highlight" class="quest-panel__item-kicker-row">
-            <text class="quest-panel__item-kicker">当前主线</text>
-            <text class="quest-panel__item-cta">继续推进</text>
-          </view>
-
           <view class="quest-panel__item-row">
             <text class="quest-panel__item-title">{{ quest.title }}</text>
-            <text v-if="quest.highlight" class="quest-panel__item-status">EPIC</text>
-            <text v-else-if="quest.completed" class="quest-panel__item-status quest-panel__item-status--done">DONE</text>
+            <text v-if="quest.highlight && !quest.completed" class="quest-panel__item-status">进行中</text>
+            <text v-else-if="quest.completed" class="quest-panel__item-status quest-panel__item-status--done">已完成</text>
           </view>
           <text class="quest-panel__item-detail">{{ quest.detail }}</text>
         </view>
@@ -76,64 +73,55 @@ defineProps<{
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12rpx;
-}
-
-.quest-panel__kicker {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  justify-content: center;
-  padding: 8rpx 16rpx;
-  border-radius: 9999px;
-  background: rgba(255, 236, 199, 0.32);
-  color: #c69021;
-  font-size: 18rpx;
-  line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: 0.14em;
+  gap: 0;
 }
 
 .quest-panel__title {
   display: block;
   color: #203042;
-  font-size: 52rpx;
-  line-height: 1.06;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-size: 40rpx;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .quest-panel__meter {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 52rpx;
-  padding: 10rpx 20rpx;
-  border-radius: 9999px;
-  background: rgba(168, 230, 207, 0.2);
+  min-height: 48rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 16rpx;
+  background: rgba(168, 230, 207, 0.24);
   color: #3f8b68;
-  font-size: 20rpx;
+  font-size: 22rpx;
   line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-weight: 800;
 }
 
 .quest-panel__list {
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
+  gap: 14rpx;
+}
+
+.quest-panel__weekly-summary {
+  display: block;
+  margin-top: -10rpx;
+  color: #7b8798;
+  font-size: 20rpx;
+  line-height: 1.4;
+  font-weight: 600;
 }
 
 .quest-panel__item {
   display: flex;
   align-items: flex-start;
-  gap: 18rpx;
-  padding: 26rpx 24rpx;
-  border-radius: 28rpx;
+  gap: 16rpx;
+  padding: 24rpx;
+  border: 2rpx solid rgba(123, 135, 152, 0.12);
+  border-radius: 20rpx;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow:
-    0 16rpx 28rpx rgba(37, 47, 61, 0.05),
-    0 8rpx 0 rgba(245, 236, 218, 0.86);
 }
 
 .quest-panel__item--done {
@@ -142,13 +130,8 @@ defineProps<{
 }
 
 .quest-panel__item--highlight {
-  padding: 30rpx 26rpx;
-  border: 4rpx solid rgba(255, 139, 139, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 245, 245, 0.98) 100%);
-  box-shadow:
-    0 18rpx 30rpx rgba(255, 126, 134, 0.12),
-    0 8rpx 0 rgba(250, 221, 221, 0.92);
-  transform: scale(1.01);
+  border-color: rgba(255, 139, 139, 0.6);
+  background: rgba(255, 245, 245, 0.98);
 }
 
 .quest-panel__check {
@@ -180,36 +163,6 @@ defineProps<{
   gap: 6rpx;
 }
 
-.quest-panel__item-kicker-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14rpx;
-}
-
-.quest-panel__item-kicker {
-  display: inline-flex;
-  min-height: 38rpx;
-  align-items: center;
-  justify-content: center;
-  padding: 8rpx 14rpx;
-  border-radius: 9999px;
-  background: rgba(255, 139, 139, 0.18);
-  color: #ff7e86;
-  font-size: 16rpx;
-  line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-}
-
-.quest-panel__item-cta {
-  display: block;
-  color: #ff7e86;
-  font-size: 18rpx;
-  line-height: 1.2;
-  font-weight: 900;
-}
-
 .quest-panel__item-row {
   display: flex;
   align-items: center;
@@ -220,7 +173,7 @@ defineProps<{
 .quest-panel__item-title {
   display: block;
   color: #243244;
-  font-size: 28rpx;
+  font-size: 26rpx;
   line-height: 1.24;
   font-weight: 900;
 }
@@ -230,15 +183,14 @@ defineProps<{
   flex: none;
   align-items: center;
   justify-content: center;
-  min-height: 38rpx;
-  padding: 8rpx 14rpx;
-  border-radius: 9999px;
+  min-height: 34rpx;
+  padding: 6rpx 10rpx;
+  border-radius: 12rpx;
   background: rgba(255, 139, 139, 0.16);
   color: #ff7e86;
-  font-size: 16rpx;
+  font-size: 18rpx;
   line-height: 1.2;
   font-weight: 900;
-  letter-spacing: 0.14em;
 }
 
 .quest-panel__item-status--done {

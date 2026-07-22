@@ -5,26 +5,36 @@ import {
 import { reportBackendSyncError } from '../api/reportBackendSyncError'
 import { studentBackendSync } from '../api/studentBackend'
 import { mapTrainingProgress } from '../api/trainingProgressModels'
+import { createRequestCache } from './useRequestCache'
 
 export type TrainingProgressState =
   | { status: 'loading' }
   | { status: 'ready'; progress: TrainingProgressViewModel }
   | { status: 'error'; message: string }
 
-export function useTrainingProgress() {
-  const state = shallowRef<TrainingProgressState>({ status: 'loading' })
+const state = shallowRef<TrainingProgressState>({ status: 'loading' })
+const progressCache = createRequestCache({
+  ttlMs: 60_000,
+  async load() {
+    await studentBackendSync.retryPendingTrainingSubmissions()
+    const dto = await studentBackendSync.loadTrainingProgress()
+    if (dto === null) {
+      throw new Error('Backend training progress is disabled.')
+    }
+    return mapTrainingProgress(dto)
+  }
+})
 
-  async function refresh() {
-    state.value = { status: 'loading' }
+export function useTrainingProgress() {
+
+  async function refresh(options: { force?: boolean } = {}) {
+    const hasReadyData = state.value.status === 'ready'
+    if (!hasReadyData) state.value = { status: 'loading' }
     try {
-      await studentBackendSync.retryPendingTrainingSubmissions()
-      const dto = await studentBackendSync.loadTrainingProgress()
-      if (dto === null) {
-        throw new Error('Backend training progress is disabled.')
-      }
+      const progress = await progressCache.get(options)
       state.value = {
         status: 'ready',
-        progress: mapTrainingProgress(dto)
+        progress
       }
     } catch (error) {
       reportBackendSyncError('训练进度同步', error)
@@ -37,6 +47,7 @@ export function useTrainingProgress() {
 
   return {
     state: readonly(state),
-    refresh
+    refresh,
+    invalidate: progressCache.invalidate
   }
 }

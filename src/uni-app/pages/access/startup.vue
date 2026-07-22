@@ -48,7 +48,7 @@ async function bootstrapAndRoute() {
         throw new Error('bootstrapAccess did not return a target page.')
       }
 
-      void uni.reLaunch({
+      await uni.reLaunch({
         url: targetPageUrl
       })
       return

@@ -62,7 +62,7 @@ function handleChoose() {
 </script>
 
 <template>
-  <view class="training-level-card">
+  <view :class="['training-level-card', `training-level-card--${props.modality}`]">
     <view class="training-level-card__glow" :class="`training-level-card__glow--${props.modality}`" />
 
     <view class="training-level-card__meta">
@@ -116,16 +116,20 @@ function handleChoose() {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 28rpx;
-  min-height: 338rpx;
-  padding: 42rpx 34rpx 34rpx;
-  border-radius: 34rpx;
+  gap: 20rpx;
+  min-height: 296rpx;
+  padding: 30rpx 28rpx 28rpx;
+  border-radius: 40rpx;
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
     0 22rpx 46rpx rgba(37, 47, 61, 0.08),
     0 10rpx 0 rgba(255, 236, 213, 0.85);
   overflow: hidden;
 }
+
+.training-level-card--wushu { background: #fffaf6; }
+.training-level-card--hiit { background: #f7fbff; }
+.training-level-card--stair { background: #fffaf1; }
 
 .training-level-card__glow {
   position: absolute;
@@ -193,15 +197,15 @@ function handleChoose() {
 
 .training-level-card__poster {
   position: absolute;
-  top: 30rpx;
-  right: 28rpx;
+  top: 22rpx;
+  right: 22rpx;
   display: flex;
-  width: 188rpx;
-  height: 160rpx;
+  width: 156rpx;
+  height: 132rpx;
   align-items: flex-end;
   justify-content: flex-start;
-  padding: 22rpx 20rpx;
-  border-radius: 28rpx 28rpx 14rpx 14rpx;
+  padding: 18rpx 16rpx;
+  border-radius: 30rpx 30rpx 16rpx 16rpx;
   overflow: hidden;
 }
 
@@ -223,29 +227,83 @@ function handleChoose() {
     #f7e5c8;
 }
 
+.training-level-card--hiit .training-level-card__poster {
+  top: 24rpx;
+  right: 26rpx;
+  width: 116rpx;
+  height: 116rpx;
+  padding: 14rpx;
+  border-radius: 9999px;
+  align-items: center;
+  justify-content: center;
+}
+
+.training-level-card--hiit .training-level-card__poster-mark {
+  font-size: 52rpx;
+}
+
+.training-level-card--hiit .training-level-card__poster-icon {
+  top: 8rpx;
+  right: 20rpx;
+  font-size: 26rpx;
+}
+
+.training-level-card--stair .training-level-card__poster {
+  top: 28rpx;
+  right: 22rpx;
+  width: 178rpx;
+  height: 106rpx;
+  border-radius: 52rpx 24rpx 52rpx 24rpx;
+}
+
+.training-level-card--stair .training-level-card__poster-mark {
+  font-size: 54rpx;
+}
+
+.training-level-card--stair .training-level-card__poster-icon {
+  top: 10rpx;
+  right: 16rpx;
+  font-size: 30rpx;
+}
+
+.training-level-card--hiit .training-level-card__glow {
+  right: -12rpx;
+  bottom: -70rpx;
+  width: 148rpx;
+  height: 148rpx;
+}
+
+.training-level-card--stair .training-level-card__glow {
+  right: -54rpx;
+  bottom: -38rpx;
+  width: 210rpx;
+  height: 128rpx;
+  border-radius: 64rpx 0 0 0;
+}
+
 .training-level-card__poster-mark {
   position: relative;
   z-index: 1;
   color: rgba(37, 47, 61, 0.72);
-  font-size: 72rpx;
+  font-size: 60rpx;
   line-height: 1;
   font-weight: 900;
 }
 
 .training-level-card__poster-icon {
   position: absolute;
-  top: 16rpx;
-  right: 18rpx;
+  top: 12rpx;
+  right: 14rpx;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 42rpx;
+  font-size: 34rpx;
   line-height: 1;
   font-weight: 900;
 }
 
 .training-level-card__poster-steps {
   position: absolute;
-  right: 24rpx;
-  bottom: 18rpx;
+  right: 18rpx;
+  bottom: 14rpx;
   display: flex;
   align-items: flex-end;
   gap: 8rpx;
@@ -271,11 +329,11 @@ function handleChoose() {
 
 .training-level-card__copy {
   display: flex;
-  max-width: 400rpx;
-  min-height: 154rpx;
+  max-width: 420rpx;
+  min-height: 126rpx;
   flex-direction: column;
-  gap: 14rpx;
-  padding-top: 10rpx;
+  gap: 10rpx;
+  padding-top: 4rpx;
 }
 
 .training-level-card__kicker {
@@ -284,7 +342,7 @@ function handleChoose() {
   max-width: 100%;
   align-items: center;
   justify-content: center;
-  padding: 10rpx 16rpx;
+  padding: 8rpx 14rpx;
   border-radius: 9999px;
   background: rgba(247, 239, 223, 0.92);
   color: #8a6f52;
@@ -296,7 +354,7 @@ function handleChoose() {
 .training-level-card__title {
   display: block;
   color: #243244;
-  font-size: 44rpx;
+  font-size: 38rpx;
   line-height: 1.18;
   font-weight: 900;
   letter-spacing: -0.04em;
@@ -305,8 +363,8 @@ function handleChoose() {
 .training-level-card__description {
   display: block;
   color: #6d7a8b;
-  font-size: 27rpx;
-  line-height: 1.58;
+  font-size: 24rpx;
+  line-height: 1.5;
   font-weight: 700;
 }
 
@@ -317,8 +375,8 @@ function handleChoose() {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 92rpx;
-  margin-top: 16rpx;
+  min-height: 80rpx;
+  margin-top: 4rpx;
   border: 0;
   border-radius: 9999px;
   padding: 0 24rpx;

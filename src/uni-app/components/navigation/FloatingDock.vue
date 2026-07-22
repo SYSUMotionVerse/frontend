@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+
 type DockTab = 'home' | 'playground' | 'growth'
-type DockIcon = 'home' | 'spark' | 'sprout'
+type DockIcon = 'home-filled' | 'fire-filled' | 'medal-filled'
 
 const props = defineProps<{
   activeTab: DockTab
@@ -15,19 +17,19 @@ const dockItems: Array<{
   {
     key: 'home',
     label: '首页',
-    icon: 'home',
+    icon: 'home-filled',
     url: '/pages/training/home'
   },
   {
     key: 'playground',
     label: '游乐场',
-    icon: 'spark',
+    icon: 'fire-filled',
     url: '/pages/training/select'
   },
   {
     key: 'growth',
     label: '成长',
-    icon: 'sprout',
+    icon: 'medal-filled',
     url: '/pages/growth/index'
   }
 ]
@@ -41,23 +43,7 @@ const dockItems: Array<{
         class="floating-dock__item floating-dock__item--active"
       >
         <view class="floating-dock__icon floating-dock__icon--active">
-          <view class="floating-dock__glyph" :class="`floating-dock__glyph--${item.icon}`">
-            <template v-if="item.icon === 'home'">
-              <view class="floating-dock__home-roof" />
-              <view class="floating-dock__home-body" />
-            </template>
-
-            <template v-else-if="item.icon === 'spark'">
-              <view class="floating-dock__spark-core" />
-              <view class="floating-dock__spark-star" />
-            </template>
-
-            <template v-else>
-              <view class="floating-dock__sprout-stem" />
-              <view class="floating-dock__sprout-leaf floating-dock__sprout-leaf--left" />
-              <view class="floating-dock__sprout-leaf floating-dock__sprout-leaf--right" />
-            </template>
-          </view>
+          <uni-icons :type="item.icon" size="32" color="#ffffff" />
         </view>
         <text class="floating-dock__label floating-dock__label--active">{{ item.label }}</text>
       </view>
@@ -70,23 +56,7 @@ const dockItems: Array<{
         :url="item.url"
       >
         <view class="floating-dock__icon">
-          <view class="floating-dock__glyph" :class="`floating-dock__glyph--${item.icon}`">
-            <template v-if="item.icon === 'home'">
-              <view class="floating-dock__home-roof" />
-              <view class="floating-dock__home-body" />
-            </template>
-
-            <template v-else-if="item.icon === 'spark'">
-              <view class="floating-dock__spark-core" />
-              <view class="floating-dock__spark-star" />
-            </template>
-
-            <template v-else>
-              <view class="floating-dock__sprout-stem" />
-              <view class="floating-dock__sprout-leaf floating-dock__sprout-leaf--left" />
-              <view class="floating-dock__sprout-leaf floating-dock__sprout-leaf--right" />
-            </template>
-          </view>
+          <uni-icons :type="item.icon" size="22" color="#7f95b2" />
         </view>
         <text class="floating-dock__label">{{ item.label }}</text>
       </navigator>

@@ -79,6 +79,30 @@ const studentBackendSync = {
     video_file: 'https://cdn.example.com/wushu.mp4',
     duration: 42
   }),
+  loadVisualExerciseArrangement: vi.fn().mockResolvedValue({
+    id: 3,
+    title: '武术基本功入门',
+    exercise_type: 'MARTIAL_ARTS',
+    item_count: 1,
+    total_duration: 42,
+    is_active: true,
+    order: 1,
+    items: [{
+      id: 31,
+      video_id: 9,
+      video: {
+        id: 9,
+        title: '马步冲拳',
+        exercise_type: 'MARTIAL_ARTS',
+        video_file: 'https://cdn.example.com/wushu.mp4',
+        duration: 42
+      },
+      expected_duration: 42,
+      countdown_duration: 0,
+      rest_duration: 0,
+      order: 1
+    }]
+  }),
   syncStairSession: vi.fn().mockResolvedValue({ synced: true }),
   loadGrowthHistory: vi.fn().mockResolvedValue({
     assessments: [
@@ -310,11 +334,36 @@ describe('page-level backend sync wiring', () => {
       video_file: 'https://cdn.example.com/wushu.mp4',
       duration: 42
     })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 3,
+      title: '武术基本功入门',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 42,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 31,
+        video_id: 9,
+        video: {
+          id: 9,
+          title: '马步冲拳',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/wushu.mp4',
+          duration: 42
+        },
+        expected_duration: 42,
+        countdown_duration: 0,
+        rest_duration: 0,
+        order: 1
+      }]
+    })
 
     ;(globalThis as typeof globalThis & { uni: Record<string, ReturnType<typeof vi.fn>> }).uni = {
       redirectTo: vi.fn().mockResolvedValue(undefined),
       navigateTo: vi.fn().mockResolvedValue(undefined),
-      reLaunch: vi.fn().mockResolvedValue(undefined)
+      reLaunch: vi.fn().mockResolvedValue(undefined),
+      request: vi.fn()
     }
   })
 
@@ -361,6 +410,18 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().reLaunch).toHaveBeenCalledWith({
       url: '/pages/training/home'
     })
+  })
+
+  it('shows a retry state when startup routing fails', async () => {
+    currentUni().reLaunch.mockRejectedValue(new Error('reLaunch failed'))
+
+    const StartupPage = (await import('../uni-app/pages/access/startup.vue')).default
+    const wrapper = mount(StartupPage)
+    await flushPromises()
+
+    expect(currentUni().reLaunch).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('连接失败')
+    expect(wrapper.find('.retry-button').exists()).toBe(true)
   })
 
   it('retries bootstrap once and then shows an error state', async () => {
@@ -797,7 +858,65 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
-  it('blocks visual completion until the actual routed teaching video ends', async () => {
+  it('automatically submits and opens feedback after the final arranged action', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 3,
+      title: '武术基本功入门',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 42,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 31,
+        video_id: 9,
+        video: {
+          id: 9,
+          title: '马步冲拳',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/wushu.mp4',
+          standard_data_url: 'https://cdn.example.com/wushu.json',
+          duration: 42
+        },
+        expected_duration: 42,
+        countdown_duration: 0,
+        rest_duration: 0,
+        order: 1
+      }]
+    })
+    ;(globalThis as typeof globalThis & {
+      uni: { request: ReturnType<typeof vi.fn> }
+    }).uni.request.mockImplementation(({ success }) => {
+      success({
+        statusCode: 200,
+        data: {
+          action_id: 'wushu-punch',
+          action_type: 'repetitive',
+          angle_unit: 'radian',
+          angle_names: [
+            'left_elbow',
+            'right_elbow',
+            'left_shoulder',
+            'right_shoulder',
+            'left_hip',
+            'right_hip',
+            'left_knee',
+            'right_knee',
+            'torso_rotation'
+          ],
+          standard_sequence: [[null, null, null, null, null, null, Math.PI / 2, null, null]],
+          angle_rules: {
+            left_knee: {
+              enabled: true,
+              weight: 1,
+              tolerance: 0.35,
+              feedback: { too_small: '', too_large: '' }
+            }
+          }
+        }
+      })
+    })
     studentBackendSync.syncVisualSession.mockResolvedValue({
       synced: true,
       record: {
@@ -816,20 +935,17 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            props: ['videoUrl', 'canComplete'],
-            emits: ['videoTimeUpdate', 'videoEnded', 'complete'],
-            methods: {
-              watchVideo() {
-                for (let second = 0; second <= 42; second += 1) {
-                  this.$emit('videoTimeUpdate', { detail: { currentTime: second } })
-                }
-                this.$emit('videoEnded', { detail: { currentTime: 42 } })
-              }
-            },
+            props: ['videoUrl'],
+            emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startTraining', 'poseResult'],
             template: `<div>
               <span class="video-url">{{ videoUrl }}</span>
-              <button class="complete-visual-session" @click="$emit('complete')">complete</button>
-              <button class="end-video" @click="watchVideo">ended</button>
+              <button class="start-training" @click="$emit('startTraining')">start</button>
+              <button class="pose-result" @click="$emit('poseResult', {
+                angleFrame: {
+                  tsMs: 123,
+                  angles: { leftKnee: Math.PI / 2 }
+                }
+              })">pose</button>
             </div>`
           }
         }
@@ -837,22 +953,38 @@ describe('page-level backend sync wiring', () => {
     })
 
     await flushPromises()
-    await wrapper.get('.complete-visual-session').trigger('click')
+    await wrapper.get('.start-training').trigger('click')
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    vi.advanceTimersByTime(15000)
+    await flushPromises()
+    await wrapper.get('.pose-result').trigger('click')
+    vi.advanceTimersByTime(41000)
     await flushPromises()
 
     expect(studentBackendSync.syncVisualSession).not.toHaveBeenCalled()
     expect(store.completeTrainingSession).not.toHaveBeenCalled()
 
-    await wrapper.get('.end-video').trigger('click')
-    await flushPromises()
-    await wrapper.get('.complete-visual-session').trigger('click')
+    vi.advanceTimersByTime(1000)
     await flushPromises()
 
-    expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith({
+    expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: expect.any(String),
       modality: 'wushu',
-      durationSeconds: 42
-    })
+      durationSeconds: 42,
+      videoId: 9,
+      score: 100,
+      comment: '教学视频已完成，本次动作评分 100 分，整体动作完成稳定。',
+      poseAnalysis: expect.objectContaining({
+        scoringSource: 'client',
+        scoringVersion: 'action-scoring-ts-v1',
+        actionScores: [expect.objectContaining({
+          actionId: 'wushu-punch',
+          score: 100,
+          frameCount: 1
+        })]
+      })
+    }))
     expect(store.completeTrainingSession).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: expect.stringMatching(/^visual-/),
@@ -862,12 +994,12 @@ describe('page-level backend sync wiring', () => {
       })
     )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
-      url: '/pages/training/short-questionnaire'
+      url: expect.stringMatching(/^\/pages\/training\/feedback\?sessionId=visual-/)
     })
   })
 
   it('blocks visual completion when the backend has no playable video', async () => {
-    studentBackendSync.loadVisualExerciseVideo.mockResolvedValue(null)
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue(null)
 
     const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
     const wrapper = mount(VisualSessionPage, {

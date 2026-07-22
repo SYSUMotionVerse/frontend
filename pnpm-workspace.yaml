@@ -1,3 +1,5 @@
+allowBuilds:
+  '@parcel/watcher': false
 # Audit ignore list — see "依赖审计例外" in docs/mini-program-production-release.md
 # for full justification, expiry conditions, and invalidation triggers.
 #

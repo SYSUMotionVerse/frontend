@@ -13,5 +13,5 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["vitest/globals", "node", "vite/client", "@dcloudio/types"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "vite.config.ts", "uno.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "vite.config.ts", "vite.action-tool.config.ts", "uno.config.ts"]
 }

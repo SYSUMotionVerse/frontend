@@ -128,7 +128,7 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
   flex-direction: column;
   align-items: center;
   gap: 16rpx;
-  padding: 44rpx 36rpx;
+  padding: 32rpx;
   border-radius: 36rpx;
   border: 4rpx solid rgba(137, 207, 255, 0.24);
   text-align: center;
@@ -138,8 +138,8 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
-  height: 88rpx;
+  width: 72rpx;
+  height: 72rpx;
   border-radius: 9999px;
   background: rgba(137, 207, 255, 0.18);
   border: 4rpx solid rgba(137, 207, 255, 0.24);
@@ -148,7 +148,7 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
 .short-questionnaire-form__hero-title {
   display: block;
   color: #1A202C;
-  font-size: 44rpx;
+  font-size: 40rpx;
   line-height: 1.15;
   font-weight: 900;
 }
@@ -156,7 +156,7 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
 .short-questionnaire-form__hero-copy {
   display: block;
   color: #64748B;
-  font-size: 30rpx;
+  font-size: 24rpx;
   line-height: 1.5;
   font-weight: 700;
 }

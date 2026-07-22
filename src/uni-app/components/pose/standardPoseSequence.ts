@@ -77,7 +77,12 @@ function toPointMap<T extends { name?: string }>(points: T[] | undefined) {
   return new Map(
     (points ?? [])
       .filter((point): point is T & { name: string } => typeof point?.name === 'string')
-      .map(point => [point.name, point])
+      .flatMap(point => {
+        const camelCaseName = point.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
+        return camelCaseName === point.name
+          ? [[point.name, point] as const]
+          : [[point.name, point] as const, [camelCaseName, point] as const]
+      })
   )
 }
 

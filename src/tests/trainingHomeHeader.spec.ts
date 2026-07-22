@@ -25,4 +25,15 @@ describe('training home header', () => {
     expect(wrapper.get('.home-header__avatar').attributes('src')).toContain('data:image/svg+xml')
     expect(wrapper.emitted('chooseWechatAvatar')).toBeUndefined()
   })
+
+  it('keeps reminder authorization attached to the notification bell', async () => {
+    const wrapper = mountHeader({
+      showReminderControl: true,
+      reminderStatus: 'not_requested'
+    })
+
+    expect(wrapper.get('.home-header__reminder-action').text()).toContain('开提醒')
+    await wrapper.get('.home-header__reminder-action').trigger('click')
+    expect(wrapper.emitted('authorizeReminders')).toHaveLength(1)
+  })
 })

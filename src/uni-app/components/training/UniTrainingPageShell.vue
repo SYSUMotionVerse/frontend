@@ -31,7 +31,14 @@ const props = withDefaults(defineProps<{
         'training-shell__inner--fit-viewport': props.fitViewport
       }"
     >
-      <slot />
+      <view v-if="props.fitViewport" class="training-shell__content">
+        <slot />
+      </view>
+      <transition v-else name="shell-enter" appear>
+        <view class="training-shell__content">
+          <slot />
+        </view>
+      </transition>
     </view>
     <FloatingDock v-if="props.showDock" :active-tab="props.dockTab" />
   </view>
@@ -48,6 +55,7 @@ const props = withDefaults(defineProps<{
 
 .training-shell--no-dock {
   padding: 24rpx 0 0;
+  overflow-y: auto;
 }
 
 .training-shell--fit-viewport {
@@ -93,9 +101,28 @@ const props = withDefaults(defineProps<{
 }
 
 .training-shell__inner--no-dock {
-  height: calc(100vh - 24rpx);
+  min-height: calc(100vh - 24rpx);
+  height: auto;
   max-width: none;
   gap: 0;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.training-shell__content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.shell-enter-enter-active {
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+.shell-enter-enter-from {
+  opacity: 0;
+  transform: translateY(12rpx);
 }
 </style>

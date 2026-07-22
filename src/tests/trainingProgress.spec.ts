@@ -93,6 +93,18 @@ describe('authoritative training progress', () => {
     })
   })
 
+  it('reuses fresh training progress rather than requesting again on a home return', async () => {
+    const { useTrainingProgress } = await import('../uni-app/composables/useTrainingProgress')
+    const progress = useTrainingProgress()
+    progress.invalidate()
+    loadTrainingProgress.mockClear()
+
+    await progress.refresh()
+    await progress.refresh()
+
+    expect(loadTrainingProgress).toHaveBeenCalledTimes(1)
+  })
+
   it('drops stale ready data when a later progress refresh fails', async () => {
     const { useTrainingProgress } = await import('../uni-app/composables/useTrainingProgress')
     const progress = useTrainingProgress()
@@ -101,8 +113,8 @@ describe('authoritative training progress', () => {
     expect(progress.state.value.status).toBe('ready')
 
     loadTrainingProgress.mockRejectedValueOnce(new Error('network unavailable'))
-    const refresh = progress.refresh()
-    expect(progress.state.value).toEqual({ status: 'loading' })
+    const refresh = progress.refresh({ force: true })
+    expect(progress.state.value.status).toBe('ready')
     await refresh
 
     expect(progress.state.value).toEqual({
@@ -112,16 +124,15 @@ describe('authoritative training progress', () => {
     expect('progress' in progress.state.value).toBe(false)
   })
 
-  it('renders backend-provided modality state on the training home page', async () => {
-    const TrainingHomePage = (await import('../uni-app/pages/training/home.vue')).default
-    const wrapper = mount(TrainingHomePage, {
+  it('marks backend-provided modality state directly on each playground lane', async () => {
+    const TrainingSelectPage = (await import('../uni-app/pages/training/select.vue')).default
+    const { useTrainingProgress } = await import('../uni-app/composables/useTrainingProgress')
+    useTrainingProgress().invalidate()
+    const wrapper = mount(TrainingSelectPage, {
       global: {
         stubs: {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
-          TrainingHomeHeader: true,
-          TrainingHomeQuestPanel: true,
-          TrainingHomeFeatureCard: true,
-          TrainingHomeCoachCard: true
+          TrainingHomeHeader: true
         }
       }
     })
@@ -129,11 +140,9 @@ describe('authoritative training progress', () => {
     await flushPromises()
 
     expect(loadTrainingProgress).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('.progress-card').text()).toContain('1/3')
-    expect(wrapper.get('.progress-card').text()).toContain('武术跟练')
-    expect(wrapper.get('.progress-card').text()).toContain('已完成')
-    expect(wrapper.get('.progress-card').text()).toContain('HIIT 跟练')
-    expect(wrapper.get('.progress-card').text()).toContain('未完成')
-    expect(wrapper.get('.progress-card').text()).toContain('本周达标 2 天')
+    expect(wrapper.get('.select-page__launch-list').text()).toContain('武术（Wushu）')
+    expect(wrapper.get('.select-page__launch-list').text()).toContain('已完成')
+    expect(wrapper.get('.select-page__launch-list').text()).toContain('HIIT Blast')
+    expect(wrapper.get('.select-page__launch-list').text()).toContain('待完成')
   })
 })

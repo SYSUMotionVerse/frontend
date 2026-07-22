@@ -1,71 +1,104 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
-import TrainingModeCard from '../../../components/training/TrainingModeCard.vue'
 import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useStationNotifications } from '../../composables/useStationNotifications'
+import { useTrainingProgress } from '../../composables/useTrainingProgress'
+import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
 
 type TrainingModeSummary = {
   modality: TrainingModality
   title: string
-  description: string
   duration: string
   difficulty: string
-  cardIndex: number
-  cardOffsetClass: string
-  floatClass: string
-  floatText: string
+  actionHint: string
+  routeLabel: string
+  icon: string
+  tone: 'wushu' | 'hiit' | 'stair'
+  iconColor: string
 }
 
 const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'wushu',
     title: '武术（Wushu）',
-    description: '跟着镜头提示舒展开动作，找到发力和节奏感。',
     duration: '10 分钟',
     difficulty: '中等',
-    cardIndex: 0,
-    cardOffsetClass: 'select-page__lane-item--flush',
-    floatClass: 'select-page__float-block--spark',
-    floatText: '流'
+    actionHint: '跟镜头出招',
+    routeLabel: '镜头跟练',
+    icon: 'camera-filled',
+    tone: 'wushu',
+    iconColor: '#c76b5b'
   },
   {
     modality: 'hiit',
     title: 'HIIT Blast',
-    description: '用短促高能的间歇冲刺，把身体一下子唤醒。',
     duration: '15 分钟',
     difficulty: '挑战',
-    cardIndex: 1,
-    cardOffsetClass: 'select-page__lane-item--pull-right',
-    floatClass: 'select-page__float-block--leaf',
-    floatText: '芽'
+    actionHint: '开始间歇冲刺',
+    routeLabel: '3 轮间歇',
+    icon: 'fire-filled',
+    tone: 'hiit',
+    iconColor: '#2b7cb8'
   },
   {
     modality: 'stair',
     title: '跑楼梯（Stairs）',
-    description: '配合传感器做轻快登阶，简单直接地把心率提起来。',
     duration: '8 分钟',
     difficulty: '轻松',
-    cardIndex: 2,
-    cardOffsetClass: 'select-page__lane-item--pull-left',
-    floatClass: 'select-page__float-block--sun',
-    floatText: '跃'
+    actionHint: '拿起手机登阶',
+    routeLabel: '传感器记录',
+    icon: 'navigate-filled',
+    tone: 'stair',
+    iconColor: '#a76c1c'
   }
 ]
 
 const store = useStudentStore()
+const trainingProgress = useTrainingProgress()
+const stationNotifications = useStationNotifications()
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
+const {
+  progress,
+  reminderLabel
+} = useTrainingHomeProgressViewModel({
+  progressState: trainingProgress.state,
+  displayName
+})
 
-const reminderLabel = computed(() =>
-  store.state.dailyAdherence.reminderEligible ? '18:00 提醒中' : '今日已达标'
-)
+onShow(() => {
+  void Promise.all([
+    trainingProgress.refresh(),
+    stationNotifications.refresh()
+  ])
+})
+
+const launchModes = computed(() => {
+  const completionByModality = new Map(
+    (progress.value?.modalities ?? []).map(item => [item.id, item.completed])
+  )
+
+  return trainingModes.map(mode => ({
+    ...mode,
+    completed: completionByModality.get(mode.modality) ?? false
+  }))
+})
+
+const heroCopy = computed(() => {
+  if (progress.value?.goalCompleted) {
+    return '今天的三条跑道都点亮了，想继续练哪一条都可以。'
+  }
+  return '从还没点亮的赛道开始，直接开练。'
+})
+
 function chooseMode(modality: TrainingModality) {
   if (modality === 'stair') {
-    void uni.navigateTo({
-      url: '/pages/training/stair-session'
-    })
+    void uni.navigateTo({ url: '/pages/training/stair-session' })
     return
   }
 
@@ -81,50 +114,60 @@ function chooseMode(modality: TrainingModality) {
       <TrainingHomeHeader
         :display-name="displayName"
         :reminder-label="reminderLabel"
-        mini-tag="SELECT A SNACK"
-        title="准备开练了吗？"
-        title-pill="训练游乐场"
-        variant="compact"
+        :unread-count="stationNotifications.unreadCount.value"
+        :show-headline="false"
+        mini-tag="训练游乐场"
+        variant="home"
+        @open-notifications="stationNotifications.openList"
       />
 
-      <view class="select-page__trail select-page__trail--top" />
-      <view class="select-page__trail select-page__trail--bottom" />
-
       <view class="select-page__hero">
-        <text class="select-page__hero-copy">
-          今天想挑战哪一种训练小零食？每一关都很短，但会让身体马上热起来。
-        </text>
+        <text class="select-page__hero-copy">{{ heroCopy }}</text>
       </view>
 
-      <view class="select-page__lane">
-        <view
-          v-for="mode in trainingModes"
+      <view class="select-page__launch-list" aria-label="选择并开始训练">
+        <button
+          v-for="mode in launchModes"
           :key="mode.modality"
-          class="select-page__lane-item"
-          :class="mode.cardOffsetClass"
+          :class="[
+            'select-page__launch-action',
+            `select-page__launch-action--${mode.tone}`
+          ]"
+          form-type="button"
+          type="button"
+          @click="chooseMode(mode.modality)"
         >
-          <view class="select-page__float-block" :class="mode.floatClass">
-            <text>{{ mode.floatText }}</text>
+          <view :class="['select-page__launch-mark', `select-page__launch-mark--${mode.tone}`]">
+            <uni-icons :type="mode.icon" size="30" :color="mode.iconColor" />
           </view>
-
-          <TrainingModeCard
-            :card-index="mode.cardIndex"
-            :description="mode.description"
-            :difficulty="mode.difficulty"
-            :duration="mode.duration"
-            :modality="mode.modality"
-            :title="mode.title"
-            @choose="chooseMode"
-          />
-        </view>
+          <view class="select-page__launch-copy">
+            <view class="select-page__launch-title-row">
+              <text class="select-page__launch-title">{{ mode.title }}</text>
+              <text
+                class="select-page__launch-completion"
+                :class="{ 'select-page__launch-completion--done': mode.completed }"
+              >
+                {{ mode.completed ? '已完成' : '待完成' }}
+              </text>
+            </view>
+            <text class="select-page__launch-hint">{{ mode.actionHint }}</text>
+            <view class="select-page__launch-route">
+              <text>{{ mode.routeLabel }}</text>
+              <view :class="['select-page__launch-trail', `select-page__launch-trail--${mode.tone}`]">
+                <view v-for="step in 3" :key="step" class="select-page__launch-trail-step" />
+              </view>
+            </view>
+          </view>
+          <view class="select-page__launch-meta">
+            <text>{{ mode.duration }}</text>
+            <text>{{ mode.difficulty }}</text>
+          </view>
+          <uni-icons type="right" size="18" :color="mode.iconColor" />
+        </button>
       </view>
 
-      <view class="select-page__streak-card">
-        <view class="select-page__streak-badge">
-          <text>🔥</text>
-        </view>
-        <text class="select-page__streak-title">你正处在热身连击里</text>
-        <text class="select-page__streak-copy">再完成 1 次训练，就能点亮 3 天连击。</text>
+      <view class="select-page__streak-note">
+        <text>完成任一训练后，将更新今日达标状态。</text>
       </view>
     </view>
   </UniTrainingPageShell>
@@ -135,152 +178,267 @@ function chooseMode(modality: TrainingModality) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 44rpx;
-  padding-bottom: 54rpx;
-}
-
-.select-page__trail {
-  position: absolute;
-  right: 12rpx;
-  width: 132rpx;
-  border-radius: 28rpx;
-  background: rgba(249, 236, 210, 0.66);
-  pointer-events: none;
-}
-
-.select-page__trail--top {
-  top: 332rpx;
-  height: 380rpx;
-}
-
-.select-page__trail--bottom {
-  top: 946rpx;
-  right: 34rpx;
-  width: 88rpx;
-  height: 300rpx;
-  background: rgba(255, 244, 224, 0.74);
+  gap: 40rpx;
+  padding-bottom: 44rpx;
 }
 
 .select-page__hero {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14rpx;
-  padding: 0 8rpx 8rpx;
+  padding: 0 8rpx;
 }
 
 .select-page__hero-copy {
   display: block;
-  max-width: 580rpx;
   color: #667588;
   font-size: 26rpx;
-  line-height: 1.58;
   font-weight: 700;
+  line-height: 1.58;
 }
 
-.select-page__lane {
+.select-page__launch-list {
   display: flex;
   flex-direction: column;
-  gap: 52rpx;
+  gap: 48rpx;
 }
 
-.select-page__lane-item {
+.select-page__launch-action {
   position: relative;
   display: flex;
   width: 100%;
-  flex-direction: column;
-}
-
-.select-page__lane-item--flush {
-  padding-right: 32rpx;
-}
-
-.select-page__lane-item--pull-right {
-  padding-left: 40rpx;
-}
-
-.select-page__lane-item--pull-left {
-  padding-right: 28rpx;
-}
-
-.select-page__float-block {
-  position: absolute;
-  top: 64rpx;
-  right: 6rpx;
-  z-index: 2;
-  display: flex;
-  width: 126rpx;
-  height: 126rpx;
+  min-height: 176rpx;
   align-items: center;
-  justify-content: center;
-  border-radius: 26rpx;
-  box-shadow: 0 16rpx 32rpx rgba(37, 47, 61, 0.05);
-  font-size: 46rpx;
-  font-weight: 900;
+  gap: 18rpx;
+  padding: 30rpx;
+  border: none;
+  color: #203042;
+  overflow: hidden;
+  text-align: left;
+  transition: transform 160ms ease-out, opacity 160ms ease-out;
+}
+
+.select-page__launch-action::before {
+  position: absolute;
+  content: '';
+  opacity: 0.7;
   pointer-events: none;
 }
 
-.select-page__float-block--spark {
-  display: none;
+.select-page__launch-action::after { display: none; }
+
+.select-page__launch-action--wushu {
+  margin-right: 20rpx;
+  width: calc(100% - 20rpx);
+  border-radius: 46rpx 46rpx 46rpx 20rpx;
+  background: #fff0eb;
 }
 
-.select-page__float-block--leaf {
-  background: rgba(245, 238, 221, 0.96);
-  color: #69814a;
+.select-page__launch-action--wushu::before {
+  right: 124rpx;
+  bottom: -60rpx;
+  width: 104rpx;
+  height: 104rpx;
+  border: 8rpx solid rgba(231, 144, 134, 0.2);
+  border-radius: 9999px;
+  box-shadow: 36rpx -24rpx 0 -20rpx rgba(231, 144, 134, 0.4);
 }
 
-.select-page__float-block--sun {
-  top: 92rpx;
-  right: 18rpx;
-  width: 96rpx;
-  height: 148rpx;
-  border-radius: 52rpx 52rpx 18rpx 18rpx;
-  background: rgba(252, 232, 198, 0.94);
-  color: rgba(255, 255, 255, 0.85);
+.select-page__launch-action--hiit {
+  margin-left: 20rpx;
+  width: calc(100% - 20rpx);
+  border-radius: 24rpx 48rpx 24rpx 48rpx;
+  background: #edf8fd;
 }
 
-.select-page__streak-card {
+.select-page__launch-action--hiit::before {
+  right: 122rpx;
+  bottom: 20rpx;
+  width: 72rpx;
+  height: 12rpx;
+  border-radius: 9999px;
+  background: rgba(105, 169, 205, 0.22);
+  box-shadow: 20rpx -22rpx 0 -2rpx rgba(105, 169, 205, 0.2), 40rpx 20rpx 0 -1rpx rgba(105, 169, 205, 0.2);
+}
+
+.select-page__launch-action--stair {
+  margin-right: 12rpx;
+  width: calc(100% - 12rpx);
+  border-radius: 50rpx 22rpx 50rpx 50rpx;
+  background: #fff7e4;
+}
+
+.select-page__launch-action--stair::before {
+  right: 128rpx;
+  bottom: 12rpx;
+  width: 18rpx;
+  height: 26rpx;
+  border-radius: 8rpx 8rpx 0 0;
+  background: rgba(204, 153, 54, 0.22);
+  box-shadow: 22rpx -16rpx 0 rgba(204, 153, 54, 0.2), 44rpx -32rpx 0 rgba(204, 153, 54, 0.18);
+}
+
+.select-page__launch-action:active {
+  opacity: 0.76;
+  transform: scale(0.98);
+}
+
+.select-page__launch-action:active .select-page__launch-trail-step {
+  transform: translateY(-2rpx);
+}
+
+.select-page__launch-mark {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-  margin-top: 10rpx;
-  padding: 42rpx 36rpx;
-  border-radius: 34rpx;
-  background: linear-gradient(180deg, #ffd27a, #ffcc63);
-  box-shadow:
-    0 20rpx 42rpx rgba(222, 183, 95, 0.24),
-    0 10rpx 0 rgba(233, 183, 70, 0.28);
-  text-align: center;
-}
-
-.select-page__streak-badge {
-  display: inline-flex;
-  width: 74rpx;
-  height: 74rpx;
+  width: 76rpx;
+  height: 76rpx;
+  flex: none;
   align-items: center;
   justify-content: center;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.select-page__launch-mark--wushu {
+  border-radius: 30rpx 22rpx 30rpx 22rpx;
+  box-shadow: 0 6rpx 0 rgba(231, 144, 134, 0.16);
+}
+
+.select-page__launch-mark--hiit {
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #ff8758;
-  font-size: 36rpx;
-  box-shadow: 0 10rpx 24rpx rgba(255, 255, 255, 0.26);
+  box-shadow: 0 6rpx 0 rgba(105, 169, 205, 0.16);
 }
 
-.select-page__streak-title {
-  display: block;
-  color: #2f3746;
-  font-size: 34rpx;
-  line-height: 1.2;
+.select-page__launch-mark--stair {
+  border-radius: 24rpx 34rpx 18rpx 34rpx;
+  box-shadow: 0 6rpx 0 rgba(204, 153, 54, 0.16);
+}
+
+.select-page__launch-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5rpx;
+}
+
+.select-page__launch-title {
+  color: #203042;
+  font-size: 30rpx;
   font-weight: 900;
+  line-height: 1.24;
 }
 
-.select-page__streak-copy {
-  display: block;
-  color: rgba(47, 55, 70, 0.76);
-  font-size: 24rpx;
-  line-height: 1.5;
+.select-page__launch-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.select-page__launch-completion {
+  display: inline-flex;
+  min-height: 30rpx;
+  flex: none;
+  align-items: center;
+  padding: 0 8rpx;
+  border-radius: 9999px;
+  background: rgba(255, 139, 139, 0.16);
+  color: #c76b5b;
+  font-size: 16rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.select-page__launch-completion--done {
+  background: rgba(168, 230, 207, 0.42);
+  color: #4f9070;
+}
+
+.select-page__launch-hint {
+  color: #718096;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.select-page__launch-route {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 3rpx;
+  color: #718096;
+  font-size: 18rpx;
   font-weight: 800;
+  line-height: 1;
 }
 
+.select-page__launch-trail {
+  display: flex;
+  width: 48rpx;
+  height: 20rpx;
+  align-items: center;
+  gap: 5rpx;
+}
+
+.select-page__launch-trail-step {
+  display: block;
+  flex: none;
+}
+
+.select-page__launch-trail--wushu .select-page__launch-trail-step {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 9999px;
+  background: #e99d95;
+}
+
+.select-page__launch-trail--wushu .select-page__launch-trail-step:nth-child(2) {
+  transform: translateY(-5rpx);
+}
+
+.select-page__launch-trail--hiit {
+  align-items: flex-end;
+}
+
+.select-page__launch-trail--hiit .select-page__launch-trail-step {
+  width: 10rpx;
+  border-radius: 8rpx 8rpx 2rpx 2rpx;
+  background: #7db5d7;
+}
+
+.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(1) { height: 8rpx; }
+.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(2) { height: 18rpx; }
+.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(3) { height: 12rpx; }
+
+.select-page__launch-trail--stair {
+  align-items: flex-end;
+  gap: 2rpx;
+}
+
+.select-page__launch-trail--stair .select-page__launch-trail-step {
+  width: 14rpx;
+  border-radius: 6rpx 6rpx 0 0;
+  background: #d8a84e;
+}
+
+.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(1) { height: 7rpx; }
+.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(2) { height: 12rpx; }
+.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(3) { height: 18rpx; }
+
+.select-page__launch-meta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+  color: #718096;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.select-page__streak-note {
+  display: block;
+  padding: 4rpx 8rpx 0;
+  color: #718096;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1.5;
+}
 </style>

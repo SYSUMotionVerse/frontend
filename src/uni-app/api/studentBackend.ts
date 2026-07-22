@@ -20,6 +20,7 @@ import type {
   BackendExerciseType,
   BackendPsychologyRecord,
   BackendSyncResult,
+  ExerciseArrangementDetail,
   ExerciseVideoSummary,
   LongQuestionnaireSyncResult,
   LongQuestionnaireSyncInput,
@@ -181,20 +182,45 @@ export function resolveBackendExerciseType(
 }
 
 function resolveExerciseVideoUrl(video: ExerciseVideoSummary): ExerciseVideoSummary {
-  const source = video.video_file?.trim()
-  if (!source || /^https?:\/\//i.test(source) || !source.startsWith('/')) {
-    return {
-      ...video,
-      video_file: source ?? null
+  const resolveAbsoluteUrl = (value: string | null | undefined) => {
+    const source = value?.trim()
+    if (!source || /^https?:\/\//i.test(source) || !source.startsWith('/')) {
+      return source ?? null
     }
+    const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000/api'
+    const origin = configuredBaseUrl.match(/^(https?:\/\/[^/]+)/i)?.[1]
+    return origin ? `${origin}${source}` : source
   }
-
-  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000/api'
-  const origin = configuredBaseUrl.match(/^(https?:\/\/[^/]+)/i)?.[1]
 
   return {
     ...video,
-    video_file: origin ? `${origin}${source}` : source
+    video_file: resolveAbsoluteUrl(video.video_file),
+    standard_data_url: resolveAbsoluteUrl(video.standard_data_url)
+  }
+}
+
+function resolveAbsoluteAssetUrl(value: string | null | undefined) {
+  const source = value?.trim()
+  if (!source || /^https?:\/\//i.test(source) || !source.startsWith('/')) {
+    return source ?? null
+  }
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000/api'
+  const origin = configuredBaseUrl.match(/^(https?:\/\/[^/]+)/i)?.[1]
+  return origin ? `${origin}${source}` : source
+}
+
+function resolveExerciseArrangementUrls(
+  arrangement: ExerciseArrangementDetail
+): ExerciseArrangementDetail {
+  return {
+    ...arrangement,
+    items: [...arrangement.items]
+      .sort((left, right) => left.order - right.order)
+      .map(item => ({
+        ...item,
+        standard_data_url: resolveAbsoluteAssetUrl(item.standard_data_url),
+        video: resolveExerciseVideoUrl(item.video)
+      }))
   }
 }
 
@@ -588,17 +614,23 @@ export function createStudentBackendSync(
   async function submitPendingTrainingJob(submission: PendingTrainingSubmission) {
     await dependencies.ensureSession()
     if (submission.kind === 'visual') {
-      const exerciseType = resolveBackendExerciseType(submission.modality)
-      const videos = await dependencies.listExerciseVideos(exerciseType)
-      const video = videos.find(item => item.video_file?.trim()) ?? videos[0]
-      if (!video) {
-        throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+      let videoId = submission.videoId
+      if (!videoId) {
+        const exerciseType = resolveBackendExerciseType(submission.modality)
+        const videos = await dependencies.listExerciseVideos(exerciseType)
+        const video = videos.find(item => item.video_file?.trim()) ?? videos[0]
+        if (!video) {
+          throw new Error(`No backend exercise video is configured for ${exerciseType}.`)
+        }
+        videoId = video.id
       }
 
       return dependencies.createExerciseRecord({
-        video: video.id,
+        video: videoId,
         duration: submission.durationSeconds,
         training_session_id: submission.sessionId,
+        ...(submission.score !== undefined ? { score: submission.score } : {}),
+        ...(submission.comment !== undefined ? { comment: submission.comment } : {}),
         ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {})
       })
     }
@@ -782,6 +814,35 @@ export function createStudentBackendSync(
 
       return video ? resolveExerciseVideoUrl(video) : null
     },
+    async loadVisualExerciseArrangement(
+      modality: VisualSessionSyncInput['modality']
+    ): Promise<ExerciseArrangementDetail | null> {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      const arrangements = await dependencies.listExerciseArrangements(
+        resolveBackendExerciseType(modality)
+      )
+      const candidates = [...arrangements]
+        .filter(item => item.is_active !== false)
+        .sort((left, right) => left.order - right.order)
+
+      for (const candidate of candidates) {
+        const detail = resolveExerciseArrangementUrls(
+          await dependencies.getExerciseArrangement(candidate.id)
+        )
+        if (
+          detail.items.length > 0 &&
+          detail.items.every(item => item.video.video_file?.trim())
+        ) {
+          return detail
+        }
+      }
+
+      return null
+    },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
       if (!dependencies.isEnabled()) {
         return {
@@ -795,6 +856,9 @@ export function createStudentBackendSync(
         sessionId: input.sessionId,
         modality: input.modality,
         durationSeconds: input.durationSeconds,
+        ...(input.videoId ? { videoId: input.videoId } : {}),
+        ...(input.score !== undefined ? { score: input.score } : {}),
+        ...(input.comment !== undefined ? { comment: input.comment } : {}),
         ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
         queuedAt: new Date().toISOString()
       }

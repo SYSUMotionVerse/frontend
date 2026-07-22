@@ -83,6 +83,8 @@ describe('pending training submissions', () => {
         sessionId: 'valid',
         modality: 'wushu',
         durationSeconds: 45,
+        score: 82.5,
+        comment: '动作基本到位。',
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
       // malformed: missing sessionId
@@ -93,6 +95,8 @@ describe('pending training submissions', () => {
       { kind: 'unknown', sessionId: 'bad-kind', durationSeconds: 30, queuedAt: '2026-07-18T10:00:00.000Z' },
       // malformed: non-finite durationSeconds
       { kind: 'visual', sessionId: 'bad-dur', modality: 'hiit', durationSeconds: Infinity, queuedAt: '2026-07-18T10:00:00.000Z' },
+      // malformed: score outside the accepted range
+      { kind: 'visual', sessionId: 'bad-score', modality: 'hiit', durationSeconds: 30, score: 101, queuedAt: '2026-07-18T10:00:00.000Z' },
       // not an object
       'string',
       null,

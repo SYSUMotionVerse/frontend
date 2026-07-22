@@ -4,6 +4,7 @@ import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPane
 import { resolvePhysicalMetricsState } from '../../../domain/student/growth'
 import { studentBackendSync } from '../../api/studentBackend'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
+import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
@@ -24,8 +25,11 @@ onMounted(async () => {
 
 <template>
   <UniGrowthPageShell dock-tab="growth">
-    <h1 class="detail-page__title">体能指标详情</h1>
-    <p class="detail-page__subtitle">导入的体测数据与趋势快照。</p>
+    <UniPageHeading
+      eyebrow="成长"
+      title="体能指标"
+      description="导入的体测数据与趋势快照。"
+    />
 
     <section class="detail-page__card">
       <p v-if="!metricsState.hasMetrics" class="detail-page__hint">{{ emptyStateHint }}</p>
@@ -35,8 +39,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.detail-page__title { margin: 0; color: #1d366b; }
-.detail-page__subtitle { margin: 0; color: #576988; font-size: 0.88rem; }
-.detail-page__card { border: 1px solid #dbe5f7; border-radius: 12px; padding: 0.9rem; background: #fff; }
-.detail-page__hint { margin: 0 0 0.65rem; color: #5a6b89; font-size: 0.8rem; }
+.detail-page__card { border: 2rpx solid rgba(255, 211, 132, 0.3); border-radius: 28rpx; padding: 32rpx; background: rgba(255, 255, 255, 0.94); }
+.detail-page__hint { margin: 0 0 20rpx; color: #718096; font-size: 22rpx; }
 </style>

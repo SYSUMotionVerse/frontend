@@ -398,7 +398,7 @@ const metricCards = computed<
 
 .stair-panel__hero-title {
   color: #1f2f47;
-  font-size: 76rpx;
+  font-size: 44rpx;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.05em;
@@ -467,7 +467,7 @@ const metricCards = computed<
 
 .stair-panel__countdown-value {
   color: #ff938f;
-  font-size: 128rpx;
+  font-size: 88rpx;
   line-height: 0.9;
   font-weight: 900;
   letter-spacing: -0.06em;
@@ -789,7 +789,7 @@ const metricCards = computed<
 
 .stair-panel__metric-value {
   color: #22324a;
-  font-size: 62rpx;
+  font-size: 44rpx;
   line-height: 0.95;
   font-weight: 900;
   letter-spacing: -0.05em;

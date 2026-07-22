@@ -59,8 +59,8 @@ defineProps<{
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  margin-top: 30rpx;
-  padding-top: 30rpx;
+  margin-top: 20rpx;
+  padding-top: 28rpx;
   border-top: 2rpx solid rgba(226, 232, 240, 0.86);
 }
 
@@ -82,7 +82,7 @@ defineProps<{
 
 .session-badges__title {
   display: block;
-  margin-top: 8rpx;
+  margin-top: 6rpx;
   color: #1A202C;
   font-size: 34rpx;
   font-weight: 900;

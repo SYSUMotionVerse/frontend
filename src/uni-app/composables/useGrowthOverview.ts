@@ -12,15 +12,62 @@ import type {
   StudentAdherenceData
 } from '../api/studentBackendTypes'
 import { useStudentStore } from './useStudentStore'
+import { createRequestCache } from './useRequestCache'
+
+const backendAssessments = shallowRef<GrowthAssessmentHistoryItem[] | null>(null)
+const backendSessions = shallowRef<GrowthTrainingHistoryItem[] | null>(null)
+const backendAdherence = shallowRef<StudentAdherenceData | null>(null)
+const backendPhysicalMetrics = shallowRef<GrowthPhysicalMetrics | null>(null)
+const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
+
+const growthOverviewCache = createRequestCache({
+  ttlMs: 5 * 60_000,
+  async load() {
+    const [history, adherence, physicalMetrics, visualScoreTrend] = await Promise.all([
+      studentBackendSync.loadGrowthHistory().catch(error => {
+        reportBackendSyncError('成长历史加载', error)
+        return null
+      }),
+      studentBackendSync.loadAdherenceData().catch(error => {
+        reportBackendSyncError('成长依从性加载', error)
+        return null
+      }),
+      studentBackendSync.loadPhysicalMetrics().catch(error => {
+        reportBackendSyncError('成长体测趋势加载', error)
+        return null
+      }),
+      studentBackendSync.loadVisualScoreTrend().catch(error => {
+        reportBackendSyncError('视觉训练得分趋势加载', error)
+        return null
+      })
+    ])
+
+    if (history) {
+      backendAssessments.value = history.assessments
+      backendSessions.value = history.trainingSessions
+    }
+    if (adherence) backendAdherence.value = adherence
+    if (physicalMetrics) backendPhysicalMetrics.value = physicalMetrics
+    if (visualScoreTrend) scoreTrend.value = visualScoreTrend
+  }
+})
+
+function resetBackendGrowthData() {
+  backendAssessments.value = null
+  backendSessions.value = null
+  backendAdherence.value = null
+  backendPhysicalMetrics.value = null
+  scoreTrend.value = null
+  growthOverviewCache.invalidate()
+}
+
+export function invalidateGrowthOverview() {
+  growthOverviewCache.invalidate()
+}
 
 export function useGrowthOverview() {
   const store = useStudentStore()
   const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
-  const backendAssessments = shallowRef<GrowthAssessmentHistoryItem[] | null>(null)
-  const backendSessions = shallowRef<GrowthTrainingHistoryItem[] | null>(null)
-  const backendAdherence = shallowRef<StudentAdherenceData | null>(null)
-  const backendPhysicalMetrics = shallowRef<GrowthPhysicalMetrics | null>(null)
-  const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
 
   const localAssessments = computed<GrowthAssessmentHistoryItem[]>(() =>
     Object.values(store.getSnapshot().longQuestionnaires)
@@ -109,45 +156,16 @@ export function useGrowthOverview() {
     ]
   })
 
-  async function loadGrowthOverview() {
-    const [history, adherence, physicalMetrics, visualScoreTrend] = await Promise.all([
-      studentBackendSync.loadGrowthHistory().catch(error => {
-        reportBackendSyncError('成长历史加载', error)
-        return null
-      }),
-      studentBackendSync.loadAdherenceData().catch(error => {
-        reportBackendSyncError('成长依从性加载', error)
-        return null
-      }),
-      studentBackendSync.loadPhysicalMetrics().catch(error => {
-        reportBackendSyncError('成长体测趋势加载', error)
-        return null
-      }),
-      studentBackendSync.loadVisualScoreTrend().catch(error => {
-        reportBackendSyncError('视觉训练得分趋势加载', error)
-        return null
-      })
-    ])
-
-    if (history) {
-      backendAssessments.value = history.assessments
-      backendSessions.value = history.trainingSessions
+  async function refresh(options: { force?: boolean } = {}) {
+    if (!studentBackendSync.isEnabled()) {
+      resetBackendGrowthData()
+      return
     }
-    if (adherence) {
-      backendAdherence.value = adherence
-    }
-    if (physicalMetrics) {
-      backendPhysicalMetrics.value = physicalMetrics
-    }
-    if (visualScoreTrend) {
-      scoreTrend.value = visualScoreTrend
-    }
+    await growthOverviewCache.get(options)
   }
 
   onMounted(() => {
-    if (studentBackendSync.isEnabled()) {
-      void loadGrowthOverview()
-    }
+    void refresh()
   })
 
   return {
@@ -159,6 +177,8 @@ export function useGrowthOverview() {
     scoreTrend,
     sessionBadges: computed(() => summary.value.sessionBadges),
     sessions,
-    summaryCards
+    summaryCards,
+    refresh,
+    invalidate: invalidateGrowthOverview
   }
 }
