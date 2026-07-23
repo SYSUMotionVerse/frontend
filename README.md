@@ -186,9 +186,9 @@ pnpm build:action-tool
 
 ## Appendix: Action Standard File Tool / 附录：动作标准文件工具
 
-The repository includes a local browser tool that extracts pose angles from standard-action videos and exports one schema 0.4 JSON file per video. Video decoding, BlazePose inference, and ZIP generation all run locally; the tool does not upload videos or results to the backend, OSS, or COS.
+The repository includes a local browser tool that extracts pose angles from standard-action videos and exports one schema 0.4 JSON file per video. The start/build command downloads the BlazePose model from the project CDN into the ignored `.tmp/action-tool-models/` cache, with `models/pose/` available as an offline fallback. Video decoding, BlazePose inference, and ZIP generation all run locally; the tool does not upload videos or results to the backend, OSS, or COS.
 
-仓库内置了一个本地浏览器工具，可从标准动作视频提取姿态角度，并为每个视频导出一个 schema 0.4 JSON 文件。视频解码、BlazePose 推理和 ZIP 生成全部在本机完成，不会把视频或结果上传到后端、OSS 或 COS。
+仓库内置了一个本地浏览器工具，可从标准动作视频提取姿态角度，并为每个视频导出一个 schema 0.4 JSON 文件。启动或构建命令会先从项目 CDN 下载 BlazePose 模型到 Git 忽略的 `.tmp/action-tool-models/` 缓存，`models/pose/` 目录作为离线回退。视频解码、BlazePose 推理和 ZIP 生成全部在本机完成，不会把视频或结果上传到后端、OSS 或 COS。
 
 Start the tool from the repository root:
 
