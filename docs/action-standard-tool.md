@@ -36,7 +36,7 @@ pnpm dev:action-tool
 http://127.0.0.1:4174/action-tool.html
 ```
 
-页面右上角显示“姿态模型就绪”后，工具可以开始分析视频。启动命令会先从项目 CDN 的 `blazepose-lite-v1` 版本下载模型到被 Git 忽略的 `.tmp/action-tool-models/`，再由本地工作台加载。你可以通过 `VITE_POSE_MODEL_BASE_URL` 指定其他 CDN 地址；仓库中的 `models/pose/` 作为 CDN 不可用时的离线回退。
+页面右上角显示“姿态模型就绪”后，工具会先从 GitHub Release 下载 `blazepose-lite-v1.zip` 到被 Git 忽略的 `.tmp/action-tool-models/`，再由本地工作台加载。你可以通过 `VITE_POSE_MODEL_ARCHIVE_URL` 指定其他公开 ZIP 地址；仓库中的 `models/pose/` 作为 GitHub 不可用时的离线回退。
 
 ## 生成动作文件
 
@@ -131,7 +131,7 @@ ZIP 中的每个视频对应一个 JSON 文件。文件名来自动作 ID，工�
 工具访问以下资源：
 
 - 你通过文件选择器导入的视频。
-- 项目 CDN 上的 BlazePose 模型文件。启动脚本会把它下载到本地缓存，再由浏览器从本地开发服务器读取；CDN 不可用时使用仓库中的 `models/pose/` 回退文件。
+- GitHub Release 中的 BlazePose 模型 ZIP。启动脚本会把它下载并解压到本地缓存，再由浏览器从本地开发服务器读取；GitHub 不可用时使用仓库中的 `models/pose/` 回退文件。
 - 浏览器内存中的姿态结果和生成的 JSON。
 
 工具不调用学生端后端 API，不需要登录，也不需要配置 OSS、COS 或请求域名白名单。关闭或刷新页面后，浏览器会释放当前视频队列；工具不会自动保存未导出的结果。
@@ -140,7 +140,7 @@ ZIP 中的每个视频对应一个 JSON 文件。文件名来自动作 ID，工�
 
 ### 页面显示“模型加载失败”
 
-确认 CDN 地址可以访问，或者确认本地回退文件 `models/pose/detector/model.json` 和 `models/pose/landmark_lite/model.json` 存在，然后重新运行 `pnpm dev:action-tool`。如果下载失败，检查 `VITE_POSE_MODEL_BASE_URL`、网络连接和 CDN 文件路径；工具在 WebGL 不可用时会尝试 CPU 后端。
+确认 GitHub Release 地址可以访问，或者确认本地回退文件 `models/pose/detector/model.json` 和 `models/pose/landmark_lite/model.json` 存在，然后重新运行 `pnpm dev:action-tool`。如果 GitHub 下载失败，可以设置 `VITE_POSE_MODEL_ARCHIVE_URL` 指向另一个公开 ZIP；不要关闭 TLS 校验。
 
 ### 页面显示“截取时间范围无效”
 

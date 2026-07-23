@@ -1,10 +1,18 @@
 import { access, copyFile, mkdir, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { unzipSync } from 'fflate'
+import { loadEnv } from 'vite'
 
-const DEFAULT_BASE_URL = 'https://cdn.sysusports.cn/pose/blazepose-lite-v1'
+const DEFAULT_ARCHIVE_URL =
+  'https://github.com/SYSUMotionVerse/frontend/releases/download/action-tool-model-blazepose-lite-v1/blazepose-lite-v1.zip'
 const projectRoot = resolve(import.meta.dirname, '..')
-const targetRoot = resolve(projectRoot, '.tmp/action-tool-models')
+const targetRoot = resolve(
+  projectRoot,
+  process.env.ACTION_TOOL_MODEL_CACHE_DIR || '.tmp/action-tool-models'
+)
 const localFallbackRoot = resolve(projectRoot, 'models/pose')
+const fileEnvironment = loadEnv('', projectRoot, '')
+const environment = { ...fileEnvironment, ...process.env }
 const files = [
   'detector/model.json',
   'detector/group1-shard1of2.bin',
@@ -44,16 +52,19 @@ async function copyLocalFallback() {
 }
 
 async function downloadModels() {
-  const baseUrl = (process.env.VITE_POSE_MODEL_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '')
-  console.log(`[action-tool] Downloading pose model from ${baseUrl}`)
+  const archiveUrl = environment.VITE_POSE_MODEL_ARCHIVE_URL?.trim() || DEFAULT_ARCHIVE_URL
+  console.log(`[action-tool] Downloading pose model archive from ${archiveUrl}`)
+  const response = await fetch(archiveUrl)
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText} while fetching model archive`)
+  const archive = unzipSync(new Uint8Array(await response.arrayBuffer()))
   for (const file of files) {
     const target = resolve(targetRoot, file)
     if (await exists(target) && (await stat(target)).size > 0) continue
-    const response = await fetch(`${baseUrl}/${file}`)
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText} while fetching ${file}`)
+    const body = archive[file] ?? archive[`pose/${file}`]
+    if (!body) throw new Error(`model archive is missing ${file}`)
     const temporary = `${target}.download`
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(temporary, new Uint8Array(await response.arrayBuffer()))
+    await writeFile(temporary, body)
     await rename(temporary, target)
   }
   console.log(`[action-tool] Pose model is ready at ${targetRoot}`)
@@ -64,7 +75,7 @@ try {
     try {
       await downloadModels()
     } catch (error) {
-      console.warn(`[action-tool] CDN download failed: ${error instanceof Error ? error.message : error}`)
+      console.warn(`[action-tool] GitHub model download failed: ${error instanceof Error ? error.message : error}`)
       if (!await copyLocalFallback()) throw error
     }
   } else {
@@ -72,7 +83,7 @@ try {
   }
 } catch (error) {
   console.error('[action-tool] Pose model is unavailable.')
-  console.error('Set VITE_POSE_MODEL_BASE_URL or provide models/pose for an offline fallback.')
+  console.error('Check GitHub access, set VITE_POSE_MODEL_ARCHIVE_URL, or provide models/pose for an offline fallback.')
   console.error(error)
   process.exitCode = 1
 }
