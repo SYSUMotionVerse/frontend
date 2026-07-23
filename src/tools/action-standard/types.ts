@@ -1,47 +1,27 @@
 import type { Pose } from '../../subpackages/training/components/pose/PoseDetectModel'
 
-export type ActionType = 'repetitive' | 'hold' | 'single'
 export type QueueStatus = 'pending' | 'analyzing' | 'ready' | 'error'
 
-export interface TtsCue {
+export interface ActionExportFrame {
+  frame_index: number
   time: number
-  text: string
+  landmarks_2d: Array<[number, number] | null>
+  landmark_visibility: Array<number | null>
+  angles: Array<number | null>
 }
 
-export interface AngleRule {
-  enabled: boolean
-  weight: number
-  tolerance: number
-  feedback: {
-    too_small: string
-    too_large: string
-  }
-}
-
-export interface ActionStandardFile {
-  schema_version: '0.4'
-  action_id: string
+export interface ActionExportFile {
+  schema_version: '0.5'
   action_name: string
-  action_type: ActionType
-  fps: number
-  angle_unit: 'radian'
+  landmark_names: string[]
   angle_names: string[]
-  standard_sequence: number[][]
-  angle_rules: Record<string, AngleRule>
-  tts_cues: TtsCue[]
+  frames: ActionExportFrame[]
   metadata: {
-    created_by: string
-    created_at: string
+    exported_by: string
+    exported_at: string
+    source_video: string
+    source_fps: number
     note: string
-    preprocessing_info: {
-      source_schema_version: '0.3'
-      target_fps: number
-      smoothing_enabled: boolean
-      smoothing_target: 'landmarks'
-      smoothing_method: 'moving_average'
-      smoothing_window: number
-      generated_from_landmarks: boolean
-    }
   }
 }
 
@@ -55,18 +35,12 @@ export interface ActionVideoItem {
   file: File
   objectUrl: string
   duration: number
-  trimStart: number
-  trimEnd: number
-  actionId: string
   actionName: string
-  actionType: ActionType
-  createdBy: string
   note: string
-  ttsCues: TtsCue[]
   status: QueueStatus
   progress: number
   detectedFrames: number
   totalFrames: number
   error: string
-  output: ActionStandardFile | null
+  output: ActionExportFile | null
 }

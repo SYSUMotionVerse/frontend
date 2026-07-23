@@ -43,7 +43,7 @@ function statusLabel(item: ActionVideoItem) {
 
     <label v-if="items.length === 0" class="empty-queue">
       <span class="empty-icon"><Film :size="24" aria-hidden="true" /></span>
-      <strong>选择标准动作视频</strong>
+      <strong>选择动作视频</strong>
       <span>可一次选择多个文件</span>
       <input class="sr-only" type="file" accept="video/*" multiple @change="onFiles" />
     </label>

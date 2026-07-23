@@ -96,6 +96,23 @@ describe('scoreAction', () => {
     expect(Number.isFinite(result.score)).toBe(true)
   })
 
+  it('normalizes raw configured weights only when calculating the score', () => {
+    const sequence = createSequence()
+    const standard = createStandard(sequence)
+    for (const name of ACTION_ANGLE_NAMES) {
+      standard.angle_rules[name]!.enabled = name === 'left_elbow' || name === 'left_shoulder'
+    }
+    standard.angle_rules.left_elbow!.weight = 1
+    standard.angle_rules.left_shoulder!.weight = 2
+
+    const result = scoreAction(standard, createMotion(sequence))
+
+    expect(result.angle_details.left_elbow?.weight).toBe(1)
+    expect(result.angle_details.left_shoulder?.weight).toBe(2)
+    expect(result.angle_details.left_elbow?.normalized_weight).toBeCloseTo(1 / 3)
+    expect(result.angle_details.left_shoulder?.normalized_weight).toBeCloseTo(2 / 3)
+  })
+
   it('uses DTW to align local timing differences', () => {
     const standardKnee = [0.4, 0.4, 0.8, 1.2, 1.6, 1.2, 0.8, 0.4]
     const warpedKnee = [0.4, 0.4, 0.4, 0.4, 0.8, 1.2, 1.6, 1.2, 0.8, 0.4]

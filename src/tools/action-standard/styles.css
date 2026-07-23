@@ -16,13 +16,16 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .topbar { height: 78px; display: flex; align-items: center; justify-content: space-between; padding: 0 36px; border-bottom: 1px solid #e5e9ef; background: #fff; }
-.brand-lockup, .topbar-actions, .queue-heading, .section-heading, .cue-heading, .progress-copy, .ready-summary, .batch-bar, .text-button, .primary-button, .secondary-button { display: flex; align-items: center; }
+.brand-lockup, .topbar-actions, .queue-heading, .section-heading, .cue-heading, .progress-copy, .ready-summary, .batch-bar, .text-button, .primary-button, .secondary-button, .exported-by-field { display: flex; align-items: center; }
 .brand-lockup { gap: 12px; }
 .brand-lockup h1 { margin: 0; color: #202b3a; font-size: 16px; line-height: 1.25; letter-spacing: -.01em; }
 .brand-lockup p { margin: 4px 0 0; color: #8692a2; font-size: 12px; }
 .brand-mark, .welcome-icon { display: grid; place-items: center; color: #fff; background: #4278a8; }
 .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
 .topbar-actions { gap: 12px; }
+.exported-by-field { gap: 7px; color: #69798e; font-size: 12px; font-weight: 650; }
+.exported-by-field input { width: 132px; min-height: 36px; padding: 7px 9px; color: #344359; border: 1px solid #dce3eb; border-radius: 7px; outline: 0; background: #fbfcfd; font-size: 12px; }
+.exported-by-field input:focus { border-color: #83a9c4; box-shadow: 0 0 0 3px rgba(66, 120, 168, .12); background: #fff; }
 .model-status { display: inline-flex; align-items: center; gap: 6px; color: #758196; font-size: 12px; margin-right: 8px; }
 .model-status--ready { color: #32856d; }
 .model-status--error { color: #b55c5b; }
@@ -112,6 +115,7 @@ h2 { margin: 0; color: #253244; font-size: 17px; font-weight: 700; letter-spacin
   body { min-width: 0; }
   .topbar { padding: 0 20px; }
   .topbar-actions .model-status { display: none; }
+  .exported-by-field span { display: none; }
   .workbench { width: calc(100% - 32px); grid-template-columns: 230px minmax(0, 1fr); gap: 16px; }
   .workspace-grid { grid-template-columns: 1fr; }
   .welcome-panel { grid-column: 2; }

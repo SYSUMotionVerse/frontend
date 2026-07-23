@@ -45,8 +45,8 @@ function formatDuration(value: number) {
     </div>
 
     <div v-else-if="item.status === 'ready'" class="ready-summary">
-      <strong>{{ item.output?.standard_sequence.length }} 帧</strong>
-      <span>角度序列已生成，可继续修改标注后重新分析</span>
+      <strong>{{ item.output?.frames.length }} 帧</strong>
+      <span>逐帧原始姿态数据已生成，可下载或修改信息后重新分析</span>
     </div>
 
     <button v-if="busy" class="secondary-button" type="button" @click="$emit('cancel')">

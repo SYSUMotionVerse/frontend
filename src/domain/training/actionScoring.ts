@@ -321,6 +321,7 @@ export function scoreAction(
     weightSum = weights.length
     warnings.push('可用角度的 weight 总和不大于 0，已按等权评分。')
   }
+  // Keep the source standard's raw weights intact and normalize only for this score.
   const normalizedWeights = weights.map(weight => weight / weightSum)
 
   const tolerances = candidates.map(({ name, rule }) => {

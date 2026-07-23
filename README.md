@@ -184,11 +184,11 @@ pnpm build:mp-weixin
 pnpm build:action-tool
 ```
 
-## Appendix: Action Standard File Tool / 附录：动作标准文件工具
+## Appendix: Action Export Tool / 附录：动作原始数据导出工具
 
-The repository includes a local browser tool that extracts pose angles from standard-action videos and exports one schema 0.4 JSON file per video. The start/build command downloads the BlazePose model archive from the project GitHub Release into the ignored `.tmp/action-tool-models/` cache, with `models/pose/` available as an offline fallback. Video decoding, BlazePose inference, and ZIP generation all run locally; the tool does not upload videos or results to the backend, OSS, or COS.
+The repository includes a local browser tool that analyzes every video frame with BlazePose and exports one schema 0.5 `action_export` JSON file per video. Each frame retains 2D landmarks, landmark visibility, and angles for a separate annotation tool to turn into `action_standard`. The start/build command downloads the BlazePose model archive into the ignored `.tmp/action-tool-models/` cache, with `models/pose/` available as an offline fallback. Video decoding, BlazePose inference, and ZIP generation all run locally; the tool does not upload videos or results to the backend, OSS, or COS.
 
-仓库内置了一个本地浏览器工具，可从标准动作视频提取姿态角度，并为每个视频导出一个 schema 0.4 JSON 文件。启动或构建命令会先从项目 GitHub Release 下载 BlazePose 模型 ZIP 到 Git 忽略的 `.tmp/action-tool-models/` 缓存，`models/pose/` 目录作为离线回退。视频解码、BlazePose 推理和 ZIP 生成全部在本机完成，不会把视频或结果上传到后端、OSS 或 COS。
+仓库内置了一个本地浏览器工具，可用 BlazePose 分析视频的每一帧，并为每个视频导出一个 schema 0.5 的 `action_export` JSON 文件。每帧保留二维关键点、可见度和角度，供独立标注工具生成 `action_standard`。启动或构建命令会先从项目 GitHub Release 下载 BlazePose 模型 ZIP 到 Git 忽略的 `.tmp/action-tool-models/` 缓存，`models/pose/` 目录作为离线回退。视频解码、BlazePose 推理和 ZIP 生成全部在本机完成，不会把视频或结果上传到后端、OSS 或 COS。
 
 Start the tool from the repository root:
 
@@ -198,17 +198,17 @@ Start the tool from the repository root:
 pnpm dev:action-tool
 ```
 
-Then open `http://127.0.0.1:4174/action-tool.html`. Import one or more videos, complete the action metadata and trim range, run the analysis, and use the export button to download all completed JSON files in one ZIP archive.
+Then open `http://127.0.0.1:4174/action-tool.html`. Import one or more videos, set each action name and note plus the shared exporter, run the analysis, and use the export button to download all completed JSON files in one ZIP archive.
 
-然后打开 `http://127.0.0.1:4174/action-tool.html`。导入一个或多个视频，填写动作信息和截取范围，运行分析，再通过导出按钮将所有已完成的 JSON 文件下载为一个 ZIP 压缩包。
+然后打开 `http://127.0.0.1:4174/action-tool.html`。导入一个或多个视频，分别填写动作名称与备注，再填写统一导出人，运行分析，再通过导出按钮将所有已完成的 JSON 文件下载为一个 ZIP 压缩包。
 
 The tool is independent of the WeChat Mini Program runtime. It does not require WeChat DevTools and is not limited by `touristappid`.
 
 该工具独立于微信小程序运行时，不需要微信开发者工具，也不受 `touristappid` 限制。
 
-See the complete Chinese guide: [`docs/action-standard-tool.md`](docs/action-standard-tool.md).
+See the complete Chinese guide: [`docs/action-export-tool.md`](docs/action-export-tool.md).
 
-完整中文使用手册：[`docs/action-standard-tool.md`](docs/action-standard-tool.md)。
+完整中文使用手册：[`docs/action-export-tool.md`](docs/action-export-tool.md)。
 
 ## Agent Prompt / 给 Agent 的 Prompt
 

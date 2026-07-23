@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { Archive, Download, LoaderCircle, Play, Upload } from '@lucide/vue'
 import { strToU8, zipSync } from 'fflate'
-import { buildActionStandardFile, DEFAULT_FPS, safeJsonFilename, validateTrimRange } from './actionStandard'
+import { buildActionExportFile, createUniqueJsonFilenames } from './actionExport'
 import MetadataEditor from './components/MetadataEditor.vue'
 import VideoQueue from './components/VideoQueue.vue'
 import VideoWorkspace from './components/VideoWorkspace.vue'
@@ -11,6 +11,7 @@ import type { ActionVideoItem } from './types'
 
 const items = ref<ActionVideoItem[]>([])
 const selectedId = ref('')
+const exportedBy = ref('')
 const modelState = ref<'loading' | 'ready' | 'error'>('loading')
 const running = ref(false)
 let controller: AbortController | null = null
@@ -48,18 +49,12 @@ async function addFiles(files: File[]) {
         file,
         objectUrl,
         duration,
-        trimStart: 0,
-        trimEnd: duration,
-        actionId: name,
         actionName: name,
-        actionType: 'repetitive',
-        createdBy: '',
         note: '',
-        ttsCues: [],
         status: 'pending',
         progress: 0,
         detectedFrames: 0,
-        totalFrames: Math.max(1, Math.floor(duration * DEFAULT_FPS)),
+        totalFrames: Math.max(1, Math.ceil(duration * 30)),
         error: '',
         output: null
       }
@@ -85,8 +80,8 @@ function patchSelected(patch: Partial<ActionVideoItem>) {
 }
 
 function validateItem(item: ActionVideoItem) {
-  if (!item.actionName.trim() || !item.actionId.trim()) return '请填写动作名称和动作 ID'
-  return validateTrimRange(item.trimStart, item.trimEnd, item.duration)
+  if (!item.actionName.trim()) return '请填写动作名称'
+  return ''
 }
 
 async function processItem(item: ActionVideoItem, signal: AbortSignal) {
@@ -101,11 +96,10 @@ async function processItem(item: ActionVideoItem, signal: AbortSignal) {
   item.progress = 0
   selectedId.value = item.id
   try {
-    const samples = await analyzeVideo({
+    const { samples, sourceFps } = await analyzeVideo({
       objectUrl: item.objectUrl,
-      start: item.trimStart,
-      end: Math.min(item.trimEnd, item.duration),
-      fps: DEFAULT_FPS,
+      start: 0,
+      end: item.duration,
       signal,
       onProgress(completed, total, detected) {
         item.progress = Math.round(completed / total * 100)
@@ -113,7 +107,10 @@ async function processItem(item: ActionVideoItem, signal: AbortSignal) {
         item.detectedFrames = detected
       }
     })
-    item.output = buildActionStandardFile(item, samples)
+    item.output = buildActionExportFile(item, samples, {
+      exportedBy: exportedBy.value,
+      sourceFps
+    })
     item.status = 'ready'
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -143,16 +140,25 @@ function cancel() {
 }
 
 function exportZip() {
-  const files = Object.fromEntries(readyItems.value.map(item => [
-    safeJsonFilename(item.actionId),
-    strToU8(JSON.stringify(item.output, null, 2))
-  ]))
+  const exportedAt = new Date().toISOString()
+  const filenames = createUniqueJsonFilenames(readyItems.value.map(item => item.actionName))
+  const files = Object.fromEntries(readyItems.value.map((item, index) => {
+    const output = {
+      ...item.output!,
+      metadata: {
+        ...item.output!.metadata,
+        exported_by: exportedBy.value.trim(),
+        exported_at: exportedAt
+      }
+    }
+    return [filenames[index], strToU8(JSON.stringify(output, null, 2))]
+  }))
   const archive = zipSync(files, { level: 6 })
   const blob = new Blob([new Uint8Array(archive)], { type: 'application/zip' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `action-standard-${new Date().toISOString().slice(0, 10)}.zip`
+  anchor.download = `action-export-${new Date().toISOString().slice(0, 10)}.zip`
   anchor.click()
   URL.revokeObjectURL(url)
 }
@@ -178,8 +184,8 @@ onBeforeUnmount(() => {
       <div class="brand-lockup">
         <span class="brand-mark"><Archive :size="20" aria-hidden="true" /></span>
         <div>
-          <h1>动作标准文件工作台</h1>
-          <p>视频标注与角度序列导出</p>
+          <h1>动作原始数据工作台</h1>
+          <p>逐帧姿态分析与 action_export 导出</p>
         </div>
       </div>
       <div class="topbar-actions">
@@ -187,6 +193,10 @@ onBeforeUnmount(() => {
           <LoaderCircle v-if="modelState === 'loading'" class="spin" :size="14" aria-hidden="true" />
           {{ modelState === 'ready' ? '姿态模型就绪' : modelState === 'error' ? '模型加载失败' : '正在加载模型' }}
         </span>
+        <label class="exported-by-field">
+          <span>统一导出人</span>
+          <input v-model="exportedBy" placeholder="姓名或账号" aria-label="统一导出人" />
+        </label>
         <label class="secondary-button secondary-button--compact">
           <Upload :size="17" aria-hidden="true" />
           导入视频
@@ -225,7 +235,7 @@ onBeforeUnmount(() => {
 
       <section v-else class="welcome-panel">
         <span class="welcome-icon"><Upload :size="28" aria-hidden="true" /></span>
-        <h2>导入标准动作视频</h2>
+        <h2>导入动作视频</h2>
         <p>文件只在本机浏览器中处理，不会上传到服务器。</p>
         <label class="primary-button primary-button--compact">
           <Upload :size="17" aria-hidden="true" />
@@ -238,7 +248,7 @@ onBeforeUnmount(() => {
     <footer v-if="items.length" class="batch-bar">
       <div>
         <strong>{{ readyItems.length }} / {{ items.length }} 已生成</strong>
-        <span>每个视频会导出一个 schema 0.4 JSON</span>
+        <span>每个视频会导出一个 schema 0.5 action_export JSON</span>
       </div>
       <button
         v-if="running"
