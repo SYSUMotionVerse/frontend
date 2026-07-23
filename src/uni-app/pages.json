@@ -1,6 +1,12 @@
 {
   "pages": [
     {
+      "path": "pages/access/startup",
+      "style": {
+        "navigationBarTitleText": "启动中"
+      }
+    },
+    {
       "path": "pages/access/register",
       "style": {
         "navigationBarTitleText": "注册"
@@ -28,6 +34,12 @@
       "path": "pages/training/home",
       "style": {
         "navigationBarTitleText": "训练首页"
+      }
+    },
+    {
+      "path": "pages/notifications/index",
+      "style": {
+        "navigationBarTitleText": "训练提醒"
       }
     },
     {

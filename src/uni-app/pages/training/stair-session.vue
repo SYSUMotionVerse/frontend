@@ -5,7 +5,9 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
+import { invalidateGrowthOverview } from '../../composables/useGrowthOverview'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { notifyTrainingComplete } from '../../platform/trainingFeedback'
 import {
   createSensorSessionAnalysis,
@@ -167,8 +169,10 @@ async function finishSession() {
     summary: analysis.summary,
     capturedBy: analysis.capturedBy
   })
+  useTrainingProgress().invalidate()
+  invalidateGrowthOverview()
   void uni.redirectTo({
-    url: '/pages/training/short-questionnaire'
+    url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(trainingSessionId)}`
   })
 }
 

@@ -93,7 +93,7 @@ describe('production growth reads', () => {
     })
   })
 
-  it('loads and renders real growth history, adherence, physical and score trend on the routed home page', async () => {
+  it('summarizes growth data without repeating detail-page content on the routed home page', async () => {
     const GrowthPage = (await import('../pages/growth/index.vue')).default
     const wrapper = mount(GrowthPage, {
       global: {
@@ -111,10 +111,11 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadVisualScoreTrend).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('最近一周达标3 天')
     expect(wrapper.text()).toContain('依从率67%')
-    expect(wrapper.text()).toContain('后端动作分析结果。')
-    expect(wrapper.text()).toContain('运动心理健康量表（第2次）')
-    expect(wrapper.text()).toContain('2600')
-    expect(wrapper.text()).toContain('91')
+    expect(wrapper.text()).toContain('2 / 3 已解锁')
+    expect(wrapper.text()).toContain('1 次训练 · 1 次评估')
+    expect(wrapper.text()).not.toContain('后端动作分析结果。')
+    expect(wrapper.text()).not.toContain('运动心理健康量表（第2次）')
+    expect(wrapper.text()).not.toContain('2600')
     expect(wrapper.findAll('.adherence-cell')).toHaveLength(1)
   })
 
@@ -163,9 +164,72 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadAdherenceData).not.toHaveBeenCalled()
     expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
     expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('本地楼梯训练记录。')
-    expect(wrapper.text()).toContain('基线 长问卷')
-    expect(wrapper.text()).toContain('24.5')
+    expect(wrapper.text()).toContain('1 次训练 · 1 次评估')
+    expect(wrapper.text()).not.toContain('本地楼梯训练记录。')
+    expect(wrapper.text()).not.toContain('基线 长问卷')
+    expect(wrapper.text()).not.toContain('24.5')
+  })
+
+  it('renders physical and visual score trends on the metrics detail page', async () => {
+    const MetricsPage = (await import('../pages/growth/metrics.vue')).default
+    const wrapper = mount(MetricsPage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: { template: '<div><slot /></div>' },
+          UniPageHeading: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(studentBackendSync.loadPhysicalMetrics).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadVisualScoreTrend).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('2600')
+    expect(wrapper.text()).toContain('2750')
+    expect(wrapper.text()).toContain('91')
+    expect(wrapper.text()).toContain('稳定性')
+  })
+
+  it('renders training frequency and assessment score trends from durable history', async () => {
+    const GrowthHistoryTrendPanel = (
+      await import('../components/growth/GrowthHistoryTrendPanel.vue')
+    ).default
+    const wrapper = mount(GrowthHistoryTrendPanel, {
+      props: {
+        sessions: [
+          {
+            id: 'visual-17',
+            modality: 'wushu',
+            date: '2026-07-17',
+            summary: '动作完成。',
+            qualityScore: 91
+          },
+          {
+            id: 'stair-18',
+            modality: 'stair',
+            date: '2026-07-18',
+            summary: '楼梯完成。',
+            qualityScore: 86
+          }
+        ],
+        assessments: [
+          {
+            checkpoint: 'week4',
+            title: '运动心理健康量表（第2次）',
+            score: 8,
+            percentage: 80,
+            submittedAt: '2026-07-15T08:00:00Z'
+          }
+        ]
+      }
+    })
+
+    expect(wrapper.text()).toContain('训练频次趋势')
+    expect(wrapper.text()).toContain('07/17')
+    expect(wrapper.text()).toContain('07/18')
+    expect(wrapper.text()).toContain('评估得分趋势')
+    expect(wrapper.text()).toContain('80%')
   })
 
   it('loads visual score trend through the authenticated backend sync seam', async () => {

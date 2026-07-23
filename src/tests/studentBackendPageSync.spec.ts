@@ -28,6 +28,7 @@ const store = {
 }
 
 const studentBackendSync = {
+  isEnabled: vi.fn(() => true),
   bootstrapAccess: vi.fn().mockResolvedValue({
     targetPageUrl: '/pages/training/home'
   }),
@@ -131,7 +132,8 @@ const studentBackendSync = {
       values: [19.4, 19.1]
     }
   ]),
-  loadAdherenceData: vi.fn().mockResolvedValue(null)
+  loadAdherenceData: vi.fn().mockResolvedValue(null),
+  loadVisualScoreTrend: vi.fn().mockResolvedValue(null)
 }
 
 const stairSensorCaptureSession = {
@@ -265,7 +267,10 @@ describe('page-level backend sync wiring', () => {
       }
     })
 
-    Object.values(studentBackendSync).forEach(value => {
+    const { isEnabled, ...asyncBackendSync } = studentBackendSync
+    isEnabled.mockReset()
+    isEnabled.mockReturnValue(true)
+    Object.values(asyncBackendSync).forEach(value => {
       value.mockReset()
       value.mockResolvedValue({ synced: true })
     })
@@ -526,6 +531,7 @@ describe('page-level backend sync wiring', () => {
     expect(store.completeProfile).not.toHaveBeenCalled()
     expect(store.setActiveCheckpoint).not.toHaveBeenCalled()
     expect(currentUni().redirectTo).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('资料提交失败')
   })
 
   it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
@@ -608,6 +614,8 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('renders loaded adherence stats and the backend calendar with a capped daily count', async () => {
+    const { invalidateGrowthOverview } = await import('../uni-app/composables/useGrowthOverview')
+    invalidateGrowthOverview()
     studentBackendSync.loadAdherenceData.mockResolvedValue({
       todayCount: 4,
       todayCompleted: true,
@@ -652,6 +660,8 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('keeps the local adherence heatmap fallback when backend data is unavailable', async () => {
+    const { invalidateGrowthOverview } = await import('../uni-app/composables/useGrowthOverview')
+    invalidateGrowthOverview()
     studentBackendSync.loadAdherenceData.mockResolvedValue(null)
 
     const AdherencePage = (await import('../uni-app/pages/growth/adherence.vue')).default
@@ -994,7 +1004,7 @@ describe('page-level backend sync wiring', () => {
       })
     )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
-      url: expect.stringMatching(/^\/pages\/training\/feedback\?sessionId=visual-/)
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=visual-/)
     })
   })
 
@@ -1079,7 +1089,7 @@ describe('page-level backend sync wiring', () => {
       expect.objectContaining({ sessionId: expect.stringMatching(/^stairs-/) })
     )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
-      url: '/pages/training/short-questionnaire'
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
     })
   })
 

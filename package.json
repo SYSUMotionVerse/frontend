@@ -17,6 +17,7 @@
     "build:action-tool": "pnpm prepare:action-tool-models && vite build --config vite.action-tool.config.ts",
     "build:mp-weixin": "uni build -p mp-weixin",
     "build:mp-weixin:production": "node scripts/build-production.mjs",
+    "check:mp-weixin-package": "node scripts/check-mini-program-package-size.mjs",
     "release:check": "node scripts/build-production.mjs --check-config",
     "audit:production": "pnpm audit --prod --audit-level high",
     "build:mp-weixin-cf": "node scripts/pose-model-tunnel.mjs build",

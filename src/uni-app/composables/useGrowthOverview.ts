@@ -1,6 +1,11 @@
-import { computed, onMounted, shallowRef } from 'vue'
-import { buildGrowthSummary, resolvePhysicalMetricsState } from '../../domain/student/growth'
+import { computed, onMounted, readonly, shallowRef } from 'vue'
+import {
+  buildGrowthAchievementsFromHistory,
+  buildGrowthSummary,
+  resolvePhysicalMetricsState
+} from '../../domain/student/growth'
 import type { GrowthAssessmentSummary, GrowthSummaryCard } from '../../domain/student/growth'
+import { buildSessionBadgesFromHistory } from '../../domain/student/sessionBadges'
 import { CHECKPOINT_LABELS } from '../../features/access/questionnaire'
 import { reportBackendSyncError } from '../api/reportBackendSyncError'
 import { studentBackendSync } from '../api/studentBackend'
@@ -19,36 +24,58 @@ const backendSessions = shallowRef<GrowthTrainingHistoryItem[] | null>(null)
 const backendAdherence = shallowRef<StudentAdherenceData | null>(null)
 const backendPhysicalMetrics = shallowRef<GrowthPhysicalMetrics | null>(null)
 const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
+const loadState = shallowRef<{
+  status: 'loading' | 'ready' | 'partial' | 'error'
+  message: string
+}>({
+  status: 'loading',
+  message: '正在同步成长记录…'
+})
 
 const growthOverviewCache = createRequestCache({
   ttlMs: 5 * 60_000,
   async load() {
-    const [history, adherence, physicalMetrics, visualScoreTrend] = await Promise.all([
-      studentBackendSync.loadGrowthHistory().catch(error => {
-        reportBackendSyncError('成长历史加载', error)
-        return null
-      }),
-      studentBackendSync.loadAdherenceData().catch(error => {
-        reportBackendSyncError('成长依从性加载', error)
-        return null
-      }),
-      studentBackendSync.loadPhysicalMetrics().catch(error => {
-        reportBackendSyncError('成长体测趋势加载', error)
-        return null
-      }),
-      studentBackendSync.loadVisualScoreTrend().catch(error => {
-        reportBackendSyncError('视觉训练得分趋势加载', error)
-        return null
-      })
+    const results = await Promise.allSettled([
+      studentBackendSync.loadGrowthHistory(),
+      studentBackendSync.loadAdherenceData(),
+      studentBackendSync.loadPhysicalMetrics(),
+      studentBackendSync.loadVisualScoreTrend()
     ])
+    const [historyResult, adherenceResult, physicalMetricsResult, visualScoreTrendResult] = results
+    const failures: string[] = []
 
-    if (history) {
-      backendAssessments.value = history.assessments
-      backendSessions.value = history.trainingSessions
+    if (historyResult.status === 'fulfilled') {
+      backendAssessments.value = historyResult.value.assessments
+      backendSessions.value = historyResult.value.trainingSessions
+    } else {
+      failures.push('训练与评估历史')
+      reportBackendSyncError('成长历史加载', historyResult.reason)
     }
-    if (adherence) backendAdherence.value = adherence
-    if (physicalMetrics) backendPhysicalMetrics.value = physicalMetrics
-    if (visualScoreTrend) scoreTrend.value = visualScoreTrend
+    if (adherenceResult.status === 'fulfilled') {
+      backendAdherence.value = adherenceResult.value
+    } else {
+      failures.push('坚持记录')
+      reportBackendSyncError('成长依从性加载', adherenceResult.reason)
+    }
+    if (physicalMetricsResult.status === 'fulfilled') {
+      backendPhysicalMetrics.value = physicalMetricsResult.value
+    } else {
+      failures.push('体能指标')
+      reportBackendSyncError('成长体测趋势加载', physicalMetricsResult.reason)
+    }
+    if (visualScoreTrendResult.status === 'fulfilled') {
+      scoreTrend.value = visualScoreTrendResult.value
+    } else {
+      failures.push('动作得分趋势')
+      reportBackendSyncError('视觉训练得分趋势加载', visualScoreTrendResult.reason)
+    }
+
+    loadState.value = failures.length === 0
+      ? { status: 'ready', message: '' }
+      : {
+          status: failures.length === results.length ? 'error' : 'partial',
+          message: `${failures.join('、')}暂时无法同步，可重新加载。`
+        }
   }
 })
 
@@ -58,6 +85,7 @@ function resetBackendGrowthData() {
   backendAdherence.value = null
   backendPhysicalMetrics.value = null
   scoreTrend.value = null
+  loadState.value = { status: 'ready', message: '' }
   growthOverviewCache.invalidate()
 }
 
@@ -94,6 +122,16 @@ export function useGrowthOverview() {
   )
   const assessments = computed(() => backendAssessments.value ?? localAssessments.value)
   const sessions = computed(() => backendSessions.value ?? localSessions.value)
+  const achievements = computed(() => (
+    backendSessions.value !== null && backendAssessments.value !== null
+      ? buildGrowthAchievementsFromHistory(backendSessions.value, backendAssessments.value.length)
+      : summary.value.achievements
+  ))
+  const sessionBadges = computed(() => (
+    backendSessions.value !== null
+      ? buildSessionBadgesFromHistory(backendSessions.value)
+      : summary.value.sessionBadges
+  ))
   const adherenceCalendar = computed(() =>
     backendAdherence.value?.calendar ?? summary.value.adherenceCalendar
   )
@@ -161,6 +199,12 @@ export function useGrowthOverview() {
       resetBackendGrowthData()
       return
     }
+    if (options.force || loadState.value.status === 'loading') {
+      loadState.value = {
+        status: 'loading',
+        message: '正在同步成长记录…'
+      }
+    }
     await growthOverviewCache.get(options)
   }
 
@@ -169,13 +213,15 @@ export function useGrowthOverview() {
   })
 
   return {
-    achievements: computed(() => summary.value.achievements),
+    achievements,
+    adherenceData: computed(() => backendAdherence.value),
     adherenceCalendar,
     assessments,
     latestAssessment,
+    loadState: readonly(loadState),
     physicalMetricsState,
     scoreTrend,
-    sessionBadges: computed(() => summary.value.sessionBadges),
+    sessionBadges,
     sessions,
     summaryCards,
     refresh,

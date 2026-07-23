@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import ShortQuestionnaireForm from '../../../components/training/ShortQuestionnaireForm.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
@@ -9,7 +10,17 @@ const store = useStudentStore()
 const latestResponse = shallowRef<{ energyLevel: number; confidence: number; enjoyment: number } | null>(null)
 const isSubmitting = shallowRef(false)
 const statusMessage = shallowRef('')
-const latestSessionId = computed(() => store.getSnapshot().sessions.at(-1)?.id ?? '')
+const routeSessionId = shallowRef('')
+const activeSessionId = computed(() => {
+  if (routeSessionId.value) {
+    return routeSessionId.value
+  }
+  return store.getSnapshot().sessions.at(-1)?.id ?? ''
+})
+
+onLoad((query) => {
+  routeSessionId.value = query?.sessionId?.toString() ?? ''
+})
 
 onMounted(() => {
   void studentBackendSync.retryPendingShortQuestionnaires()
@@ -20,7 +31,7 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
     return
   }
 
-  if (!latestSessionId.value) {
+  if (!activeSessionId.value) {
     statusMessage.value = '未找到本次训练记录，请返回首页后重试。'
     return
   }
@@ -30,7 +41,7 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
   let result: Awaited<ReturnType<typeof studentBackendSync.syncShortQuestionnaire>>
   try {
     result = await studentBackendSync.syncShortQuestionnaire({
-      sessionId: latestSessionId.value,
+      sessionId: activeSessionId.value,
       ...payload
     })
   } catch {
@@ -51,7 +62,7 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
   }
 
   void uni.redirectTo({
-    url: `/pages/training/feedback?sessionId=${encodeURIComponent(latestSessionId.value)}`
+    url: `/pages/training/feedback?sessionId=${encodeURIComponent(activeSessionId.value)}`
   })
 }
 
@@ -64,7 +75,7 @@ function goHome() {
 
 <template>
   <UniTrainingPageShell :show-dock="false">
-    <ShortQuestionnaireForm @submit="submitResponse" />
+    <ShortQuestionnaireForm :submitting="isSubmitting" @submit="submitResponse" />
 
     <section v-if="statusMessage" class="card-shell p-18 text-14 text-slate-600">
       {{ statusMessage }}

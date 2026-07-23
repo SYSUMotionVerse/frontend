@@ -35,6 +35,10 @@ export interface GrowthAchievement {
   earned: boolean
 }
 
+export interface GrowthHistorySession {
+  date: string
+}
+
 export interface GrowthSummaryModel {
   completedSessions: number
   totalSessions: number
@@ -134,6 +138,24 @@ export function resolvePhysicalMetricsState(state: GrowthStateSource): PhysicalM
   }
 }
 
+export function buildGrowthAchievementsFromHistory(
+  sessions: readonly GrowthHistorySession[],
+  assessmentCount: number
+): GrowthAchievement[] {
+  return buildAchievements(
+    sessions.length,
+    calculateCurrentStreakFromDates(sessions.map(session => session.date)),
+    assessmentCount > 0
+      ? {
+          checkpoint: 'baseline',
+          score: 0,
+          percentage: 0,
+          submittedAt: null
+        }
+      : null
+  )
+}
+
 function getLatestSession(sessions: readonly SessionRecord[]): SessionRecord | null {
   if (sessions.length === 0) {
     return null
@@ -166,18 +188,22 @@ function getLatestAssessment(
 }
 
 function calculateCurrentStreak(sessions: readonly SessionRecord[]): number {
-  if (sessions.length === 0) {
+  return calculateCurrentStreakFromDates(sessions.map(session => session.date))
+}
+
+function calculateCurrentStreakFromDates(dates: readonly string[]): number {
+  if (dates.length === 0) {
     return 0
   }
 
-  const completedDates = new Set(sessions.map(session => session.date))
+  const completedDates = new Set(dates)
   const sortedDates = Array.from(completedDates).sort((left, right) => right.localeCompare(left))
 
   let streak = 1
-  let cursor = new Date(`${sortedDates[0]}T00:00:00`)
+  let cursor = new Date(`${sortedDates[0]}T00:00:00Z`)
 
   for (let index = 1; index < sortedDates.length; index += 1) {
-    cursor.setDate(cursor.getDate() - 1)
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
     const expectedDate = toIsoDate(cursor)
 
     if (sortedDates[index] !== expectedDate) {

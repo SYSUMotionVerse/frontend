@@ -70,6 +70,18 @@ export function validateProductionManifest(manifest) {
   if (miniProgram?.setting?.urlCheck !== true) {
     errors.push('mp-weixin.setting.urlCheck must be true for production')
   }
+  if (miniProgram?.setting?.minified !== true) {
+    errors.push('mp-weixin.setting.minified must be true for production')
+  }
+  if (miniProgram?.setting?.minifyWXSS !== true) {
+    errors.push('mp-weixin.setting.minifyWXSS must be true for production')
+  }
+  if (miniProgram?.setting?.minifyWXML !== true) {
+    errors.push('mp-weixin.setting.minifyWXML must be true for production')
+  }
+  if (miniProgram?.setting?.uploadWithSourceMap !== false) {
+    errors.push('mp-weixin.setting.uploadWithSourceMap must be false for production')
+  }
 
   return errors
 }
@@ -85,6 +97,20 @@ export function validateGeneratedProjectConfig(projectConfig) {
   if (projectConfig?.setting?.urlCheck !== true) {
     errors.push(
       'generated project.config.json must enable setting.urlCheck',
+    )
+  }
+  if (projectConfig?.setting?.minified !== true) {
+    errors.push('generated project.config.json must enable setting.minified')
+  }
+  if (projectConfig?.setting?.minifyWXSS !== true) {
+    errors.push('generated project.config.json must enable setting.minifyWXSS')
+  }
+  if (projectConfig?.setting?.minifyWXML !== true) {
+    errors.push('generated project.config.json must enable setting.minifyWXML')
+  }
+  if (projectConfig?.setting?.uploadWithSourceMap !== false) {
+    errors.push(
+      'generated project.config.json must disable setting.uploadWithSourceMap',
     )
   }
 

@@ -8,7 +8,8 @@ function mountForm() {
       stubs: {
         picker: {
           name: 'PickerStub',
-          template: '<div class="picker-stub"><slot /></div>'
+          props: ['range'],
+          template: '<div class="picker-stub"><span v-for="item in range" :key="item">{{ item }}</span><slot /></div>'
         }
       }
     }
@@ -26,6 +27,14 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
 }
 
 describe('registration form', () => {
+  it('only offers backend-supported gender values', () => {
+    const wrapper = mountForm()
+
+    expect(wrapper.text()).toContain('女')
+    expect(wrapper.text()).toContain('男')
+    expect(wrapper.text()).not.toContain('其他')
+  })
+
   it('emits profile data without personal avatar metadata', async () => {
     const wrapper = mountForm()
     await fillValidProfileFields(wrapper)

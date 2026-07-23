@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AchievementBadgeList from '../../../components/growth/AchievementBadgeList.vue'
-import { buildGrowthSummary } from '../../../domain/student/growth'
+import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
-import { useStudentStore } from '../../composables/useStudentStore'
+import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const store = useStudentStore()
-const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
-const earnedCount = computed(() => summary.value.achievements.filter((badge) => badge.earned).length)
+const { achievements, loadState, refresh } = useGrowthOverview()
+const earnedCount = computed(() => achievements.value.filter(badge => badge.earned).length)
 </script>
 
 <template>
@@ -19,11 +18,17 @@ const earnedCount = computed(() => summary.value.achievements.filter((badge) => 
         title="成就"
         description="基于参与和坚持的激励里程碑。"
       />
-      <text class="achievement-page__summary">{{ earnedCount }} / {{ summary.achievements.length }} 已解锁</text>
+      <text class="achievement-page__summary">{{ earnedCount }} / {{ achievements.length }} 已解锁</text>
     </view>
 
+    <GrowthLoadStatus
+      :status="loadState.status"
+      :message="loadState.message"
+      @retry="refresh({ force: true })"
+    />
+
     <view class="achievement-page__board">
-      <AchievementBadgeList :achievements="summary.achievements" />
+      <AchievementBadgeList :achievements="achievements" />
     </view>
   </UniGrowthPageShell>
 </template>

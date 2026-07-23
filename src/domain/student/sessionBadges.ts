@@ -17,6 +17,13 @@ export interface SessionBadge {
   sharePath: string
 }
 
+export interface SessionBadgeHistoryItem {
+  id: string
+  modality: TrainingModality
+  date: string
+  qualityScore: number
+}
+
 const MODALITY_LABELS: Record<TrainingModality, string> = {
   wushu: '武术训练',
   hiit: 'HIIT 训练',
@@ -45,6 +52,32 @@ export function buildSessionBadges(sessions: readonly SessionRecord[], limit = 6
   return sessions
     .filter(session => session.completed)
     .map(buildSessionBadge)
+    .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate))
+    .slice(0, limit)
+}
+
+export function buildSessionBadgesFromHistory(
+  sessions: readonly SessionBadgeHistoryItem[],
+  limit = 6
+): SessionBadge[] {
+  return sessions
+    .map(session => {
+      const score = Math.round(session.qualityScore)
+      const badge = resolveBadgeDefinition(score)
+
+      return {
+        id: `${session.id}-badge`,
+        level: badge.level,
+        title: badge.title,
+        description: `本次质量考评 ${score} 分，${badge.description}`,
+        scoreLabel: `${score} 分`,
+        sessionDate: session.date,
+        modalityLabel: MODALITY_LABELS[session.modality],
+        svgName: badge.svgName,
+        shareTitle: `我在 Sport Snack 获得了「${badge.title}」`,
+        sharePath: '/pages/growth/history'
+      }
+    })
     .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate))
     .slice(0, limit)
 }

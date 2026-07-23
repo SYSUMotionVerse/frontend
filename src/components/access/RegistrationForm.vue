@@ -4,6 +4,14 @@ import type { StudentProfile } from '../../domain/student/types'
 
 type RegistrationPayload = Omit<StudentProfile, 'completed'>
 
+const props = withDefaults(defineProps<{
+  submitting?: boolean
+  submitLabel?: string
+}>(), {
+  submitting: false,
+  submitLabel: '准备好了，出发！ 🚀'
+})
+
 const emit = defineEmits<{
   submit: [payload: RegistrationPayload]
 }>()
@@ -20,7 +28,7 @@ const form = reactive<RegistrationPayload>({
   restingHeartRate: 70
 })
 
-const genderOptions = ['女', '男', '其他']
+const genderOptions = ['女', '男']
 const gradeOptions = ['一年级', '二年级', '三年级', '四年级']
 
 const selectedGenderIndex = computed(() => {
@@ -79,7 +87,7 @@ const canSubmit = computed(() => {
   return (
     /^\d{8}$/.test(form.studentId) &&
     form.name.trim().length > 0 &&
-    form.gender.trim().length > 0 &&
+    genderOptions.includes(form.gender) &&
     form.major.trim().length > 0 &&
     form.grade.trim().length > 0 &&
     form.age > 0 &&
@@ -90,7 +98,7 @@ const canSubmit = computed(() => {
 })
 
 function handleSubmit() {
-  if (!canSubmit.value) {
+  if (!canSubmit.value || props.submitting) {
     return
   }
 
@@ -124,6 +132,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
         <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">学号</text>
         <input
           :value="form.studentId"
+          aria-label="学号"
           autocomplete="username"
           class="input-shell registration-input-shell"
           inputmode="numeric"
@@ -137,13 +146,14 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 
       <view class="form-stack-field">
         <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">姓名</text>
-        <input v-model.trim="form.name" autocomplete="name" class="input-shell registration-input-shell" name="name" placeholder="例如：运动小明" />
+        <input v-model.trim="form.name" aria-label="姓名" autocomplete="name" class="input-shell registration-input-shell" name="name" placeholder="例如：运动小明" />
       </view>
 
       <view class="form-row">
         <view class="form-row__field flex flex-col gap-[16rpx]">
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">性别</text>
           <picker
+            aria-label="性别"
             class="registration-picker-shell"
             mode="selector"
             :range="genderOptions"
@@ -160,6 +170,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">年龄</text>
           <input
             :value="String(form.age)"
+            aria-label="年龄"
             autocomplete="off"
             class="input-shell registration-input-shell"
             inputmode="numeric"
@@ -175,12 +186,13 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
       <view class="form-row">
         <view class="form-row__field flex flex-col gap-[16rpx]">
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">专业</text>
-          <input v-model.trim="form.major" autocomplete="organization-title" class="input-shell registration-input-shell" name="major" placeholder="理科..." />
+          <input v-model.trim="form.major" aria-label="专业" autocomplete="organization-title" class="input-shell registration-input-shell" name="major" placeholder="理科..." />
         </view>
         
         <view class="form-row__field flex flex-col gap-[16rpx]">
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">年级</text>
           <picker
+            aria-label="年级"
             class="registration-picker-shell"
             mode="selector"
             :range="gradeOptions"
@@ -211,6 +223,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">身高 (cm)</text>
           <input
             :value="String(form.heightCm)"
+            aria-label="身高（厘米）"
             autocomplete="off"
             class="input-shell registration-input-shell"
             inputmode="numeric"
@@ -226,6 +239,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">体重 (kg)</text>
           <input
             :value="String(form.weightKg)"
+            aria-label="体重（千克）"
             autocomplete="off"
             class="input-shell registration-input-shell"
             inputmode="numeric"
@@ -242,6 +256,7 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
         <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">静息心率 (bpm)</text>
         <input
           :value="String(form.restingHeartRate)"
+          aria-label="静息心率"
           autocomplete="off"
           class="input-shell registration-input-shell"
           inputmode="numeric"
@@ -255,11 +270,11 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
     </view>
 
     <view class="form-card__footer-note">
-      <text>这里的一切仅用于设置您的初始个人资料。您可以稍后完善它。</text>
+      <text>这些信息用于建立初始训练档案，请确认准确后提交。</text>
     </view>
 
-    <button form-type="submit" class="btn-primary mt-[24rpx] mb-[48rpx]" :disabled="!canSubmit">
-      <text class="tracking-wide">准备好了，出发！ 🚀</text>
+    <button form-type="submit" class="btn-primary mt-[24rpx] mb-[48rpx]" :disabled="!canSubmit || props.submitting">
+      <text class="tracking-wide">{{ props.submitting ? '正在提交…' : props.submitLabel }}</text>
     </button>
   </form>
 </template>

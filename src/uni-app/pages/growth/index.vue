@@ -3,11 +3,8 @@ import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
-import AssessmentHistoryList from '../../../components/growth/AssessmentHistoryList.vue'
-import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPanel.vue'
+import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import SessionBadgeList from '../../../components/growth/SessionBadgeList.vue'
-import TrainingHistoryList from '../../../components/growth/TrainingHistoryList.vue'
-import VisualScoreTrendPanel from '../../../components/growth/VisualScoreTrendPanel.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
@@ -22,8 +19,9 @@ const {
   achievements,
   adherenceCalendar,
   assessments,
+  loadState,
   physicalMetricsState,
-  scoreTrend,
+  refresh,
   sessionBadges,
   sessions,
   summaryCards
@@ -60,7 +58,6 @@ const explorationLinks = computed(() => [
   {
     url: '/pages/growth/achievements',
     title: '成就',
-    description: '回顾已经获得的训练里程碑。',
     meta: `${earnedAchievementCount.value} / ${achievements.value.length} 已解锁`,
     icon: 'medal-filled',
     tone: 'coral',
@@ -69,9 +66,6 @@ const explorationLinks = computed(() => [
   {
     url: '/pages/growth/metrics',
     title: '体能指标',
-    description: physicalMetricsState.value.hasMetrics
-      ? '查看已导入的体测趋势。'
-      : '导入体测数据后可查看趋势。',
     meta: physicalMetricsState.value.hasMetrics ? '已有数据' : '等待数据',
     icon: 'bars',
     tone: 'teal',
@@ -80,7 +74,6 @@ const explorationLinks = computed(() => [
   {
     url: '/pages/growth/history',
     title: '训练与评估历史',
-    description: '回看已经完成的训练和评估。',
     meta: `${sessions.value.length} 次训练 · ${assessments.value.length} 次评估`,
     icon: 'calendar-filled',
     tone: 'gold',
@@ -104,6 +97,12 @@ onShow(() => {
         mini-tag="成长中心"
         variant="home"
         @open-notifications="stationNotifications.openList"
+      />
+
+      <GrowthLoadStatus
+        :status="loadState.status"
+        :message="loadState.message"
+        @retry="refresh({ force: true })"
       />
 
       <view class="growth-page__overview">
@@ -148,8 +147,7 @@ onShow(() => {
       <view class="growth-page__section growth-page__section-shell growth-page__section-shell--explore">
         <view class="growth-page__section-head">
           <view class="growth-page__section-copy">
-            <text class="growth-page__section-title">继续探索</text>
-            <text class="growth-page__section-description">把完整数据留给需要深入查看的时候。</text>
+            <text class="growth-page__section-title">完整记录</text>
           </view>
         </view>
         <view class="growth-page__exploration-list">
@@ -164,47 +162,11 @@ onShow(() => {
             </view>
             <view class="growth-page__exploration-copy">
               <text class="growth-page__exploration-title">{{ link.title }}</text>
-              <text class="growth-page__exploration-description">{{ link.description }}</text>
+              <text class="growth-page__exploration-meta">{{ link.meta }}</text>
             </view>
-            <view class="growth-page__exploration-meta">
-              <text>{{ link.meta }}</text>
-              <text class="growth-page__exploration-arrow">›</text>
-            </view>
+            <text class="growth-page__exploration-arrow">›</text>
           </navigator>
         </view>
-      </view>
-
-      <view class="growth-page__block">
-        <view class="growth-page__block-head">
-          <view class="growth-page__section-copy">
-            <text class="growth-page__section-title">体能指标</text>
-            <text class="growth-page__section-description">导入的体测数据会在这里形成趋势。</text>
-          </view>
-          <navigator class="growth-page__link" url="/pages/growth/metrics">查看详情</navigator>
-        </view>
-        <PhysicalMetricsPanel :metrics-state="physicalMetricsState" />
-      </view>
-
-      <view class="growth-page__block">
-        <view class="growth-page__block-head">
-          <view class="growth-page__section-copy">
-            <text class="growth-page__section-title">最近历史记录</text>
-            <text class="growth-page__section-description">查看训练与问卷历史。</text>
-          </view>
-          <navigator class="growth-page__link" url="/pages/growth/history">查看详情</navigator>
-        </view>
-        <TrainingHistoryList :sessions="sessions" />
-        <AssessmentHistoryList :assessments="assessments" />
-      </view>
-
-      <view class="growth-page__block">
-        <view class="growth-page__block-head">
-          <view class="growth-page__section-copy">
-            <text class="growth-page__section-title">视觉得分趋势</text>
-            <text class="growth-page__section-description">仅在有训练数据时显示最近的动作表现。</text>
-          </view>
-        </view>
-        <VisualScoreTrendPanel :score-trend="scoreTrend" />
       </view>
     </view>
   </UniGrowthPageShell>
@@ -219,13 +181,10 @@ onShow(() => {
 .growth-page__overview-stat,
 .growth-page__overview-stat-head,
 .growth-page__section-copy,
-.growth-page__block,
-.growth-page__block-head,
 .growth-page__exploration-list,
 .growth-page__exploration-row,
 .growth-page__exploration-icon,
-.growth-page__exploration-copy,
-.growth-page__exploration-meta {
+.growth-page__exploration-copy {
   display: flex;
 }
 
@@ -342,8 +301,7 @@ onShow(() => {
   line-height: 1.4;
 }
 
-.growth-page__section,
-.growth-page__block {
+.growth-page__section {
   flex-direction: column;
   gap: var(--growth-space-2);
 }
@@ -364,8 +322,7 @@ onShow(() => {
   background: rgba(255, 255, 255, 0.94);
 }
 
-.growth-page__section-head,
-.growth-page__block-head {
+.growth-page__section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -390,12 +347,15 @@ onShow(() => {
 }
 
 .growth-page__link {
-  min-height: 0;
+  display: inline-flex;
+  min-height: 88rpx;
+  align-items: center;
+  justify-content: center;
   padding: 10rpx 16rpx;
   border: none;
   border-radius: 9999px;
-  background: rgba(137, 207, 255, 0.1);
-  color: #2b7cb8;
+  background: rgba(199, 107, 91, 0.08);
+  color: #a64f42;
   font-size: 24rpx;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -458,24 +418,15 @@ onShow(() => {
   font-weight: 800;
 }
 
-.growth-page__exploration-description {
-  color: #718096;
-  font-size: 20rpx;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
 .growth-page__exploration-meta {
-  flex: none;
-  align-items: center;
-  gap: 8rpx;
   color: #c76b5b;
   font-size: 20rpx;
-  font-weight: 800;
-  text-align: right;
+  font-weight: 700;
 }
 
 .growth-page__exploration-arrow {
+  flex: none;
+  color: #8a97a8;
   font-size: 32rpx;
   line-height: 1;
 }

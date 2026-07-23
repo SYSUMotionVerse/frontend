@@ -10,6 +10,8 @@ interface SubmissionPayload {
 
 const props = defineProps<{
   questionnaire: PsychologyQuestionnaireModel
+  submitting?: boolean
+  submitLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +27,7 @@ for (const question of props.questionnaire.questions) {
 const isComplete = computed(() => Object.values(answers).every((value) => value > 0))
 
 function handleSubmit() {
-  if (!isComplete.value) {
+  if (!isComplete.value || props.submitting) {
     return
   }
 
@@ -56,6 +58,8 @@ function handleResponseChange(questionId: number, optionId: number) {
           :key="option.id"
           class="long-questionnaire-form__option"
           :class="{ 'long-questionnaire-form__option--selected': answers[question.id] === option.id }"
+          :aria-label="`${question.prompt}：${option.label}`"
+          :aria-pressed="answers[question.id] === option.id"
           type="button"
           @click="handleResponseChange(question.id, option.id)"
         >
@@ -65,9 +69,10 @@ function handleResponseChange(questionId: number, optionId: number) {
     </view>
 
     <view class="long-questionnaire-form__actions">
-      <button form-type="submit" class="btn-primary" :disabled="!isComplete">
+      <button form-type="submit" class="btn-primary" :disabled="!isComplete || props.submitting">
         <text v-if="!isComplete">请先完成所有问题</text>
-        <text v-else>提交答案</text>
+        <text v-else-if="props.submitting">正在提交…</text>
+        <text v-else>{{ props.submitLabel || '提交答案' }}</text>
       </button>
     </view>
   </form>

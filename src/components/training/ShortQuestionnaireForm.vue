@@ -9,6 +9,12 @@ const emit = defineEmits<{
   submit: [payload: { energyLevel: number; confidence: number; enjoyment: number }]
 }>()
 
+const props = withDefaults(defineProps<{
+  submitting?: boolean
+}>(), {
+  submitting: false
+})
+
 const form = reactive({
   energyLevel: 0,
   confidence: 0,
@@ -63,7 +69,7 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
 </script>
 
 <template>
-  <form class="short-questionnaire-form" @submit.prevent="emit('submit', { ...form })">
+  <form class="short-questionnaire-form" @submit.prevent="!props.submitting && emit('submit', { ...form })">
     <view class="short-questionnaire-form__hero bg-white chunky-shadow">
       <view class="short-questionnaire-form__hero-badge">
         <text class="text-[48rpx]">🙂</text>
@@ -106,8 +112,9 @@ function optionClasses(isSelected: boolean, palette: RatingOptionPalette) {
     </view>
 
     <view class="short-questionnaire-form__actions">
-      <button class="btn-primary" form-type="submit" :disabled="!isComplete">
+      <button class="btn-primary" form-type="submit" :disabled="!isComplete || props.submitting">
         <text v-if="!isComplete">请完成全部打卡项</text>
+        <text v-else-if="props.submitting">正在保存…</text>
         <text v-else>提交打卡 ✨</text>
       </button>
     </view>

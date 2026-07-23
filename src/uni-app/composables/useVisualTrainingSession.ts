@@ -769,7 +769,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     invalidateGrowthOverview()
 
     void uni.redirectTo({
-      url: `/pages/training/feedback?sessionId=${encodeURIComponent(submission.sessionId)}`
+      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(submission.sessionId)}`
     })
   }
 

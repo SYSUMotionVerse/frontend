@@ -93,6 +93,10 @@ describe('release configuration', () => {
     ).toEqual([
       'mp-weixin.appid must be a real release AppID',
       'mp-weixin.setting.urlCheck must be true for production',
+      'mp-weixin.setting.minified must be true for production',
+      'mp-weixin.setting.minifyWXSS must be true for production',
+      'mp-weixin.setting.minifyWXML must be true for production',
+      'mp-weixin.setting.uploadWithSourceMap must be false for production',
     ])
   })
 
@@ -101,7 +105,7 @@ describe('release configuration', () => {
       validateProductionManifest({
         'mp-weixin': {
           appid: 'wx-release-appid',
-          setting: { urlCheck: true },
+          setting: productionSettings,
         },
       }),
     ).toEqual([
@@ -114,7 +118,7 @@ describe('release configuration', () => {
       validateProductionManifest({
         'mp-weixin': {
           appid: 'wx4305e8964a9093fc',
-          setting: { urlCheck: true },
+          setting: productionSettings,
         },
       }),
     ).toEqual([])
@@ -124,7 +128,7 @@ describe('release configuration', () => {
     expect(
       validateGeneratedProjectConfig({
         appid: 'wx4305e8964a9093fc',
-        setting: { urlCheck: true },
+        setting: productionSettings,
       }),
     ).toEqual([])
     expect(
@@ -135,6 +139,10 @@ describe('release configuration', () => {
     ).toEqual([
       'generated project.config.json must contain a real release AppID',
       'generated project.config.json must enable setting.urlCheck',
+      'generated project.config.json must enable setting.minified',
+      'generated project.config.json must enable setting.minifyWXSS',
+      'generated project.config.json must enable setting.minifyWXML',
+      'generated project.config.json must disable setting.uploadWithSourceMap',
     ])
   })
 
@@ -142,7 +150,7 @@ describe('release configuration', () => {
     expect(
       validateGeneratedProjectConfig({
         appid: 'wx-release-appid',
-        setting: { urlCheck: true },
+        setting: productionSettings,
       }),
     ).toEqual([
       'generated project.config.json appid must match the WeChat format wx followed by 16 hex characters',
@@ -248,3 +256,11 @@ describe('release configuration', () => {
     ).toContain('VITE_SHORT_QUESTIONNAIRE_ENDPOINT must not include percent-encoded path traversal or backslash')
   })
 })
+
+const productionSettings = {
+  urlCheck: true,
+  minified: true,
+  minifyWXSS: true,
+  minifyWXML: true,
+  uploadWithSourceMap: false,
+}

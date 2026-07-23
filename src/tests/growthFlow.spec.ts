@@ -151,4 +151,16 @@ describe('student growth summaries', () => {
       message: '导入体测数据后将在此显示体能指标。'
     })
   })
+
+  it('rebuilds achievements from durable backend history after a restart', async () => {
+    const { buildGrowthAchievementsFromHistory } = await loadGrowthModule()
+
+    const achievements = buildGrowthAchievementsFromHistory([
+      { date: '2026-07-18' },
+      { date: '2026-07-17' },
+      { date: '2026-07-16' }
+    ], 1)
+
+    expect(achievements.every(achievement => achievement.earned)).toBe(true)
+  })
 })

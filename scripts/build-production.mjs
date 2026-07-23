@@ -7,6 +7,11 @@ import {
   validateProductionManifest,
   validateReleaseConfig,
 } from './release-config.mjs'
+import {
+  assertMainPackageSize,
+  formatPackageMeasurement,
+  measureMiniProgramPackage,
+} from './check-mini-program-package-size.mjs'
 
 const root = resolve(process.cwd())
 const fileEnvironment = loadEnv('production', root, '')
@@ -59,7 +64,18 @@ if (generatedErrors.length > 0) {
   process.exit(1)
 }
 
-console.log('Generated production bundle passed release configuration checks.')
+const packageMeasurement = await measureMiniProgramPackage(
+  resolve(root, 'dist/build/mp-weixin'),
+)
+console.log(formatPackageMeasurement(packageMeasurement))
+try {
+  assertMainPackageSize(packageMeasurement)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
+
+console.log('Generated production bundle passed release configuration and package size checks.')
 
 async function readJson(path) {
   try {

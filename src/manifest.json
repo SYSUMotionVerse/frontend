@@ -11,7 +11,11 @@
       "subPackages": true
     },
     "setting": {
-      "urlCheck": true
+      "urlCheck": true,
+      "minified": true,
+      "minifyWXSS": true,
+      "minifyWXML": true,
+      "uploadWithSourceMap": false
     }
   }
 }

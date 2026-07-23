@@ -1,19 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from 'vue'
+import { computed } from 'vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
-import { buildGrowthSummary } from '../../../domain/student/growth'
+import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
-import { useStudentStore } from '../../composables/useStudentStore'
-import { studentBackendSync } from '../../api/studentBackend'
-import { reportBackendSyncError } from '../../api/reportBackendSyncError'
-import type { StudentAdherenceData } from '../../api/studentBackendTypes'
+import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const store = useStudentStore()
-const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
-
-const adherenceData = shallowRef<StudentAdherenceData | null>(null)
-
+const { adherenceCalendar, adherenceData, loadState, refresh } = useGrowthOverview()
 const complianceLoaded = computed(() => adherenceData.value !== null)
 const complianceTodayCount = computed(() => {
   const todayCount = adherenceData.value?.todayCount ?? 0
@@ -23,20 +16,6 @@ const complianceRatePercent = computed(() =>
   Math.round((adherenceData.value?.complianceRate ?? 0) * 100)
 )
 const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [])
-const calendarDays = computed(() =>
-  adherenceData.value?.calendar ?? summary.value.adherenceCalendar
-)
-
-onMounted(async () => {
-  try {
-    const data = await studentBackendSync.loadAdherenceData()
-    if (data) {
-      adherenceData.value = data
-    }
-  } catch (error) {
-    reportBackendSyncError('打卡数据加载', error)
-  }
-})
 
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 </script>
@@ -47,6 +26,12 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
       eyebrow="成长"
       title="达标记录"
       description="训练坚持记录与依从性分析。"
+    />
+
+    <GrowthLoadStatus
+      :status="loadState.status"
+      :message="loadState.message"
+      @retry="refresh({ force: true })"
     />
 
     <section v-if="complianceLoaded" class="detail-page__stats">
@@ -90,7 +75,7 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
       <view class="heatmap-header">
         <span v-for="label in weekdayLabels" :key="label" class="weekday-label">{{ label }}</span>
       </view>
-      <AdherenceHeatmap :days="calendarDays" />
+      <AdherenceHeatmap :days="adherenceCalendar" />
       <p class="detail-page__note">每个方块代表一天，训练次数越多颜色越深，3 次即达标。</p>
     </section>
   </UniGrowthPageShell>
