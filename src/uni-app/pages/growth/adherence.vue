@@ -17,7 +17,6 @@ const complianceRatePercent = computed(() =>
 )
 const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [])
 
-const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 </script>
 
 <template>
@@ -72,9 +71,6 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
     <section class="detail-page__card">
       <h2 class="detail-page__section-title">近期热力图</h2>
-      <view class="heatmap-header">
-        <span v-for="label in weekdayLabels" :key="label" class="weekday-label">{{ label }}</span>
-      </view>
       <AdherenceHeatmap :days="adherenceCalendar" />
       <p class="detail-page__note">每个方块代表一天，训练次数越多颜色越深，3 次即达标。</p>
     </section>
@@ -118,7 +114,7 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 }
 .stat-label {
   display: block;
-  font-size: 20rpx;
+  font-size: 24rpx;
   color: #718096;
   margin-top: 6rpx;
 }
@@ -150,23 +146,9 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
   background: #FF8B8B;
   border-radius: 6rpx;
   min-height: 4rpx;
-  transition: height 0.3s ease;
 }
 .trend-bar-label {
-  font-size: 0.65rem;
-  color: #8899b4;
-}
-
-.heatmap-header {
-  display: flex;
-  gap: 32rpx;
-  margin-bottom: 8rpx;
-  padding: 0 4rpx;
-}
-.weekday-label {
-  width: 32rpx;
-  text-align: center;
-  font-size: 0.65rem;
+  font-size: 22rpx;
   color: #8899b4;
 }
 

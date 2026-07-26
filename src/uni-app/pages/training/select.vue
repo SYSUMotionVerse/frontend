@@ -26,7 +26,7 @@ const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'wushu',
     title: '武术（Wushu）',
-    duration: '10 分钟',
+    duration: '按动作编排',
     difficulty: '中等',
     actionHint: '跟镜头出招',
     routeLabel: '镜头跟练',
@@ -37,10 +37,10 @@ const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'hiit',
     title: 'HIIT Blast',
-    duration: '15 分钟',
+    duration: '按动作编排',
     difficulty: '挑战',
     actionHint: '开始间歇冲刺',
-    routeLabel: '3 轮间歇',
+    routeLabel: '镜头跟练',
     icon: 'fire-filled',
     tone: 'hiit',
     iconColor: '#2b7cb8'
@@ -48,7 +48,7 @@ const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'stair',
     title: '跑楼梯（Stairs）',
-    duration: '8 分钟',
+    duration: '30 秒',
     difficulty: '轻松',
     actionHint: '拿起手机登阶',
     routeLabel: '传感器记录',

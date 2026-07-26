@@ -93,7 +93,7 @@ onShareAppMessage((options) => {
 
   return {
     title: targetDataset?.shareTitle ?? '我的 Sport Snack 成长记录',
-    path: targetDataset?.sharePath ?? '/pages/growth/index'
+    path: targetDataset?.sharePath ?? '/pages/access/startup'
   }
 })
 </script>

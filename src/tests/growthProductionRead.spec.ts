@@ -117,7 +117,7 @@ describe('production growth reads', () => {
     expect(wrapper.text()).not.toContain('后端动作分析结果。')
     expect(wrapper.text()).not.toContain('运动心理健康量表（第2次）')
     expect(wrapper.text()).not.toContain('2600')
-    expect(wrapper.findAll('.adherence-cell')).toHaveLength(1)
+    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(1)
   })
 
   it('preserves local growth data when backend integration is disabled', async () => {

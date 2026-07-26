@@ -567,7 +567,7 @@ describe('backend client session handling', () => {
     )
   })
 
-  it('requests a rolling 28-day compliance calendar', async () => {
+  it('requests the selected monthly compliance calendar', async () => {
     const uniMock = createUniMock([{
       statusCode: 200,
       data: {
@@ -585,8 +585,35 @@ describe('backend client session handling', () => {
     await client.getComplianceCalendar(2026, 7)
 
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
-      'http://api.example.com/exercises/compliance/calendar/?days=28'
+      'http://api.example.com/exercises/compliance/calendar/?year=2026&month=7'
     )
+  })
+
+  it('loads every notification page returned by the backend', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: {
+          count: 2,
+          next: 'http://api.example.com/notifications/messages/?notification_type=TRAINING_REMINDER&page=2',
+          results: [{ id: 1 }]
+        }
+      },
+      {
+        statusCode: 200,
+        data: {
+          count: 2,
+          next: null,
+          results: [{ id: 2 }]
+        }
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await expect(client.listNotifications()).resolves.toEqual([{ id: 1 }, { id: 2 }])
+    expect(uniMock.request).toHaveBeenCalledTimes(2)
   })
 
   it('loads persisted achievement awards from training progress', async () => {

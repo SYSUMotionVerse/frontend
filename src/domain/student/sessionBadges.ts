@@ -44,7 +44,7 @@ export function buildSessionBadge(session: SessionRecord): SessionBadge {
     modalityLabel: MODALITY_LABELS[session.modality],
     svgName: badge.svgName,
     shareTitle: `我在 Sport Snack 获得了「${badge.title}」`,
-    sharePath: `/pages/training/feedback?sessionId=${encodeURIComponent(session.id)}`
+    sharePath: '/pages/access/startup'
   }
 }
 
@@ -77,7 +77,7 @@ export function buildSessionBadgesFromHistory(
         modalityLabel: MODALITY_LABELS[session.modality],
         svgName: badge.svgName,
         shareTitle: `我在 Sport Snack 获得了「${badge.title}」`,
-        sharePath: '/pages/growth/history'
+        sharePath: '/pages/access/startup'
       }
     })
     .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate))

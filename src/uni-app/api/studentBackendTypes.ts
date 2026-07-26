@@ -246,6 +246,7 @@ export interface ExerciseScoreDetails {
 
 export interface BackendExerciseRecord {
   id: number
+  training_session_id?: string
   video?: number
   duration: number
   score: number | string | null
@@ -265,6 +266,7 @@ export interface BackendExerciseRecord {
 
 export interface BackendStairRecord {
   id: number
+  training_session_id?: string
   duration: number
   speed_data: Record<string, unknown> | null
   acceleration_data: Record<string, unknown> | null

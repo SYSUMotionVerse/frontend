@@ -15,7 +15,7 @@ describe('AdherenceHeatmap', () => {
       }
     })
 
-    const cells = wrapper.findAll('.adherence-cell')
+    const cells = wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')
 
     expect(cells[0].classes()).toContain('adherence-cell--level-0')
     expect(cells[1].classes()).toContain('adherence-cell--level-1')

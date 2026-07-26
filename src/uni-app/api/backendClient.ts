@@ -316,6 +316,39 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     }
   }
 
+  async function requestAllPages<T>(initialPath: string) {
+    const items: T[] = []
+    let nextPath: string | null = initialPath
+    let pageCount = 0
+
+    while (nextPath && pageCount < 100) {
+      const response: T[] | PaginatedResponse<T> = await request<
+        T[] | PaginatedResponse<T>
+      >(nextPath)
+      if (Array.isArray(response)) {
+        items.push(...response)
+        break
+      }
+
+      items.push(...unwrapCollectionResponse<T>(response))
+      const next: string | null | undefined = response.next
+      if (!next) break
+      if (next.startsWith(baseUrl)) {
+        nextPath = next.slice(baseUrl.length) || '/'
+      } else if (next.startsWith('/') && !next.startsWith('//')) {
+        nextPath = next
+      } else {
+        throw new Error('Backend pagination returned an unsafe next-page URL.')
+      }
+      pageCount += 1
+    }
+
+    if (pageCount >= 100) {
+      throw new Error('Backend pagination exceeded the safety limit.')
+    }
+    return items
+  }
+
   function resetSession() {
     hasAuthenticatedSession = false
     sessionCookie = ''
@@ -442,9 +475,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getMyCompliance() {
       return request<BackendComplianceSummary>('/exercises/compliance/my_compliance/')
     },
-    getComplianceCalendar(_year: number, _month: number) {
+    getComplianceCalendar(year: number, month: number) {
       return request<BackendComplianceCalendar>(
-        '/exercises/compliance/calendar/?days=28'
+        `/exercises/compliance/calendar/?year=${year}&month=${month}`
       )
     },
     getComplianceTrend(count = 12) {
@@ -462,9 +495,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       )
     },
     listNotifications() {
-      return request<BackendStationNotification[] | PaginatedResponse<BackendStationNotification>>(
+      return requestAllPages<BackendStationNotification>(
         '/notifications/messages/?notification_type=TRAINING_REMINDER'
-      ).then(response => unwrapCollectionResponse<BackendStationNotification>(response))
+      )
     },
     getUnreadNotifications() {
       return request<BackendUnreadNotifications>(

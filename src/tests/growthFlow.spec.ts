@@ -76,7 +76,7 @@ describe('student growth summaries', () => {
         modalityLabel: '武术训练',
         svgName: 'stable-star',
         shareTitle: '我在 Sport Snack 获得了「动作稳定星」',
-        sharePath: '/pages/training/feedback?sessionId=session-1'
+        sharePath: '/pages/access/startup'
       }
     ])
   })
@@ -128,7 +128,7 @@ describe('student growth summaries', () => {
       modalityLabel: 'HIIT 训练',
       svgName: 'full-power',
       shareTitle: '我在 Sport Snack 获得了「满格表现章」',
-      sharePath: '/pages/training/feedback?sessionId=session-top'
+      sharePath: '/pages/access/startup'
     })
   })
 

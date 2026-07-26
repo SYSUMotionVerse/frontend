@@ -734,7 +734,6 @@ export function createStudentBackendSync(
       return runIfEnabled(dependencies.isEnabled(), async () => {
         await dependencies.ensureSession()
         await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(profile))
-        await dependencies.createSurveyRecord(buildRegistrationSurveyRecordPayload(profile))
         submissionOptions.registrationProfileStorage.save(profile)
       })
     },
@@ -935,6 +934,19 @@ export function createStudentBackendSync(
         assessments: mapBackendAssessmentHistory(psychologyRecords),
         trainingSessions: mapBackendTrainingHistory(exerciseRecords, stairRecords)
       }
+    },
+    async loadTrainingSession(sessionId: string) {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      const [exerciseRecords, stairRecords] = await Promise.all([
+        dependencies.listExerciseRecords(),
+        dependencies.listStairRecords()
+      ])
+      return mapBackendTrainingHistory(exerciseRecords, stairRecords)
+        .find(session => session.id === sessionId) ?? null
     },
     async loadTrainingProgress() {
       if (!dependencies.isEnabled()) {

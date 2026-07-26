@@ -36,7 +36,7 @@ describe('student backend sync orchestration', () => {
     }
   }
 
-  it('syncs registration through login, profile update, and a survey record', async () => {
+  it('syncs registration through login and the authoritative user profile', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const ensureSession = vi.fn().mockResolvedValue(undefined)
@@ -59,15 +59,10 @@ describe('student backend sync orchestration', () => {
         student_id: '20260001'
       })
     )
-    expect(createSurveyRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        survey_type: 1,
-        analysis: expect.stringContaining('"source":"registration"')
-      })
-    )
+    expect(createSurveyRecord).not.toHaveBeenCalled()
   })
 
-  it('rejects registration when required metadata cannot be persisted', async () => {
+  it('does not depend on the legacy survey-record fallback during registration', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const ensureSession = vi.fn().mockResolvedValue(undefined)
@@ -81,11 +76,11 @@ describe('student backend sync orchestration', () => {
       createSurveyRecord
     })
 
-    await expect(sync.syncRegistration(createProfile())).rejects.toThrow('Request failed with 400')
+    await expect(sync.syncRegistration(createProfile())).resolves.toEqual({ synced: true })
 
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(updateProfile).toHaveBeenCalledTimes(1)
-    expect(createSurveyRecord).toHaveBeenCalledTimes(1)
+    expect(createSurveyRecord).not.toHaveBeenCalled()
   })
 
   it('syncs a long questionnaire as a survey record', async () => {

@@ -71,6 +71,7 @@ const recordIconColor = computed(() =>
 const cameraPlaceholderLabel = computed(() =>
   props.recognitionEnabled ? '正在准备你的画面…' : '开启相机后可识别动作和录制自己'
 )
+const startActionDisabled = computed(() => !props.recognitionEnabled)
 const poseStatusLabel = computed(() => {
   if (props.poseFallbackSampling) {
     return props.livePoseFps > 0 ? `${props.livePoseFps} FPS 采样识别` : '采样识别中'
@@ -222,11 +223,18 @@ defineExpose({ startRecord, stopRecord })
         v-if="!videoLoading && !videoError && videoUrl && phaseKind === 'preview' && !trainingStarted && startCountdown === 0"
         class="visual-session__start-overlay"
       >
-        <button class="visual-session__start-button" @click="emit('startTraining')">
+        <button
+          class="visual-session__start-button"
+          :class="{ 'visual-session__start-button--disabled': startActionDisabled }"
+          :disabled="startActionDisabled"
+          @click="emit('startTraining')"
+        >
           <uni-icons type="play-filled" size="22" color="#fffaf4" />
           <text>开始训练</text>
         </button>
-        <text class="visual-session__start-hint">准备好后开始 3 秒倒计时</text>
+        <text class="visual-session__start-hint">
+          {{ startActionDisabled ? '请先在下方开启相机' : '准备好后开始 3 秒倒计时' }}
+        </text>
       </view>
       <view
         v-if="startCountdown > 0"
@@ -543,11 +551,16 @@ defineExpose({ startRecord, stopRecord })
   font-size: 30rpx;
   font-weight: 900;
   line-height: 1;
+  min-height: 88rpx;
   padding: 24rpx 42rpx;
 }
 
 .visual-session__start-button::after {
   border: none;
+}
+
+.visual-session__start-button--disabled {
+  opacity: 0.56;
 }
 
 .visual-session__start-hint {
@@ -890,6 +903,7 @@ defineExpose({ startRecord, stopRecord })
   font-size: 22rpx;
   font-weight: 900;
   line-height: 1;
+  min-height: 88rpx;
   padding: 20rpx 28rpx;
 }
 
@@ -904,7 +918,7 @@ defineExpose({ startRecord, stopRecord })
   min-width: 0;
   overflow: hidden;
   color: #6f6255;
-  font-size: 18rpx;
+  font-size: 24rpx;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -913,7 +927,7 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__recorded {
   flex-shrink: 0;
   color: #28766a;
-  font-size: 18rpx;
+  font-size: 24rpx;
   font-weight: 800;
 }
 

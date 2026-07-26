@@ -654,7 +654,7 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('3/3')
     expect(wrapper.text()).not.toContain('4/3')
     expect(wrapper.text()).toContain('75%')
-    expect(wrapper.findAll('.adherence-cell')).toHaveLength(2)
+    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(2)
     expect(wrapper.find('.adherence-cell--partial').attributes('title')).toContain('2026-07-01')
     expect(wrapper.find('.adherence-cell--met').attributes('title')).toContain('2026-07-02')
   })
@@ -938,8 +938,13 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['startTraining'],
-            template: '<button class="start-training" @click="$emit(\'startTraining\')">start</button>'
+            emits: ['startRecognition', 'startTraining'],
+            template: `
+              <div>
+                <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+              </div>
+            `
           }
         }
       }
@@ -947,6 +952,7 @@ describe('page-level backend sync wiring', () => {
 
     try {
       await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
       await wrapper.get('.start-training').trigger('click')
       vi.advanceTimersByTime(3000 + 15000 + 1000)
       await flushPromises()
@@ -1077,9 +1083,10 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['startTraining', 'videoEnded'],
+            emits: ['startRecognition', 'startTraining', 'videoEnded'],
             template: `
               <div>
+                <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
                 <button class="end-video" @click="$emit('videoEnded', { detail: { currentTime: 4 } })">end</button>
               </div>
@@ -1091,6 +1098,7 @@ describe('page-level backend sync wiring', () => {
 
     try {
       await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
       await wrapper.get('.start-training').trigger('click')
       await vi.advanceTimersByTimeAsync(4000)
 
@@ -1204,9 +1212,10 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startTraining', 'poseResult'],
+            emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startRecognition', 'startTraining', 'poseResult'],
             template: `<div>
               <span class="video-url">{{ videoUrl }}</span>
+              <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
               <button class="start-training" @click="$emit('startTraining')">start</button>
               <button class="pose-result" @click="$emit('poseResult', {
                 angleFrame: {
@@ -1221,6 +1230,7 @@ describe('page-level backend sync wiring', () => {
     })
 
     await flushPromises()
+    await wrapper.get('.start-recognition').trigger('click')
     await wrapper.get('.start-training').trigger('click')
     vi.advanceTimersByTime(3000)
     await flushPromises()

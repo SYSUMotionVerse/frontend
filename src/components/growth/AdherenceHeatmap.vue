@@ -7,10 +7,17 @@ const props = defineProps<{
 }>()
 
 const legendLevels = [0, 1, 2, 3] as const
+const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
 const groupedWeeks = computed(() => {
-  const weeks: GrowthCalendarDay[][] = []
-  let activeWeek: GrowthCalendarDay[] = []
+  const weeks: Array<Array<GrowthCalendarDay | null>> = []
+  let activeWeek: Array<GrowthCalendarDay | null> = []
+  const firstDate = props.days[0]?.date
+  if (firstDate) {
+    const weekday = new Date(`${firstDate}T00:00:00`).getDay()
+    const mondayFirstOffset = (weekday + 6) % 7
+    activeWeek = Array.from({ length: mondayFirstOffset }, () => null)
+  }
 
   props.days.forEach(day => {
     activeWeek.push(day)
@@ -47,19 +54,24 @@ function cellClass(day: GrowthCalendarDay): string {
 
 <template>
   <view class="adherence-shell">
-    <view class="adherence" aria-label="坚持热力图">
-      <view
-        v-for="(week, weekIndex) in groupedWeeks"
-        :key="weekIndex"
-        class="adherence-week"
-      >
+    <view class="adherence-grid">
+      <view class="adherence-weekdays" aria-hidden="true">
+        <text v-for="label in weekdayLabels" :key="label">{{ label }}</text>
+      </view>
+      <view class="adherence" aria-label="坚持热力图">
         <view
-          v-for="day in week"
-          :key="day.date"
-          :class="cellClass(day)"
-          :aria-label="`${day.date}：已完成 ${day.completedSessions} 次训练`"
-          :title="`${day.date}：已完成 ${day.completedSessions} 次训练`"
-        />
+          v-for="(week, weekIndex) in groupedWeeks"
+          :key="weekIndex"
+          class="adherence-week"
+        >
+          <view
+            v-for="(day, dayIndex) in week"
+            :key="day?.date ?? `empty-${weekIndex}-${dayIndex}`"
+            :class="day ? cellClass(day) : 'adherence-cell adherence-cell--empty'"
+            :aria-label="day ? `${day.date}：已完成 ${day.completedSessions} 次训练` : undefined"
+            :title="day ? `${day.date}：已完成 ${day.completedSessions} 次训练` : undefined"
+          />
+        </view>
       </view>
     </view>
 
@@ -82,6 +94,27 @@ function cellClass(day: GrowthCalendarDay): string {
   gap: 16rpx;
 }
 
+.adherence-grid {
+  display: flex;
+  gap: 12rpx;
+}
+
+.adherence-weekdays {
+  display: flex;
+  flex: 0 0 32rpx;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.adherence-weekdays text {
+  width: 32rpx;
+  height: 32rpx;
+  color: #718096;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  text-align: center;
+}
+
 .adherence {
   display: flex;
   gap: 16rpx;
@@ -99,6 +132,10 @@ function cellClass(day: GrowthCalendarDay): string {
   width: 32rpx;
   height: 32rpx;
   border-radius: 9999px;
+}
+
+.adherence-cell--empty {
+  visibility: hidden;
 }
 
 .adherence-cell--level-0,

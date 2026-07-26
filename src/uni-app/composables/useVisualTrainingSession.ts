@@ -186,6 +186,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     && Boolean(videoUrl.value)
     && !videoError.value
     && !videoLoading.value
+    && actionScores.value.length > 0
     && !completing.value
   ))
   const completionHint = computed(() => {
@@ -194,12 +195,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (!videoUrl.value) return '当前训练暂未配置教学视频'
     if (completionError.value) return completionError.value
     if (!trainingStarted.value) return '准备好后点击“开始训练”'
+    if (!recognitionEnabled.value) return '请先开启相机，识别动作后再开始训练'
     if (startCountdown.value > 0) return `${startCountdown.value} 秒后开始准备`
     if (phaseKind.value === 'preview') return `${phaseRemainingSeconds.value} 秒后开始 ${exerciseVideo.value?.title ?? '动作'}`
     if (phaseKind.value === 'rest') return `休息 ${phaseRemainingSeconds.value} 秒，准备下一动作`
     if (phaseKind.value === 'demonstration') return `观看 ${exerciseVideo.value?.title ?? '下一动作'} 示范，暂时不用跟练`
     if (phaseKind.value === 'countdown') return `${phaseRemainingSeconds.value} 秒后开始跟练`
     if (!videoEnded.value) return `动作 ${activeItemIndex.value + 1}/${arrangement.value?.items.length ?? 0}，完整跟随视频训练`
+    if (actionScores.value.length === 0) return '暂未识别到有效动作，请调整相机位置后重试本次训练'
     if (completing.value) return '正在保存训练记录'
     return '教学视频已完成，可以提交训练'
   })
@@ -506,6 +509,13 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function startTraining() {
+    if (!recognitionEnabled.value) {
+      if (typeof uni.showToast === 'function') {
+        void uni.showToast({ title: '请先开启相机', icon: 'none' })
+      }
+      return
+    }
+
     if (
       trainingStarted.value
       || startCountdownTimer
@@ -797,6 +807,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       Math.round(arrangement.value?.total_duration || videoProgressSeconds.value || 0)
     )
     const scoring = buildSessionScoringResult(actionScores.value, scoringWarnings.value)
+    if (scoring.score === undefined) {
+      completionError.value = '暂未识别到有效动作，请调整相机位置后重试本次训练'
+      completing.value = false
+      return
+    }
     const basePoseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
     const poseAnalysis = basePoseAnalysis
       ? {
@@ -808,7 +823,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           ...(scoring.scoreDetails ? { scoreDetails: scoring.scoreDetails } : {})
         }
       : undefined
-    let qualityScore = scoring.score === undefined ? 0 : Math.round(scoring.score)
+    let qualityScore = Math.round(scoring.score)
     let summary = scoring.summary
 
     try {
@@ -818,7 +833,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         ...(primaryVideoId.value
           ? { videoId: primaryVideoId.value }
           : {}),
-        ...(scoring.score !== undefined ? { score: scoring.score } : {}),
+        score: scoring.score,
         comment: scoring.summary,
         ...(poseAnalysis ? { poseAnalysis } : {})
       })

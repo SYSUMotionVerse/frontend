@@ -65,7 +65,7 @@ export function mapBackendTrainingHistory(
       const score = toNullableNumber(record.score)
       return {
         createdAt: record.created_at,
-        id: `visual-${record.id}`,
+        id: record.training_session_id || `visual-${record.id}`,
         modality: resolveExerciseModality(record),
         date: formatDate(record.created_at),
         summary: record.comment || record.video_info?.title || '已完成训练。',
@@ -78,7 +78,7 @@ export function mapBackendTrainingHistory(
     const score = toNullableNumber(record.acceleration_data?.qualityScore)
     return {
       createdAt: record.created_at,
-      id: `stair-${record.id}`,
+      id: record.training_session_id || `stair-${record.id}`,
       modality: 'stair' as const,
       date: formatDate(record.created_at),
       summary: typeof record.acceleration_data?.summary === 'string'

@@ -2,28 +2,65 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import { buildSessionBadge, resolveModalityLabel } from '../../../domain/student/sessionBadges'
+import type { SessionRecord } from '../../../domain/student/types'
+import { studentBackendSync } from '../../api/studentBackend'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
 const sessionId = ref('latest')
+const remoteSession = ref<SessionRecord | null>(null)
+const loadingSession = ref(false)
+const sessionLoadError = ref('')
 
-onLoad((query) => {
+onLoad(async (query) => {
   const nextQuery = query ?? {}
   sessionId.value = nextQuery.sessionId?.toString() ?? 'latest'
+  const localSession = resolveLocalSession()
+  if (localSession || sessionId.value === 'latest') return
+
+  loadingSession.value = true
+  sessionLoadError.value = ''
+  try {
+    const loaded = await studentBackendSync.loadTrainingSession(sessionId.value)
+    if (!loaded || loaded.qualityScore === null) {
+      sessionLoadError.value = '未找到这次训练记录'
+      return
+    }
+    remoteSession.value = {
+      id: loaded.id,
+      modality: loaded.modality,
+      date: loaded.date,
+      completed: true,
+      validCheckInApplied: false,
+      restartedAfterInterrupt: false,
+      shortQuestionnaire: null,
+      analysis: {
+        qualityScore: loaded.qualityScore,
+        summary: loaded.summary,
+        capturedBy: loaded.modality === 'stair' ? 'sensor' : 'camera'
+      }
+    }
+  } catch {
+    sessionLoadError.value = '训练记录加载失败，请检查网络后重试'
+  } finally {
+    loadingSession.value = false
+  }
 })
 
 onShow(() => {
   store.refreshReminderEligibility()
 })
 
-const session = computed(() => {
+function resolveLocalSession() {
   const snapshot = store.getSnapshot()
   if (sessionId.value === 'latest') {
     return snapshot.sessions.at(-1) ?? null
   }
 
   return snapshot.sessions.find(item => item.id === sessionId.value) ?? null
-})
+}
+
+const session = computed(() => resolveLocalSession() ?? remoteSession.value)
 
 const modalityLabel = computed(() => {
   if (!session.value) {
@@ -115,7 +152,7 @@ onShareAppMessage((options) => {
 
   return {
     title: targetDataset?.shareTitle ?? sessionBadge.value?.shareTitle ?? '我完成了一次 Sport Snack 训练',
-    path: targetDataset?.sharePath ?? sessionBadge.value?.sharePath ?? '/pages/training/home'
+    path: targetDataset?.sharePath ?? sessionBadge.value?.sharePath ?? '/pages/access/startup'
   }
 })
 </script>
@@ -126,7 +163,20 @@ onShareAppMessage((options) => {
     <view class="feedback-page__halo feedback-page__halo--sky" />
 
     <view class="feedback-page__inner">
-      <view class="feedback-page__hero">
+      <view v-if="loadingSession" class="feedback-page__state-card">
+        <text class="feedback-page__state-title">正在加载训练结果</text>
+        <text class="feedback-page__state-copy">请稍候，不会用临时分数替代真实记录。</text>
+      </view>
+
+      <view v-else-if="!session" class="feedback-page__state-card">
+        <text class="feedback-page__state-title">{{ sessionLoadError || '暂无可展示的训练结果' }}</text>
+        <text class="feedback-page__state-copy">你可以返回训练首页开始一次新的训练。</text>
+        <button class="feedback-page__primary-action" type="button" @click="goHome">
+          返回首页
+        </button>
+      </view>
+
+      <view v-if="session && !loadingSession" class="feedback-page__hero">
         <view class="feedback-page__heading">
           <text class="feedback-page__eyebrow">训练已记录</text>
           <text class="feedback-page__title">{{ modalityLabel }}训练完成</text>
@@ -136,7 +186,7 @@ onShareAppMessage((options) => {
         </view>
       </view>
 
-      <view class="feedback-page__score-card">
+      <view v-if="session && !loadingSession" class="feedback-page__score-card">
         <view class="feedback-page__score-decor feedback-page__score-decor--left">
           <text>✦</text>
         </view>
@@ -176,7 +226,7 @@ onShareAppMessage((options) => {
         </view>
       </view>
 
-      <view class="feedback-page__encouragement-card">
+      <view v-if="session && !loadingSession" class="feedback-page__encouragement-card">
         <view class="feedback-page__encouragement-icon">
           <text>🌟</text>
         </view>
@@ -187,11 +237,11 @@ onShareAppMessage((options) => {
         </view>
       </view>
 
-      <view class="feedback-page__status-pill">
+      <view v-if="session && !loadingSession" class="feedback-page__status-pill">
         <text>{{ statusText }}</text>
       </view>
 
-      <view class="feedback-page__actions">
+      <view v-if="session && !loadingSession" class="feedback-page__actions">
         <button
           class="feedback-page__primary-action"
           type="button"
@@ -262,6 +312,32 @@ onShareAppMessage((options) => {
   min-height: 100vh;
   flex-direction: column;
   padding: 48rpx 40rpx 88rpx;
+}
+
+.feedback-page__state-card {
+  display: flex;
+  min-height: 360rpx;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+  margin-top: 112rpx;
+  padding: 48rpx 36rpx;
+  border-radius: 28rpx;
+  background: var(--feedback-card);
+  text-align: center;
+}
+
+.feedback-page__state-title {
+  color: var(--feedback-ink);
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.feedback-page__state-copy {
+  color: var(--feedback-muted);
+  font-size: 26rpx;
+  line-height: 1.6;
 }
 
 .feedback-page__hero {
