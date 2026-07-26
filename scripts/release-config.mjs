@@ -144,7 +144,8 @@ function isReservedPlaceholderDomain(hostname) {
  *
  * The endpoint must be a same-backend relative path beginning with exactly one
  * slash, with no scheme, host, query, fragment, path traversal, or backslash.
- * It is optional because the backend endpoint does not exist yet.
+ * It remains optional for local/offline builds. Production config enables the
+ * deployed backend endpoint.
  */
 export function validateShortQuestionnaireEndpoint(endpoint) {
   const errors = []

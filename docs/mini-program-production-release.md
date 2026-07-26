@@ -115,6 +115,11 @@ DCloud/uni-app 工具链传递引入，直接 override `jpeg-js`、`@intlify/*`�
 强制替换。`pnpm audit:production` 仍会让任何新增、未列入清单的 high 或
 critical 漏洞失败。
 
+同一文件还包含两项已验证的安全 override：统一使用修复后的 `postcss@8.5.18`，
+并从 `@tensorflow-models/pose-detection` 的生产依赖图移除仅供其源码构建脚本
+使用的 `rimraf`。后者不会被已发布的姿态推理运行时代码导入。调整这些 override
+后必须重新运行 frozen install、完整测试、依赖审计和生产构建。
+
 **复查截止日：2026-10-18。** 无论是否升级了 `@dcloudio/*`，到该日期必须重新运行不带例外的 `pnpm audit --prod`，删除已修复的 GHSA，并复审剩余项。升级 `@dcloudio/*` 时也必须执行同样的复审。若这些依赖开始处理不可信的构建输入、开放开发服务器到公网，或进入小程序运行时代码，则现有例外立即失效，必须在发布前解决。
 
 当前受控的 high 级 GHSA 清单：

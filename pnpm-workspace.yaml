@@ -1,5 +1,14 @@
 allowBuilds:
   '@parcel/watcher': false
+
+overrides:
+  # pose-detection publishes its build-only cleanup tool as a production
+  # dependency. It is not imported by the distributed runtime package.
+  '@tensorflow-models/pose-detection>rimraf': '-'
+  # All current consumers accept PostCSS 8; use the patched release across the
+  # uni-app compiler graph.
+  postcss: 8.5.18
+
 # Audit ignore list — see "依赖审计例外" in docs/mini-program-production-release.md
 # for full justification, expiry conditions, and invalidation triggers.
 #
