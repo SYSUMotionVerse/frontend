@@ -87,6 +87,36 @@ describe('growth backend read models', () => {
     ])
   })
 
+  it('preserves unavailable scores instead of turning them into zeroes', async () => {
+    const { mapBackendTrainingHistory } = await import('../uni-app/api/growthBackendModels')
+
+    expect(
+      mapBackendTrainingHistory(
+        [{
+          id: 3,
+          video: 7,
+          duration: 30,
+          score: null,
+          comment: '训练已完成，暂无可用动作评分。',
+          status: 'COMPLETED',
+          created_at: '2026-04-12T10:00:00Z',
+          video_info: {
+            id: 7,
+            title: '马步冲拳',
+            exercise_type: 'MARTIAL_ARTS'
+          }
+        }],
+        [{
+          id: 4,
+          duration: 26,
+          speed_data: null,
+          acceleration_data: null,
+          created_at: '2026-04-12T11:00:00Z'
+        }]
+      ).map(session => session.qualityScore)
+    ).toEqual([null, null])
+  })
+
   it('maps backend visual score trend data into chart models', async () => {
     const { mapBackendVisualScoreTrend } = await import('../uni-app/api/growthBackendModels')
 
@@ -120,6 +150,35 @@ describe('growth backend read models', () => {
         latestOverallScore: 91,
         bestOverallScore: 91
       }
+    })
+  })
+
+  it('maps persisted achievement awards into growth badges', async () => {
+    const { mapBackendAchievementAwards } = await import('../uni-app/api/growthBackendModels')
+
+    const result = mapBackendAchievementAwards({
+      milestones: [
+        { code: 'starter', earned: true, awarded_at: '2026-07-18T10:00:00Z' },
+        { code: 'momentum', earned: false, awarded_at: null },
+        { code: 'assessment', earned: true, awarded_at: '2026-07-19T10:00:00Z' }
+      ],
+      session_badges: [{
+        code: 'session_gold',
+        training_session_id: 'session-88',
+        modality: 'HIIT',
+        local_date: '2026-07-20',
+        score: 88,
+        awarded_at: '2026-07-20T10:00:00Z'
+      }]
+    })
+
+    expect(result.achievements.map(item => item.earned)).toEqual([true, false, true])
+    expect(result.sessionBadges).toHaveLength(1)
+    expect(result.sessionBadges[0]).toMatchObject({
+      id: 'session-88-badge',
+      level: 'gold',
+      scoreLabel: '88 分',
+      modalityLabel: 'HIIT 训练'
     })
   })
 

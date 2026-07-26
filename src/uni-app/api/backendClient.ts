@@ -20,6 +20,7 @@ import type {
   BackendComplianceCalendar,
   BackendComplianceTrend,
   BackendTrainingProgress,
+  BackendAchievementAwards,
   BackendStationNotification,
   BackendUnreadNotifications,
   BackendReminderReturn,
@@ -396,7 +397,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       })
     },
     getExerciseScoreTrend() {
-      return request<BackendExerciseScoreTrendResponse>('/exercises/records/score_trend/')
+      return request<BackendExerciseScoreTrendResponse>(
+        '/exercises/records/score_trend/?days=all'
+      )
     },
     createStairsRecord(payload: StairsRecordCreatePayload) {
       return request('/exercises/stairs/', {
@@ -425,12 +428,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     listExerciseRecords() {
       return request<BackendExerciseRecord[] | PaginatedResponse<BackendExerciseRecord>>(
-        '/exercises/records/my_records/'
+        '/exercises/records/my_records/?days=all'
       ).then(response => unwrapCollectionResponse<BackendExerciseRecord>(response))
     },
     listStairRecords() {
       return request<BackendStairRecord[] | PaginatedResponse<BackendStairRecord>>(
-        '/exercises/stairs/my_records/'
+        '/exercises/stairs/my_records/?days=all'
       ).then(response => unwrapCollectionResponse<BackendStairRecord>(response))
     },
     getPhysicalTestTrend() {
@@ -439,9 +442,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getMyCompliance() {
       return request<BackendComplianceSummary>('/exercises/compliance/my_compliance/')
     },
-    getComplianceCalendar(year: number, month: number) {
+    getComplianceCalendar(_year: number, _month: number) {
       return request<BackendComplianceCalendar>(
-        `/exercises/compliance/calendar/?year=${year}&month=${month}`
+        '/exercises/compliance/calendar/?days=28'
       )
     },
     getComplianceTrend(count = 12) {
@@ -451,6 +454,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getTrainingProgress() {
       return request<BackendTrainingProgress>('/exercises/progress/today/')
+    },
+    getAchievementAwards() {
+      return request<BackendAchievementAwards>(
+        '/exercises/progress/achievements/',
+        { method: 'POST' }
+      )
     },
     listNotifications() {
       return request<BackendStationNotification[] | PaginatedResponse<BackendStationNotification>>(

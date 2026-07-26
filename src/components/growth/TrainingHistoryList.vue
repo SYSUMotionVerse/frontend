@@ -16,7 +16,9 @@ defineProps<{
           {{ session.modality.toUpperCase() }} · {{ session.date }}
         </text>
         <text class="history-item__subline block">{{ session.summary }}</text>
-        <text class="history-item__meta block">质量分：{{ session.qualityScore }}</text>
+        <text class="history-item__meta block">
+          {{ session.qualityScore === null ? '质量分：暂无评分' : `质量分：${session.qualityScore}` }}
+        </text>
       </view>
     </view>
   </view>

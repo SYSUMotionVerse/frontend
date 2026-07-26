@@ -944,6 +944,14 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       return dependencies.getTrainingProgress()
     },
+    async loadAchievementAwards() {
+      if (!dependencies.isEnabled() || !dependencies.getAchievementAwards) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      return dependencies.getAchievementAwards()
+    },
     async loadStationNotifications() {
       if (!dependencies.isEnabled()) {
         return { count: 0, notifications: [] }

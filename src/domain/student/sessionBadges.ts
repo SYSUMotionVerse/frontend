@@ -21,7 +21,7 @@ export interface SessionBadgeHistoryItem {
   id: string
   modality: TrainingModality
   date: string
-  qualityScore: number
+  qualityScore: number | null
 }
 
 const MODALITY_LABELS: Record<TrainingModality, string> = {
@@ -61,6 +61,8 @@ export function buildSessionBadgesFromHistory(
   limit = 6
 ): SessionBadge[] {
   return sessions
+    .filter((session): session is SessionBadgeHistoryItem & { qualityScore: number } =>
+      session.qualityScore !== null)
     .map(session => {
       const score = Math.round(session.qualityScore)
       const badge = resolveBadgeDefinition(score)

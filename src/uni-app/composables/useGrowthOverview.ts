@@ -8,8 +8,10 @@ import type { GrowthAssessmentSummary, GrowthSummaryCard } from '../../domain/st
 import { buildSessionBadgesFromHistory } from '../../domain/student/sessionBadges'
 import { CHECKPOINT_LABELS } from '../../features/access/questionnaire'
 import { reportBackendSyncError } from '../api/reportBackendSyncError'
+import { mapBackendAchievementAwards } from '../api/growthBackendModels'
 import { studentBackendSync } from '../api/studentBackend'
 import type {
+  BackendAchievementAwards,
   GrowthAssessmentHistoryItem,
   GrowthPhysicalMetrics,
   GrowthTrainingHistoryItem,
@@ -24,6 +26,7 @@ const backendSessions = shallowRef<GrowthTrainingHistoryItem[] | null>(null)
 const backendAdherence = shallowRef<StudentAdherenceData | null>(null)
 const backendPhysicalMetrics = shallowRef<GrowthPhysicalMetrics | null>(null)
 const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
+const backendAwards = shallowRef<BackendAchievementAwards | null>(null)
 const loadState = shallowRef<{
   status: 'loading' | 'ready' | 'partial' | 'error'
   message: string
@@ -39,9 +42,16 @@ const growthOverviewCache = createRequestCache({
       studentBackendSync.loadGrowthHistory(),
       studentBackendSync.loadAdherenceData(),
       studentBackendSync.loadPhysicalMetrics(),
-      studentBackendSync.loadVisualScoreTrend()
+      studentBackendSync.loadVisualScoreTrend(),
+      studentBackendSync.loadAchievementAwards?.() ?? Promise.resolve(null)
     ])
-    const [historyResult, adherenceResult, physicalMetricsResult, visualScoreTrendResult] = results
+    const [
+      historyResult,
+      adherenceResult,
+      physicalMetricsResult,
+      visualScoreTrendResult,
+      awardsResult
+    ] = results
     const failures: string[] = []
 
     if (historyResult.status === 'fulfilled') {
@@ -69,6 +79,12 @@ const growthOverviewCache = createRequestCache({
       failures.push('动作得分趋势')
       reportBackendSyncError('视觉训练得分趋势加载', visualScoreTrendResult.reason)
     }
+    if (awardsResult.status === 'fulfilled') {
+      backendAwards.value = awardsResult.value
+    } else {
+      failures.push('成长徽章')
+      reportBackendSyncError('成长徽章加载', awardsResult.reason)
+    }
 
     loadState.value = failures.length === 0
       ? { status: 'ready', message: '' }
@@ -85,6 +101,7 @@ function resetBackendGrowthData() {
   backendAdherence.value = null
   backendPhysicalMetrics.value = null
   scoreTrend.value = null
+  backendAwards.value = null
   loadState.value = { status: 'ready', message: '' }
   growthOverviewCache.invalidate()
 }
@@ -122,13 +139,22 @@ export function useGrowthOverview() {
   )
   const assessments = computed(() => backendAssessments.value ?? localAssessments.value)
   const sessions = computed(() => backendSessions.value ?? localSessions.value)
+  const mappedAwards = computed(() => (
+    backendAwards.value === null
+      ? null
+      : mapBackendAchievementAwards(backendAwards.value)
+  ))
   const achievements = computed(() => (
-    backendSessions.value !== null && backendAssessments.value !== null
+    mappedAwards.value !== null
+      ? mappedAwards.value.achievements
+      : backendSessions.value !== null && backendAssessments.value !== null
       ? buildGrowthAchievementsFromHistory(backendSessions.value, backendAssessments.value.length)
       : summary.value.achievements
   ))
   const sessionBadges = computed(() => (
-    backendSessions.value !== null
+    mappedAwards.value !== null
+      ? mappedAwards.value.sessionBadges
+      : backendSessions.value !== null
       ? buildSessionBadgesFromHistory(backendSessions.value)
       : summary.value.sessionBadges
   ))

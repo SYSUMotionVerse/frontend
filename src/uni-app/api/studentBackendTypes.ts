@@ -382,7 +382,7 @@ export interface GrowthTrainingHistoryItem {
   modality: TrainingModality
   date: string
   summary: string
-  qualityScore: number
+  qualityScore: number | null
   scoreDetails?: ExerciseScoreDetails | null
 }
 
@@ -425,6 +425,7 @@ export interface StudentBackendSyncDependencies {
   getComplianceCalendar: (year: number, month: number) => Promise<BackendComplianceCalendar>
   getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
   getTrainingProgress: () => Promise<BackendTrainingProgress>
+  getAchievementAwards?: () => Promise<BackendAchievementAwards>
   listNotifications: () => Promise<BackendStationNotification[]>
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
@@ -478,6 +479,26 @@ export interface BackendTrainingProgress {
     end_date: string
     qualifying_day_count: number
   }
+}
+
+export interface BackendAchievementMilestone {
+  code: 'starter' | 'momentum' | 'assessment'
+  earned: boolean
+  awarded_at: string | null
+}
+
+export interface BackendSessionBadgeAward {
+  code: 'session_platinum' | 'session_gold' | 'session_silver' | 'session_bronze'
+  training_session_id: string
+  modality: BackendTrainingModality
+  local_date: string
+  score: number
+  awarded_at: string
+}
+
+export interface BackendAchievementAwards {
+  milestones: BackendAchievementMilestone[]
+  session_badges: BackendSessionBadgeAward[]
 }
 
 export type RegistrationSyncInput = StudentProfile

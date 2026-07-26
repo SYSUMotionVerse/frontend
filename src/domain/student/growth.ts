@@ -156,6 +156,31 @@ export function buildGrowthAchievementsFromHistory(
   )
 }
 
+export function buildGrowthAchievementsFromAwardCodes(
+  earnedCodes: ReadonlySet<string>
+): GrowthAchievement[] {
+  return [
+    {
+      id: 'starter',
+      title: '起步有力',
+      description: '完成第一次训练。',
+      earned: earnedCodes.has('starter')
+    },
+    {
+      id: 'momentum',
+      title: '势头建立者',
+      description: '保持连续 3 天训练。',
+      earned: earnedCodes.has('momentum')
+    },
+    {
+      id: 'assessment',
+      title: '评估探索者',
+      description: '至少完成一次长问卷评估。',
+      earned: earnedCodes.has('assessment')
+    }
+  ]
+}
+
 function getLatestSession(sessions: readonly SessionRecord[]): SessionRecord | null {
   if (sessions.length === 0) {
     return null

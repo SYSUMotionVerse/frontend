@@ -449,7 +449,29 @@ describe('backend client session handling', () => {
         bestOverallScore: 91
       }
     })
-    expect(uniMock.request.mock.calls[0]?.[0].url).toBe('http://api.example.com/exercises/records/score_trend/')
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/records/score_trend/?days=all'
+    )
+  })
+
+  it('requests complete exercise and stairs history explicitly', async () => {
+    const uniMock = createUniMock([
+      { statusCode: 200, data: [] },
+      { statusCode: 200, data: [] }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await client.listExerciseRecords()
+    await client.listStairRecords()
+
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/records/my_records/?days=all'
+    )
+    expect(uniMock.request.mock.calls[1]?.[0].url).toBe(
+      'http://api.example.com/exercises/stairs/my_records/?days=all'
+    )
   })
 
   it('unwraps paginated psychology scale lists into arrays', async () => {
@@ -543,6 +565,46 @@ describe('backend client session handling', () => {
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
       'http://api.example.com/exercises/compliance/trend/?type=weekly&weeks=8'
     )
+  })
+
+  it('requests a rolling 28-day compliance calendar', async () => {
+    const uniMock = createUniMock([{
+      statusCode: 200,
+      data: {
+        year: 2026,
+        month: 7,
+        days: [],
+        completed_days: 0,
+        total_training_count: 0
+      }
+    }])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await client.getComplianceCalendar(2026, 7)
+
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/compliance/calendar/?days=28'
+    )
+  })
+
+  it('loads persisted achievement awards from training progress', async () => {
+    const payload = {
+      milestones: [],
+      session_badges: []
+    }
+    const uniMock = createUniMock([{ statusCode: 200, data: payload }])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+
+    await expect(client.getAchievementAwards()).resolves.toEqual(payload)
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/exercises/progress/achievements/'
+    )
+    expect(uniMock.request.mock.calls[0]?.[0].method).toBe('POST')
   })
 
   it('exposes the response status code on backend request errors', async () => {

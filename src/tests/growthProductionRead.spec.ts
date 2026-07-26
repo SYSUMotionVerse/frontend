@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInitialStudentState } from '../domain/student/state'
 
 vi.mock('@dcloudio/uni-app', () => ({
+  onShareAppMessage: vi.fn(),
   onShow: vi.fn()
 }))
 

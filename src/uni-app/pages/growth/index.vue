@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import SessionBadgeList from '../../../components/growth/SessionBadgeList.vue'
@@ -83,6 +83,18 @@ const explorationLinks = computed(() => [
 
 onShow(() => {
   void stationNotifications.refresh()
+})
+
+onShareAppMessage((options) => {
+  const targetDataset = options.target?.dataset as {
+    shareTitle?: string
+    sharePath?: string
+  } | undefined
+
+  return {
+    title: targetDataset?.shareTitle ?? '我的 Sport Snack 成长记录',
+    path: targetDataset?.sharePath ?? '/pages/growth/index'
+  }
 })
 </script>
 

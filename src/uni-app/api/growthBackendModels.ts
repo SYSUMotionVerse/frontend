@@ -1,6 +1,9 @@
 import type { PhysicalMetricTrend, TrainingModality } from '../../domain/student/types'
+import { buildGrowthAchievementsFromAwardCodes } from '../../domain/student/growth'
+import { buildSessionBadgesFromHistory } from '../../domain/student/sessionBadges'
 import { mapPsychologyRecordSummary } from './psychologyModels'
 import type {
+  BackendAchievementAwards,
   BackendExerciseRecord,
   BackendExerciseScoreTrendResponse,
   BackendPhysicalTrendResponse,
@@ -24,8 +27,28 @@ function toNumber(value: unknown) {
   return 0
 }
 
+function toNullableNumber(value: unknown) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function resolveExerciseModality(record: BackendExerciseRecord): TrainingModality {
   return record.video_info?.exercise_type === 'HIIT' ? 'hiit' : 'wushu'
+}
+
+function resolveBackendModality(
+  modality: BackendAchievementAwards['session_badges'][number]['modality']
+): TrainingModality {
+  if (modality === 'HIIT') return 'hiit'
+  if (modality === 'STAIRS') return 'stair'
+  return 'wushu'
 }
 
 function formatDate(isoLike: string) {
@@ -38,26 +61,32 @@ export function mapBackendTrainingHistory(
 ): GrowthTrainingHistoryItem[] {
   const visualSessions = exerciseRecords
     .filter(record => record.status !== 'PENDING')
-    .map(record => ({
-      createdAt: record.created_at,
-      id: `visual-${record.id}`,
-      modality: resolveExerciseModality(record),
-      date: formatDate(record.created_at),
-      summary: record.comment || record.video_info?.title || '已完成训练。',
-      qualityScore: Math.round(toNumber(record.score)),
-      scoreDetails: record.scoreDetails ?? record.poseAnalysis?.scoreDetails ?? null
-    }))
+    .map(record => {
+      const score = toNullableNumber(record.score)
+      return {
+        createdAt: record.created_at,
+        id: `visual-${record.id}`,
+        modality: resolveExerciseModality(record),
+        date: formatDate(record.created_at),
+        summary: record.comment || record.video_info?.title || '已完成训练。',
+        qualityScore: score === null ? null : Math.round(score),
+        scoreDetails: record.scoreDetails ?? record.poseAnalysis?.scoreDetails ?? null
+      }
+    })
 
-  const stairSessions = stairRecords.map(record => ({
-    createdAt: record.created_at,
-    id: `stair-${record.id}`,
-    modality: 'stair' as const,
-    date: formatDate(record.created_at),
-    summary: typeof record.acceleration_data?.summary === 'string'
-      ? record.acceleration_data.summary
-      : '已完成楼梯训练。',
-    qualityScore: Math.round(toNumber(record.acceleration_data?.qualityScore))
-  }))
+  const stairSessions = stairRecords.map(record => {
+    const score = toNullableNumber(record.acceleration_data?.qualityScore)
+    return {
+      createdAt: record.created_at,
+      id: `stair-${record.id}`,
+      modality: 'stair' as const,
+      date: formatDate(record.created_at),
+      summary: typeof record.acceleration_data?.summary === 'string'
+        ? record.acceleration_data.summary
+        : '已完成楼梯训练。',
+      qualityScore: score === null ? null : Math.round(score)
+    }
+  })
 
   return [...visualSessions, ...stairSessions]
     .sort((left, right) =>
@@ -101,6 +130,26 @@ export function mapBackendAssessmentHistory(
       submittedAt: summary.submittedAt
     }
   })
+}
+
+export function mapBackendAchievementAwards(response: BackendAchievementAwards) {
+  const earnedCodes = new Set(
+    response.milestones
+      .filter(milestone => milestone.earned)
+      .map(milestone => milestone.code)
+  )
+
+  return {
+    achievements: buildGrowthAchievementsFromAwardCodes(earnedCodes),
+    sessionBadges: buildSessionBadgesFromHistory(
+      response.session_badges.map(award => ({
+        id: award.training_session_id,
+        modality: resolveBackendModality(award.modality),
+        date: award.local_date,
+        qualityScore: award.score
+      }))
+    )
+  }
 }
 
 export function mapBackendPhysicalMetrics(

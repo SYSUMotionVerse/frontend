@@ -132,6 +132,19 @@ describe('student growth summaries', () => {
     })
   })
 
+  it('does not award a score badge when the backend score is unavailable', async () => {
+    const { buildSessionBadgesFromHistory } = await import('../domain/student/sessionBadges')
+
+    expect(buildSessionBadgesFromHistory([
+      {
+        id: 'visual-unscored',
+        modality: 'wushu',
+        date: '2026-03-20',
+        qualityScore: null
+      }
+    ])).toEqual([])
+  })
+
   it('places shareable training badges directly after the adherence heatmap on the growth page', () => {
     const pageSource = readFileSync(
       resolve(process.cwd(), 'src/uni-app/pages/growth/index.vue'),
@@ -141,6 +154,8 @@ describe('student growth summaries', () => {
     expect(pageSource).toContain('SessionBadgeList')
     expect(pageSource).toContain(':badges="sessionBadges"')
     expect(pageSource.indexOf('<AdherenceHeatmap')).toBeLessThan(pageSource.indexOf('<SessionBadgeList'))
+    expect(pageSource).toContain('onShareAppMessage')
+    expect(pageSource).toContain('targetDataset?.sharePath')
   })
 
   it('returns an empty-state model when physical metrics are unavailable', async () => {
