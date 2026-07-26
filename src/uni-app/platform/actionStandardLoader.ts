@@ -35,6 +35,70 @@ export function parseActionStandard(value: unknown): ActionStandard {
   if (!isRecord(parsed.angle_rules)) {
     throw new Error('标准动作文件 angle_rules 无效。')
   }
+  if (parsed.tts_cues !== undefined) {
+    if (
+      !Array.isArray(parsed.tts_cues)
+      || parsed.tts_cues.some(cue =>
+        !isRecord(cue)
+        || typeof cue.time !== 'number'
+        || !Number.isFinite(cue.time)
+        || cue.time < 0
+        || typeof cue.text !== 'string'
+        || typeof cue.audio_url !== 'string'
+        || cue.audio_url.trim().length === 0
+      )
+    ) {
+      throw new Error('标准动作文件 tts_cues 无效。')
+    }
+  }
+  if (
+    parsed.countdown_audio_url !== undefined
+    && (
+      typeof parsed.countdown_audio_url !== 'string'
+      || parsed.countdown_audio_url.trim().length === 0
+    )
+  ) {
+    throw new Error('标准动作文件 countdown_audio_url 无效。')
+  }
+  if (
+    parsed.countdown_audio_urls !== undefined
+    && (
+      !isRecord(parsed.countdown_audio_urls)
+      || ['1', '2', '3'].some(key => {
+        const countdownAudioUrls = parsed.countdown_audio_urls as Record<string, unknown>
+        const url = countdownAudioUrls[key]
+        return typeof url !== 'string' || url.trim().length === 0
+      })
+    )
+  ) {
+    throw new Error('标准动作文件 countdown_audio_urls 无效。')
+  }
+  if (
+    parsed.transition_audio_urls !== undefined
+    && (
+      !isRecord(parsed.transition_audio_urls)
+      || typeof parsed.transition_audio_urls.start !== 'string'
+      || parsed.transition_audio_urls.start.trim().length === 0
+      || typeof parsed.transition_audio_urls.end !== 'string'
+      || parsed.transition_audio_urls.end.trim().length === 0
+      || (
+        parsed.transition_audio_urls.next_action !== undefined
+        && (
+          typeof parsed.transition_audio_urls.next_action !== 'string'
+          || parsed.transition_audio_urls.next_action.trim().length === 0
+        )
+      )
+      || (
+        parsed.transition_audio_urls.rest_next_action !== undefined
+        && (
+          typeof parsed.transition_audio_urls.rest_next_action !== 'string'
+          || parsed.transition_audio_urls.rest_next_action.trim().length === 0
+        )
+      )
+    )
+  ) {
+    throw new Error('标准动作文件 transition_audio_urls 无效。')
+  }
 
   return parsed as unknown as ActionStandard
 }

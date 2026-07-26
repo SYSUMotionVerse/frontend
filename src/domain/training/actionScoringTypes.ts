@@ -23,6 +23,21 @@ export interface ActionAngleRule {
   feedback?: Partial<Record<ActionScoreDirection, string>>
 }
 
+export interface ActionTtsCue {
+  time: number
+  text: string
+  audio_url: string
+}
+
+export type CountdownAudioUrls = Record<'1' | '2' | '3', string>
+
+export interface ActionTransitionAudioUrls {
+  start: string
+  end: string
+  next_action?: string
+  rest_next_action?: string
+}
+
 export interface ActionStandard {
   schema_version?: string
   action_id: string
@@ -33,6 +48,10 @@ export interface ActionStandard {
   angle_names: string[]
   standard_sequence: Array<Array<number | null>>
   angle_rules: Partial<Record<ActionAngleName, ActionAngleRule>>
+  tts_cues?: ActionTtsCue[]
+  countdown_audio_url?: string
+  countdown_audio_urls?: CountdownAudioUrls
+  transition_audio_urls?: ActionTransitionAudioUrls
 }
 
 export interface ActionMotionFrame {

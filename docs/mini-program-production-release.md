@@ -80,7 +80,7 @@ VITE_SHORT_QUESTIONNAIRE_ENDPOINT=/exercises/short-questionnaires
 在小程序后台的“开发管理 → 开发设置 → 服务器域名”中，至少添加：
 
 - API HTTPS 域名到 `request` 合法域名。
-- COS/CDN HTTPS 域名 `https://cdn.sysusports.cn` 到 `request` 合法域名。
+- COS/CDN HTTPS 域名 `https://cdn.sysusports.cn` 同时加入 `request` 与 `downloadFile` 合法域名；动作视频缓存和教练语音都依赖下载域名。
 
 域名必须与生产环境变量完全一致；不要填写路径 `/api` 或 `/pose/...`。
 

@@ -16,6 +16,7 @@ import { invalidateGrowthOverview } from './useGrowthOverview'
 import { useTrainingProgress } from './useTrainingProgress'
 import { trainingVideoCache } from '../platform/videoCache'
 import { actionStandardLoader } from '../platform/actionStandardLoader'
+import { createTrainingTtsPlayer } from '../platform/trainingTts'
 import { aggregateActionScores, scoreAction } from '../../domain/training/actionScoring'
 import {
   ACTION_SCORING_VERSION,
@@ -56,6 +57,14 @@ function toRoundedScore(value: number) {
 
 function resolveStandardUrl(item: ExerciseArrangementItem) {
   return item.standard_data_url?.trim() || item.video.standard_data_url?.trim() || ''
+}
+
+function resolveStandardAudioUrls(standard: ActionStandard) {
+  return [
+    ...Object.values(standard.countdown_audio_urls ?? {}),
+    ...Object.values(standard.transition_audio_urls ?? {}),
+    ...(standard.tts_cues ?? []).map(cue => cue.audio_url)
+  ]
 }
 
 function buildActionMotion(angleFrames: PoseAngleFrame[]): ActionMotion | null {
@@ -131,6 +140,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const actionStandards = shallowRef<Record<number, ActionStandard>>({})
   const actionScores = shallowRef<ScoredActionResult[]>([])
   const scoringWarnings = shallowRef<string[]>([])
+  const ttsPlayer = createTrainingTtsPlayer()
+  let pendingEndCue: Promise<void> | undefined
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setInterval> | null = null
   let startCountdownTimer: ReturnType<typeof setInterval> | null = null
@@ -232,12 +243,61 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     sessionProgressSeconds.value = phase.startSeconds + elapsed
   }
 
+  function playCountdownSequence() {
+    const urls = activeStandard()?.countdown_audio_urls
+    ttsPlayer.replace([
+      urls?.['3'] ?? '',
+      urls?.['2'] ?? '',
+      urls?.['1'] ?? ''
+    ])
+  }
+
+  function activeStandard() {
+    return actionStandards.value[activeItem.value?.id ?? 0]
+  }
+
+  function playStartCue() {
+    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.start ?? ''])
+  }
+
+  function playEndCue() {
+    pendingEndCue = ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.end ?? ''])
+  }
+
+  function playNextActionCue() {
+    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.next_action ?? ''])
+  }
+
+  function playRestNextActionCue() {
+    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.rest_next_action ?? ''])
+  }
+
+  function syncActiveGuidance() {
+    if (phaseKind.value !== 'active') return
+    const actionDuration = Math.max(1, activeItem.value?.expected_duration ?? 1)
+    const elapsedSeconds = Math.max(0, actionDuration - phaseRemainingSeconds.value)
+    ttsPlayer.sync(activeStandard()?.tts_cues ?? [], elapsedSeconds)
+  }
+
   function startPhaseTimer(onComplete: () => void) {
     clearPhaseTimer()
     syncSessionProgress()
     phaseTimer = setInterval(() => {
       phaseRemainingSeconds.value = Math.max(0, phaseRemainingSeconds.value - 1)
       syncSessionProgress()
+      syncActiveGuidance()
+      if (
+        (phaseKind.value === 'preview' || phaseKind.value === 'countdown')
+        && phaseRemainingSeconds.value === startCueCountdownSeconds
+      ) {
+        playCountdownSequence()
+      }
+      if (phaseKind.value === 'active' && phaseRemainingSeconds.value === 3) {
+        playCountdownSequence()
+      }
+      if (phaseKind.value === 'active' && phaseRemainingSeconds.value === 0) {
+        playEndCue()
+      }
       if (phaseRemainingSeconds.value === 0) {
         clearPhaseTimer()
         onComplete()
@@ -359,6 +419,18 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       }
     })
     actionStandards.value = standards
+
+    const firstStandard = standards[nextArrangement.items[0]?.id ?? 0]
+    if (firstStandard) {
+      await ttsPlayer.preload(resolveStandardAudioUrls(firstStandard))
+    }
+    const laterAudioUrls = nextArrangement.items
+      .slice(1)
+      .flatMap(item => {
+        const standard = standards[item.id]
+        return standard ? resolveStandardAudioUrls(standard) : []
+      })
+    void ttsPlayer.preload(laterAudioUrls)
   }
 
   function finalizeActiveAction() {
@@ -412,7 +484,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     videoDurationSeconds.value = exerciseVideo.value?.duration ?? 0
     playbackState.value = 'idle'
     videoAutoplay.value = true
+    ttsPlayer.resetTimeline()
+    pendingEndCue = undefined
     syncSessionProgress()
+    playStartCue()
+    syncActiveGuidance()
     startPhaseTimer(beginRestOrNextItem)
   }
 
@@ -424,6 +500,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     phaseRemainingSeconds.value = initialPreviewDurationSeconds
     playbackState.value = 'idle'
     videoAutoplay.value = true
+    playNextActionCue()
     syncSessionProgress()
     startPhaseTimer(beginActiveItem)
   }
@@ -442,6 +519,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     startCountdown.value = initialStartCountdownSeconds
     videoAutoplay.value = false
     playbackState.value = 'idle'
+    playCountdownSequence()
     clearStartCountdownTimer()
     startCountdownTimer = setInterval(() => {
       startCountdown.value = Math.max(0, startCountdown.value - 1)
@@ -455,6 +533,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     phaseRemainingSeconds.value = startCueCountdownSeconds
     playbackState.value = 'idle'
     videoAutoplay.value = false
+    playCountdownSequence()
     syncSessionProgress()
     startPhaseTimer(beginActiveItem)
   }
@@ -472,6 +551,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     phaseRemainingSeconds.value = videoDurationSeconds.value
     playbackState.value = 'idle'
     videoAutoplay.value = true
+    playNextActionCue()
     syncSessionProgress()
   }
 
@@ -483,7 +563,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       videoEnded.value = true
       playbackState.value = 'ended'
       sessionProgressSeconds.value = workoutTimeline.value.at(-1)?.endSeconds ?? 0
-      void finishSession()
+      void finishSessionAfterPlayback(pendingEndCue)
       return
     }
 
@@ -498,6 +578,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       beginDemonstration()
       return
     }
+    playRestNextActionCue()
     startPhaseTimer(beginDemonstration)
   }
 
@@ -598,6 +679,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (videoAutoplay.value || playbackState.value === 'ended') return
     if (phaseKind.value === 'rest' || phaseKind.value === 'countdown') return
     clearPhaseTimer()
+    ttsPlayer.pause()
     playbackState.value = 'paused'
   }
 
@@ -697,7 +779,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     }
   }
 
-  async function finishSession() {
+  async function finishSessionAfterPlayback(completionAudio?: Promise<void>) {
     if (completing.value) return
     if (!canComplete.value) {
       if (typeof uni.showToast === 'function') {
@@ -768,9 +850,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     useTrainingProgress().invalidate()
     invalidateGrowthOverview()
 
+    await completionAudio
     void uni.redirectTo({
       url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(submission.sessionId)}`
     })
+  }
+
+  async function finishSession() {
+    return finishSessionAfterPlayback()
   }
 
   async function interruptSession() {
@@ -786,6 +873,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     actionStandards.value = {}
     actionScores.value = []
     scoringWarnings.value = []
+    ttsPlayer.reset()
     clearStartCountdownTimer()
     void loadExerciseArrangement()
   }, { immediate: true })
@@ -796,6 +884,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearPhaseTimer()
     clearStartCountdownTimer()
     clearCacheWarmupTimer()
+    ttsPlayer.destroy()
     if (recording.value) {
       recording.value = false
       void capture.value?.stopRecord().catch(() => {})

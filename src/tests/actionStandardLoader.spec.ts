@@ -23,6 +23,45 @@ describe('actionStandardLoader', () => {
     )
   })
 
+  it('validates optional TTS cues', () => {
+    expect(parseActionStandard({
+      ...validStandard(),
+      countdown_audio_url: 'https://cdn.example.com/countdown.mp3',
+      countdown_audio_urls: {
+        '1': 'https://cdn.example.com/1.mp3',
+        '2': 'https://cdn.example.com/2.mp3',
+        '3': 'https://cdn.example.com/3.mp3'
+      },
+      transition_audio_urls: {
+        start: 'https://cdn.example.com/start.mp3',
+        end: 'https://cdn.example.com/end.mp3',
+        next_action: 'https://cdn.example.com/next.mp3',
+        rest_next_action: 'https://cdn.example.com/rest-next.mp3'
+      },
+      tts_cues: [{
+        time: 0,
+        text: '动作开始',
+        audio_url: 'https://cdn.example.com/00.mp3'
+      }]
+    }).tts_cues).toHaveLength(1)
+    expect(() => parseActionStandard({
+      ...validStandard(),
+      countdown_audio_url: ''
+    })).toThrow('countdown_audio_url')
+    expect(() => parseActionStandard({
+      ...validStandard(),
+      countdown_audio_urls: { '1': 'https://cdn.example.com/1.mp3' }
+    })).toThrow('countdown_audio_urls')
+    expect(() => parseActionStandard({
+      ...validStandard(),
+      transition_audio_urls: { start: 'https://cdn.example.com/start.mp3' }
+    })).toThrow('transition_audio_urls')
+    expect(() => parseActionStandard({
+      ...validStandard(),
+      tts_cues: [{ time: -1, text: '动作开始', audio_url: '' }]
+    })).toThrow('tts_cues')
+  })
+
   it('deduplicates concurrent requests for the same URL', async () => {
     const requestJson = vi.fn().mockResolvedValue(validStandard())
     const loader = createActionStandardLoader({ requestJson })

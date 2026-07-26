@@ -868,6 +868,264 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
+  it('plays action guidance from the session clock without waiting for video time updates', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 3,
+      title: '武术基本功入门',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 8,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 31,
+        video_id: 9,
+        video: {
+          id: 9,
+          title: '马步冲拳',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/wushu.mp4',
+          standard_data_url: 'https://cdn.example.com/guidance-wushu.json',
+          duration: 8
+        },
+        expected_duration: 8,
+        countdown_duration: 0,
+        rest_duration: 0,
+        order: 1
+      }]
+    })
+    ;(globalThis as typeof globalThis & {
+      uni: { request: ReturnType<typeof vi.fn> }
+    }).uni.request.mockImplementation(({ success }) => {
+      success({
+        statusCode: 200,
+        data: {
+          action_id: 'wushu-punch',
+          action_type: 'repetitive',
+          angle_unit: 'radian',
+          angle_names: ['left_knee'],
+          standard_sequence: [[Math.PI / 2]],
+          angle_rules: {},
+          tts_cues: [{
+            time: 1,
+            text: '保持膝盖稳定',
+            audio_url: 'https://cdn.example.com/guidance-01.mp3'
+          }]
+        }
+      })
+    })
+
+    const audioContext = {
+      src: '',
+      autoplay: false,
+      obeyMuteSwitch: false,
+      play: vi.fn(),
+      stop: vi.fn(),
+      destroy: vi.fn(),
+      onEnded: vi.fn(),
+      onError: vi.fn()
+    }
+    const createInnerAudioContext = vi.fn(() => audioContext)
+    vi.stubGlobal('wx', { createInnerAudioContext })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          VisualTrainingPanel: {
+            props: ['videoUrl'],
+            emits: ['startTraining'],
+            template: '<button class="start-training" @click="$emit(\'startTraining\')">start</button>'
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-training').trigger('click')
+      vi.advanceTimersByTime(3000 + 15000 + 1000)
+      await flushPromises()
+
+      expect(createInnerAudioContext).toHaveBeenCalledOnce()
+      expect(audioContext.src).toBe('https://cdn.example.com/guidance-01.mp3')
+      expect(audioContext.play).toHaveBeenCalledOnce()
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('plays the initial countdown and a complete second-action TTS sequence', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 4,
+      title: '两动作语音回归',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 2,
+      total_duration: 13,
+      is_active: true,
+      order: 1,
+      items: [
+        {
+          id: 41,
+          video_id: 10,
+          video: {
+            id: 10,
+            title: '第一个动作',
+            exercise_type: 'MARTIAL_ARTS',
+            video_file: 'https://cdn.example.com/action-1.mp4',
+            standard_data_url: 'https://cdn.example.com/action-1-sequence.json',
+            duration: 4
+          },
+          expected_duration: 4,
+          countdown_duration: 0,
+          rest_duration: 2,
+          order: 1
+        },
+        {
+          id: 42,
+          video_id: 11,
+          video: {
+            id: 11,
+            title: '第二个动作',
+            exercise_type: 'MARTIAL_ARTS',
+            video_file: 'https://cdn.example.com/action-2.mp4',
+            standard_data_url: 'https://cdn.example.com/action-2-sequence.json',
+            duration: 4
+          },
+          expected_duration: 4,
+          countdown_duration: 0,
+          rest_duration: 0,
+          order: 2
+        }
+      ]
+    })
+
+    const sharedCountdown = {
+      '3': 'https://cdn.example.com/countdown-3.mp3',
+      '2': 'https://cdn.example.com/countdown-2.mp3',
+      '1': 'https://cdn.example.com/countdown-1.mp3'
+    }
+    ;(globalThis as typeof globalThis & {
+      uni: { request: ReturnType<typeof vi.fn> }
+    }).uni.request.mockImplementation(({ url, success }) => {
+      const isSecondAction = url.includes('action-2')
+      success({
+        statusCode: 200,
+        data: {
+          action_id: isSecondAction ? 'action-2' : 'action-1',
+          action_type: 'repetitive',
+          angle_unit: 'radian',
+          angle_names: ['left_knee'],
+          standard_sequence: [[Math.PI / 2]],
+          angle_rules: {},
+          countdown_audio_urls: sharedCountdown,
+          transition_audio_urls: {
+            start: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-start.mp3`,
+            end: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-end.mp3`,
+            next_action: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-next.mp3`,
+            rest_next_action: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-rest-next.mp3`
+          },
+          tts_cues: [{
+            time: 0,
+            text: isSecondAction ? '第二个动作指导' : '第一个动作指导',
+            audio_url: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-guidance.mp3`
+          }]
+        }
+      })
+    })
+
+    const playedUrls: string[] = []
+    const completedUrls: string[] = []
+    const createInnerAudioContext = vi.fn(() => {
+      let ended: (() => void) | undefined
+      let playbackTimer: ReturnType<typeof setTimeout> | undefined
+      return {
+        src: '',
+        autoplay: false,
+        obeyMuteSwitch: false,
+        play() {
+          playedUrls.push(this.src)
+          playbackTimer = setTimeout(() => {
+            completedUrls.push(this.src)
+            ended?.()
+          }, this.src.includes('countdown') ? 1200 : 20)
+        },
+        stop() {
+          if (playbackTimer) clearTimeout(playbackTimer)
+        },
+        destroy: vi.fn(),
+        onEnded(callback: () => void) {
+          ended = callback
+        },
+        onError: vi.fn()
+      }
+    })
+    vi.stubGlobal('wx', { createInnerAudioContext })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          VisualTrainingPanel: {
+            props: ['videoUrl'],
+            emits: ['startTraining', 'videoEnded'],
+            template: `
+              <div>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="end-video" @click="$emit('videoEnded', { detail: { currentTime: 4 } })">end</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-training').trigger('click')
+      await vi.advanceTimersByTimeAsync(4000)
+
+      expect(playedUrls.slice(0, 3)).toEqual([
+        sharedCountdown['3'],
+        sharedCountdown['2'],
+        sharedCountdown['1']
+      ])
+      expect(completedUrls.slice(0, 3)).toEqual([
+        sharedCountdown['3'],
+        sharedCountdown['2'],
+        sharedCountdown['1']
+      ])
+
+      await vi.advanceTimersByTimeAsync(14000 + 4000 + 2000)
+      const secondActionStart = playedUrls.length
+      const secondActionCompleted = completedUrls.length
+      await wrapper.get('.end-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(3700)
+
+      const expectedSecondActionAudio = [
+        sharedCountdown['3'],
+        sharedCountdown['2'],
+        sharedCountdown['1'],
+        'https://cdn.example.com/action-2-start.mp3',
+        'https://cdn.example.com/action-2-guidance.mp3'
+      ]
+      expect(playedUrls.slice(secondActionStart)).toEqual(expectedSecondActionAudio)
+      expect(completedUrls.slice(secondActionCompleted)).toEqual(expectedSecondActionAudio)
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('automatically submits and opens feedback after the final arranged action', async () => {
     vi.useFakeTimers()
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
