@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef, watch } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onResize, onShow } from '@dcloudio/uni-app'
 import VisualTrainingPanel from './components/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../domain/student/types'
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
@@ -10,10 +10,38 @@ import {
 } from '../../uni-app/composables/useVisualTrainingSession'
 
 const modality = shallowRef<Exclude<TrainingModality, 'stair'>>('wushu')
+const comparisonMode = shallowRef(false)
 const session = useVisualTrainingSession({ modality })
+
+function updateOrientation(windowWidth: number, windowHeight: number) {
+  comparisonMode.value = windowWidth > windowHeight
+}
+
+function updateOrientationFromRuntime() {
+  if (typeof uni.getWindowInfo === 'function') {
+    const windowInfo = uni.getWindowInfo()
+    updateOrientation(windowInfo.windowWidth, windowInfo.windowHeight)
+    return
+  }
+  if (typeof uni.getSystemInfoSync === 'function') {
+    const systemInfo = uni.getSystemInfoSync()
+    updateOrientation(systemInfo.windowWidth, systemInfo.windowHeight)
+  }
+}
 
 onLoad((query) => {
   modality.value = query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
+  updateOrientationFromRuntime()
+})
+
+onShow(updateOrientationFromRuntime)
+
+onResize(({ size }) => {
+  if (size) {
+    updateOrientation(size.windowWidth, size.windowHeight)
+    return
+  }
+  updateOrientationFromRuntime()
 })
 
 watch(
@@ -33,7 +61,12 @@ function setCapture(instance: unknown) {
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="playground" :show-dock="false" :fit-viewport="true">
+  <UniTrainingPageShell
+    dock-tab="playground"
+    :show-dock="false"
+    :fit-viewport="true"
+    access-mode="execute"
+  >
     <view class="visual-session-page">
       <VisualTrainingPanel
         :ref="setCapture"
@@ -60,6 +93,16 @@ function setCapture(instance: unknown) {
         :start-countdown="session.startCountdown.value"
         :phase-kind="session.phaseKind.value"
         :phase-remaining-seconds="session.phaseRemainingSeconds.value"
+        :comparison-mode="comparisonMode"
+        :tutorial-mode="session.tutorialMode.value"
+        :tutorial-index="session.tutorialIndex.value"
+        :tutorial-text="session.tutorialText.value"
+        :tutorial-records="session.tutorialRecords.value"
+        :tutorial-loading="session.tutorialLoading.value"
+        :tutorial-video-url="session.tutorialVideoUrl.value"
+        :tutorial-video-title="session.tutorialVideo.value?.title ?? ''"
+        :tutorial-total-actions="session.tutorialTotalActions.value"
+        :tutorial-is-last="session.tutorialIsLast.value"
         @retry-video="session.retryVideo"
         @video-time-update="session.handleVideoTimeUpdate"
         @video-play="session.handleVideoPlay"
@@ -69,7 +112,10 @@ function setCapture(instance: unknown) {
         @toggle-playback="session.togglePlayback"
         @start-recognition="session.startRecognition"
         @start-training="session.startTraining"
-        @toggle-record="session.toggleRecord"
+        @next-tutorial="session.nextTutorial"
+        @prev-tutorial="session.prevTutorial"
+        @start-practice="session.startPractice"
+        @skip-tutorial="session.skipTutorial"
         @pose-result="session.handlePoseResult"
         @pose-stats="session.handlePoseStats"
         @complete="session.finishSession"

@@ -104,7 +104,8 @@
         {
           "path": "visual-session",
           "style": {
-            "navigationBarTitleText": "可视化训练"
+            "navigationBarTitleText": "可视化训练",
+            "pageOrientation": "auto"
           }
         }
       ]

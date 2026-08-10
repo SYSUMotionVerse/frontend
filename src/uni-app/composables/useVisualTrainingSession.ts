@@ -3,8 +3,10 @@ import type { TrainingModality } from '../../domain/student/types'
 import type {
   ExerciseArrangementDetail,
   ExerciseArrangementItem,
+  ExerciseRecordBrief,
   ExerciseScoreDetails,
-  ExerciseVideoSummary
+  ExerciseVideoSummary,
+  TutorialResponse
 } from '../api/studentBackendTypes'
 import { buildVisualPoseAnalysisPayload, studentBackendSync } from '../api/studentBackend'
 import { reportBackendSyncError } from '../api/reportBackendSyncError'
@@ -126,6 +128,15 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const videoProgressSeconds = shallowRef(0)
   const videoDurationSeconds = shallowRef(0)
   const playbackState = shallowRef<VisualTrainingPlaybackState>('idle')
+
+  // ── Tutorial mode state ──
+  const tutorialMode = shallowRef(false)
+  const tutorialIndex = shallowRef(0)
+  const tutorialText = shallowRef('')
+  const tutorialRecords = shallowRef<ExerciseRecordBrief[]>([])
+  const tutorialVideoControllable = shallowRef(false)
+  const tutorialLoading = shallowRef(false)
+
   const recording = shallowRef(false)
   const recordSeconds = shallowRef(0)
   const recordedVideoPath = shallowRef('')
@@ -153,6 +164,22 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const exerciseVideo = computed<ExerciseVideoSummary | null>(() => activeItem.value?.video ?? null)
   const sourceVideoUrl = computed(() => exerciseVideo.value?.video_file?.trim() ?? '')
   const videoUrl = computed(() => cachedVideoPaths.value[sourceVideoUrl.value] ?? sourceVideoUrl.value)
+
+  // ── Tutorial computed ──
+  const tutorialItem = computed(() => arrangement.value?.items?.[tutorialIndex.value] ?? null)
+  const tutorialVideo = computed<ExerciseVideoSummary | null>(() => tutorialItem.value?.video ?? null)
+  const tutorialSourceUrl = computed(() => {
+    const v = tutorialVideo.value
+    return (v?.tutorial_video_url?.trim() || v?.video_file?.trim() || '').trim()
+  })
+  const tutorialVideoUrl = computed(() => cachedVideoPaths.value[tutorialSourceUrl.value] ?? tutorialSourceUrl.value)
+  const tutorialTotalActions = computed(() => arrangement.value?.items.length ?? 0)
+  const tutorialIsLast = computed(() => tutorialIndex.value >= tutorialTotalActions.value - 1)
+
+  // In tutorial mode, show the tutorial item's video instead of the active item's
+  const displayVideoUrl = computed(() => tutorialMode.value ? tutorialVideoUrl.value : videoUrl.value)
+  const displayVideoAutoplay = computed(() => tutorialMode.value ? false : videoAutoplay.value)
+
   const workoutTimeline = computed(() => buildVisualWorkoutTimeline(arrangement.value?.items ?? []))
   const emptyWorkoutState: VisualWorkoutState = {
     current: {
@@ -626,6 +653,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     actionStandards.value = {}
     actionScores.value = []
     scoringWarnings.value = []
+    // Reset tutorial state
+    tutorialMode.value = false
+    tutorialIndex.value = 0
+    tutorialText.value = ''
+    tutorialRecords.value = []
     clearPhaseTimer()
     clearStartCountdownTimer()
     clearCacheWarmupTimer()
@@ -646,6 +678,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         syncSessionProgress()
         await restoreCachedVideo(0)
         scheduleVideoPrefetch(0)
+        // Enter tutorial mode after arrangement loads
+        tutorialMode.value = true
+        tutorialIndex.value = 0
+        await loadTutorialData(0)
       }
     } catch (error) {
       if (requestId !== videoRequestId) return
@@ -661,6 +697,68 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   function retryVideo() {
     void loadExerciseArrangement()
   }
+
+  // ── Tutorial functions ──
+  async function loadTutorialData(index: number) {
+    const item = arrangement.value?.items?.[index]
+    if (!item) return
+
+    // Use tutorial_text from the arrangement item if available, otherwise fetch from API
+    const video = item.video
+    if (video.tutorial_text) {
+      tutorialText.value = video.tutorial_text
+    } else {
+      tutorialText.value = ''
+    }
+
+    tutorialRecords.value = []
+    tutorialLoading.value = true
+    try {
+      const loadTutorial = studentBackendSync.loadExerciseVideoTutorial
+      if (typeof loadTutorial !== 'function') return
+
+      const resp = await loadTutorial(item.video_id)
+      if (resp) {
+        if (!tutorialText.value && resp.tutorial_text) {
+          tutorialText.value = resp.tutorial_text
+        }
+        tutorialRecords.value = resp.recent_records ?? []
+      }
+    } catch (error) {
+      // Tutorial API is optional - silently ignore errors
+      console.warn('[VisualSession] tutorial load failed:', error)
+    } finally {
+      tutorialLoading.value = false
+    }
+  }
+
+  async function nextTutorial() {
+    if (tutorialIsLast.value) return
+    tutorialIndex.value += 1
+    await loadTutorialData(tutorialIndex.value)
+  }
+
+  async function prevTutorial() {
+    if (tutorialIndex.value <= 0) return
+    tutorialIndex.value -= 1
+    await loadTutorialData(tutorialIndex.value)
+  }
+
+  function startPractice() {
+    // Exit tutorial mode and start the practice session
+    tutorialMode.value = false
+    activeItemIndex.value = 0
+    // Start the actual training
+    startTraining()
+  }
+
+  function skipTutorial() {
+    // Skip directly to practice without watching all tutorials
+    tutorialMode.value = false
+    activeItemIndex.value = 0
+    startTraining()
+  }
+
 
   function handleVideoTimeUpdate(event: unknown) {
     if (phaseKind.value !== 'active' && phaseKind.value !== 'demonstration') return
@@ -933,6 +1031,23 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     startCountdown,
     phaseKind,
     phaseRemainingSeconds,
+    // Tutorial exports
+    tutorialMode,
+    tutorialIndex,
+    tutorialText,
+    tutorialRecords,
+    tutorialLoading,
+    tutorialItem,
+    tutorialVideo,
+    tutorialVideoUrl,
+    tutorialTotalActions,
+    tutorialIsLast,
+    displayVideoUrl,
+    displayVideoAutoplay,
+    nextTutorial,
+    prevTutorial,
+    startPractice,
+    skipTutorial,
     retryVideo,
     handleVideoTimeUpdate,
     handleVideoPlay,
