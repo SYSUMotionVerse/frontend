@@ -207,6 +207,7 @@ onShareAppMessage((options) => {
   --growth-space-4: 56rpx;
   flex-direction: column;
   gap: var(--growth-space-4);
+  padding-bottom: 112rpx;
 }
 
 .growth-page__overview {
