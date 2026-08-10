@@ -14,7 +14,7 @@ withDefaults(defineProps<{
 })
 
 onMounted(() => {
-  void ensureProtectedStudentAccess()
+  void ensureProtectedStudentAccess('browse')
 })
 </script>
 

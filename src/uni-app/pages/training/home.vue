@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeProgressOverview from '../../../components/training/TrainingHomeProgressOverview.vue'
+import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useReminderConsent } from '../../composables/useReminderConsent'
@@ -11,12 +12,18 @@ import { useStationNotifications } from '../../composables/useStationNotificatio
 import { useReminderReturn } from '../../composables/useReminderReturn'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import {
+  continueRequiredQuestionnaire,
+  useProtectedAccessState
+} from '../../composables/useNavigationGuard'
 
 const store = useStudentStore()
 const reminderConsent = useReminderConsent()
 const stationNotifications = useStationNotifications()
 const reminderReturn = useReminderReturn()
 const trainingProgress = useTrainingProgress()
+const accessState = useProtectedAccessState()
+const isBrowseOnly = computed(() => accessState.value.level === 'browse')
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -88,6 +95,11 @@ function handleReminderAuthorizationRetry() {
         variant="home"
         @open-notifications="stationNotifications.openList"
         @authorize-reminders="handleReminderAuthorizationRetry"
+      />
+
+      <QuestionnaireUnlockBanner
+        v-if="isBrowseOnly"
+        @continue-questionnaire="continueRequiredQuestionnaire"
       />
 
       <TrainingHomeProgressOverview

@@ -146,6 +146,7 @@ const notifyTrainingComplete = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
+  onResize: vi.fn(),
   onShow: vi.fn(),
   onBeforeUnmount: vi.fn()
 }))
@@ -368,7 +369,10 @@ describe('page-level backend sync wiring', () => {
       redirectTo: vi.fn().mockResolvedValue(undefined),
       navigateTo: vi.fn().mockResolvedValue(undefined),
       reLaunch: vi.fn().mockResolvedValue(undefined),
-      request: vi.fn()
+      request: vi.fn(),
+      getStorageSync: vi.fn(),
+      setStorageSync: vi.fn(),
+      removeStorageSync: vi.fn()
     }
   })
 
@@ -580,9 +584,9 @@ describe('page-level backend sync wiring', () => {
         title: '运动心理健康量表（第1次）'
       }
     )
-    expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 6, 60)
+    expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 0, 100)
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
-      url: '/pages/access/questionnaire-result?checkpoint=baseline&score=6&percentage=60&submittedAt=2026-04-09T15%3A30%3A00.000Z'
+      url: '/pages/access/questionnaire-result?checkpoint=baseline&score=0&percentage=100&questionnaireCount=1&submittedAt=2026-04-09T15%3A30%3A00.000Z'
     })
     expect(currentUni().navigateTo).not.toHaveBeenCalled()
   })

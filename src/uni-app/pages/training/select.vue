@@ -3,12 +3,18 @@ import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
+import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useStationNotifications } from '../../composables/useStationNotifications'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import {
+  continueRequiredQuestionnaire,
+  ensureProtectedStudentAccess,
+  useProtectedAccessState
+} from '../../composables/useNavigationGuard'
 
 type TrainingModeSummary = {
   modality: TrainingModality
@@ -61,6 +67,8 @@ const trainingModes: TrainingModeSummary[] = [
 const store = useStudentStore()
 const trainingProgress = useTrainingProgress()
 const stationNotifications = useStationNotifications()
+const accessState = useProtectedAccessState()
+const isBrowseOnly = computed(() => accessState.value.level === 'browse')
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -96,7 +104,15 @@ const heroCopy = computed(() => {
   return '从还没点亮的赛道开始，直接开练。'
 })
 
-function chooseMode(modality: TrainingModality) {
+async function chooseMode(modality: TrainingModality) {
+  if (isBrowseOnly.value) {
+    continueRequiredQuestionnaire()
+    return
+  }
+
+  const canExecute = await ensureProtectedStudentAccess('execute')
+  if (!canExecute) return
+
   if (modality === 'stair') {
     void uni.navigateTo({ url: '/pages/training/stair-session' })
     return
@@ -121,6 +137,12 @@ function chooseMode(modality: TrainingModality) {
         @open-notifications="stationNotifications.openList"
       />
 
+      <QuestionnaireUnlockBanner
+        v-if="isBrowseOnly"
+        compact
+        @continue-questionnaire="continueRequiredQuestionnaire"
+      />
+
       <view class="select-page__hero">
         <text class="select-page__hero-copy">{{ heroCopy }}</text>
       </view>
@@ -131,7 +153,8 @@ function chooseMode(modality: TrainingModality) {
           :key="mode.modality"
           :class="[
             'select-page__launch-action',
-            `select-page__launch-action--${mode.tone}`
+            `select-page__launch-action--${mode.tone}`,
+            { 'select-page__launch-action--locked': isBrowseOnly }
           ]"
           form-type="button"
           type="button"
@@ -152,7 +175,7 @@ function chooseMode(modality: TrainingModality) {
             </view>
             <text class="select-page__launch-hint">{{ mode.actionHint }}</text>
             <view class="select-page__launch-route">
-              <text>{{ mode.routeLabel }}</text>
+            <text>{{ isBrowseOnly ? '完成问卷后解锁' : mode.routeLabel }}</text>
               <view :class="['select-page__launch-trail', `select-page__launch-trail--${mode.tone}`]">
                 <view v-for="step in 3" :key="step" class="select-page__launch-trail-step" />
               </view>
@@ -207,7 +230,7 @@ function chooseMode(modality: TrainingModality) {
   min-height: 176rpx;
   align-items: center;
   gap: 18rpx;
-  padding: 30rpx;
+  padding: 30rpx 96rpx 30rpx 30rpx;
   border: none;
   color: #203042;
   overflow: hidden;
@@ -223,6 +246,10 @@ function chooseMode(modality: TrainingModality) {
 }
 
 .select-page__launch-action::after { display: none; }
+
+.select-page__launch-action--locked {
+  opacity: 0.68;
+}
 
 .select-page__launch-action--wushu {
   margin-right: 20rpx;
@@ -315,6 +342,8 @@ function chooseMode(modality: TrainingModality) {
   flex: 1;
   flex-direction: column;
   gap: 5rpx;
+  padding-right: 12rpx;
+  box-sizing: border-box;
 }
 
 .select-page__launch-title {
@@ -422,6 +451,10 @@ function chooseMode(modality: TrainingModality) {
 .select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(3) { height: 18rpx; }
 
 .select-page__launch-meta {
+  position: absolute;
+  right: 64rpx;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex: none;
   flex-direction: column;
@@ -431,6 +464,13 @@ function chooseMode(modality: TrainingModality) {
   font-size: 20rpx;
   font-weight: 800;
   line-height: 1.2;
+}
+
+.select-page__launch-action > .uni-icons {
+  position: absolute;
+  right: 28rpx;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .select-page__streak-note {

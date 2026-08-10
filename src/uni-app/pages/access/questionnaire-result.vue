@@ -12,6 +12,7 @@ const checkpoint = ref<CheckpointKey>('baseline')
 const score = ref(0)
 const percentage = ref(0)
 const submittedAt = ref('')
+const questionnaireCount = ref(1)
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -19,6 +20,7 @@ onLoad((query) => {
   score.value = Number(nextQuery.score ?? 0)
   percentage.value = Number(nextQuery.percentage ?? 0)
   submittedAt.value = nextQuery.submittedAt?.toString() ?? ''
+  questionnaireCount.value = Math.max(1, Number(nextQuery.questionnaireCount ?? 1))
 })
 
 const scoreValue = computed(() => score.value)
@@ -46,6 +48,7 @@ function handleContinue() {
       :score="scoreValue"
       :percentage="percentageValue"
       :submitted-at="submittedAtValue"
+      :questionnaire-count="questionnaireCount"
       @continue="handleContinue"
     />
   </UniAccessPageShell>

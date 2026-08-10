@@ -2,6 +2,7 @@ import type { CheckpointKey } from '../../types/student'
 import type {
   BackendPsychologyRecord,
   BackendPsychologyScale,
+  PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel,
   PsychologyScaleSubmitPayload
 } from './studentBackendTypes'
@@ -37,12 +38,30 @@ export function mapBackendScaleToQuestionnaire(
     scaleId: scale.id,
     title: scale.title,
     description: scale.description,
-    checkpoint: resolveCheckpointFromScaleOrder(scale.order),
+    checkpoint: scale.checkpoint ?? resolveCheckpointFromScaleOrder(scale.order),
+    ...(scale.short_title ? { shortTitle: scale.short_title } : {}),
+    ...(scale.instructions ? { instructions: scale.instructions } : {}),
+    ...(scale.response_legend ? { responseLegend: scale.response_legend } : {}),
+    ...(scale.estimated_minutes !== undefined
+      ? { estimatedMinutes: scale.estimated_minutes }
+      : {}),
     questions: [...scale.questions]
       .sort((left, right) => left.order - right.order)
       .map(question => ({
         id: question.id,
         prompt: question.question_text,
+        ...(question.source_order !== undefined
+          ? { sourceOrder: question.source_order }
+          : {}),
+        ...(question.dimension !== undefined
+          ? { dimension: question.dimension }
+          : {}),
+        ...(question.response_config !== undefined
+          ? { responseConfig: question.response_config }
+          : {}),
+        ...(question.question_type !== 'SINGLE'
+          ? { questionType: question.question_type }
+          : {}),
         options: [...question.options]
           .sort((left, right) => left.order - right.order)
           .map(option => ({
@@ -56,15 +75,26 @@ export function mapBackendScaleToQuestionnaire(
 
 export function buildPsychologyScaleSubmitPayload(
   scaleId: number,
-  answers: Record<number, number>
+  answers: Record<number, PsychologyQuestionnaireAnswer>
 ): PsychologyScaleSubmitPayload {
   return {
     scale_id: scaleId,
     answers: Object.entries(answers)
-      .map(([questionId, optionId]) => ({
-        question_id: Number(questionId),
-        selected_options: [optionId]
-      }))
+      .map(([questionId, answer]) => Array.isArray(answer)
+        ? {
+            question_id: Number(questionId),
+            selected_options: answer
+          }
+        : typeof answer === 'number'
+          ? {
+              question_id: Number(questionId),
+              selected_options: [answer]
+            }
+          : {
+              question_id: Number(questionId),
+              selected_options: [],
+              text_answer: answer
+            })
       .sort((left, right) => left.question_id - right.question_id)
   }
 }
@@ -88,7 +118,8 @@ export function calculatePsychologyPercentage(
 
 export function mapPsychologyRecordSummary(record: BackendPsychologyRecord) {
   return {
-    checkpoint: resolveCheckpointFromScaleOrder(record.scale_info.order),
+    checkpoint: record.scale_info.checkpoint
+      ?? resolveCheckpointFromScaleOrder(record.scale_info.order),
     title: record.scale_info.title,
     score: toNumber(record.total_score),
     percentage: calculatePsychologyPercentage(record.scale_info, record.total_score),

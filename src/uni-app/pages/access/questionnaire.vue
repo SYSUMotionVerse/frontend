@@ -12,7 +12,15 @@ import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { buildMiniProgramQueryString } from '../../platform/queryString'
-import type { PsychologyQuestionnaireModel } from '../../api/studentBackendTypes'
+import {
+  questionnaireDraftStorage,
+  type QuestionnaireDraft
+} from '../../platform/questionnaireDraftStorage'
+import type {
+  BackendQuestionnairePlan,
+  PsychologyQuestionnaireAnswer,
+  PsychologyQuestionnaireModel
+} from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
 const checkpoint = ref<CheckpointKey>('baseline')
@@ -22,6 +30,9 @@ const hasLoaded = shallowRef(false)
 const isSubmitting = shallowRef(false)
 const loadErrorMessage = shallowRef('')
 const submitErrorMessage = shallowRef('')
+const questionnaireDraft = shallowRef<QuestionnaireDraft | null>(null)
+const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
+const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -30,9 +41,22 @@ onLoad((query) => {
 })
 
 const checkpointLabel = computed(() => CHECKPOINT_LABELS[checkpoint.value])
-const title = computed(() => questionnaire.value?.title ?? `${checkpointLabel.value} 长问卷`)
-const subtitle = computed(() => questionnaire.value?.description || '完成本次评估后才能继续训练。')
+const title = computed(() => checkpoint.value === 'baseline' ? '基线问卷' : `${checkpointLabel.value}问卷`)
+const subtitle = computed(() => '请根据自己的真实情况作答，没有标准答案。')
 const submitLabel = computed(() => submitErrorMessage.value ? '重新提交答案' : '提交答案')
+const estimatedMinutes = computed(() =>
+  questionnairePlan.value?.estimated_total_minutes
+    ?? questionnaire.value?.estimatedMinutes
+    ?? Math.max(3, Math.ceil(((questionnaire.value?.questions?.length ?? 0) * 8) / 60))
+)
+const questionnaireCount = computed(() =>
+  questionnairePlan.value?.questionnaire_count ?? 1
+)
+const questionnaireNumber = computed(() => {
+  const scaleId = questionnaire.value?.scaleId
+  const entry = questionnairePlan.value?.questionnaires.find(item => item.id === scaleId)
+  return entry?.order ?? 1
+})
 
 onMounted(() => {
   if (hasLoaded.value) {
@@ -48,9 +72,25 @@ async function loadQuestionnaire() {
   loadErrorMessage.value = ''
 
   try {
-    questionnaire.value = await studentBackendSync.loadLongQuestionnaire(checkpoint.value)
+    const loadPlan = typeof studentBackendSync.loadQuestionnairePlan === 'function'
+      ? studentBackendSync.loadQuestionnairePlan(checkpoint.value)
+      : Promise.resolve(null)
+    const [loadedQuestionnaire, loadedPlan] = await Promise.all([
+      studentBackendSync.loadLongQuestionnaire(checkpoint.value),
+      loadPlan
+    ])
+    questionnaire.value = loadedQuestionnaire
+    questionnairePlan.value = loadedPlan
+    questionnaireDraft.value = loadedQuestionnaire && draftStudentId.value
+      ? questionnaireDraftStorage.load(
+          draftStudentId.value,
+          checkpoint.value,
+          loadedQuestionnaire.scaleId
+        )
+      : null
   } catch (error) {
     questionnaire.value = null
+    questionnaireDraft.value = null
     loadErrorMessage.value = '问卷加载失败，请检查网络后重试。'
     reportBackendSyncError('问卷加载', error)
   } finally {
@@ -60,7 +100,7 @@ async function loadQuestionnaire() {
 
 async function handleSubmit(payload: {
   scaleId: number
-  answers: Record<number, number>
+  answers: Record<number, PsychologyQuestionnaireAnswer>
   title: string
 }) {
   if (isSubmitting.value) {
@@ -80,11 +120,37 @@ async function handleSubmit(payload: {
       return
     }
 
-    store.submitLongQuestionnaire(checkpoint.value, result.score, result.percentage)
+    questionnaireDraftStorage.clear(draftStudentId.value, checkpoint.value, payload.scaleId)
+    questionnaireDraft.value = null
+    if (typeof studentBackendSync.loadQuestionnairePlan === 'function') {
+      const [nextQuestionnaire, nextPlan] = await Promise.all([
+        studentBackendSync.loadLongQuestionnaire(checkpoint.value),
+        studentBackendSync.loadQuestionnairePlan(checkpoint.value)
+      ])
+      questionnairePlan.value = nextPlan
+      if (nextQuestionnaire) {
+        questionnaire.value = nextQuestionnaire
+        questionnaireDraft.value = draftStudentId.value
+          ? questionnaireDraftStorage.load(
+              draftStudentId.value,
+              checkpoint.value,
+              nextQuestionnaire.scaleId
+            )
+          : null
+        void uni.showToast({
+          title: '本份已保存，继续下一份',
+          icon: 'none'
+        })
+        return
+      }
+    }
+
+    store.submitLongQuestionnaire(checkpoint.value, 0, 100)
     const queryString = buildMiniProgramQueryString({
       checkpoint: checkpoint.value,
-      score: String(result.score),
-      percentage: String(result.percentage),
+      score: '0',
+      percentage: '100',
+      questionnaireCount: String(questionnairePlan.value?.questionnaire_count ?? 1),
       submittedAt: result.submittedAt
     })
 
@@ -98,6 +164,31 @@ async function handleSubmit(payload: {
     isSubmitting.value = false
   }
 }
+
+function handleDraftChange(payload: {
+  answers: Record<number, PsychologyQuestionnaireAnswer>
+  currentQuestionIndex: number
+}) {
+  if (!questionnaire.value) return
+  if (!draftStudentId.value) return
+
+  const draft: QuestionnaireDraft = {
+    studentId: draftStudentId.value,
+    checkpoint: checkpoint.value,
+    scaleId: questionnaire.value.scaleId,
+    answers: payload.answers,
+    currentQuestionIndex: payload.currentQuestionIndex,
+    updatedAt: new Date().toISOString()
+  }
+  questionnaireDraftStorage.save(draft)
+  questionnaireDraft.value = draft
+}
+
+function previewTrainingContent() {
+  void uni.navigateTo({
+    url: '/pages/training/home?preview=questionnaire'
+  })
+}
 </script>
 
 <template>
@@ -107,7 +198,7 @@ async function handleSubmit(payload: {
     :subtitle="subtitle"
   >
     <view v-if="isLoading" class="questionnaire-page__empty-state">
-      正在加载问卷...
+      正在加载问卷…
     </view>
     <view
       v-else-if="loadErrorMessage"
@@ -123,10 +214,23 @@ async function handleSubmit(payload: {
       当前没有可提交的后端量表。
     </view>
     <template v-else>
+      <view class="questionnaire-page__preview">
+        <text>想先了解训练内容？</text>
+        <button class="questionnaire-page__preview-action" type="button" @click="previewTrainingContent">
+          先浏览小程序
+        </button>
+      </view>
       <LongQuestionnaireForm
+        :key="questionnaire.scaleId"
         :questionnaire="questionnaire"
         :submitting="isSubmitting"
         :submit-label="submitLabel"
+        :initial-answers="questionnaireDraft?.answers"
+        :initial-question-index="questionnaireDraft?.currentQuestionIndex"
+        :questionnaire-count="questionnaireCount"
+        :questionnaire-number="questionnaireNumber"
+        :estimated-minutes="estimatedMinutes"
+        @draft-change="handleDraftChange"
         @submit="handleSubmit"
       />
       <view v-if="submitErrorMessage" class="questionnaire-page__submit-error" aria-live="polite">
@@ -163,13 +267,19 @@ async function handleSubmit(payload: {
 }
 
 .questionnaire-page__retry {
-  min-height: 88rpx;
+  min-height: 108rpx;
   margin: 0;
-  border-radius: 9999px;
-  background: #203042;
-  color: #fffaf4;
-  font-size: 26rpx;
-  font-weight: 800;
+  border: 0;
+  border-radius: 999rpx;
+  background: #FF8B8B;
+  box-shadow: 0 8rpx 0 #DE7272;
+  color: #1A202C;
+  font-size: 34rpx;
+  font-weight: 900;
+}
+
+.questionnaire-page__retry::after {
+  border: none;
 }
 
 .questionnaire-page__submit-error {
@@ -179,5 +289,32 @@ async function handleSubmit(payload: {
   font-size: 26rpx;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.questionnaire-page__preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+  color: #64748B;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.questionnaire-page__preview-action {
+  min-height: 56rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #C35F6B;
+  font-size: 24rpx;
+  font-weight: 900;
+  text-decoration: underline;
+}
+
+.questionnaire-page__preview-action::after {
+  border: none;
 }
 </style>

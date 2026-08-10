@@ -95,10 +95,9 @@ describe('ui review fixes', () => {
     }
   })
 
-  it('uses miniapp form submission semantics on shared forms', () => {
+  it('keeps native form submits within their owning components', () => {
     const files = [
       'src/components/access/RegistrationForm.vue',
-      'src/components/access/LongQuestionnaireForm.vue',
       'src/components/training/ShortQuestionnaireForm.vue'
     ]
 
@@ -107,6 +106,14 @@ describe('ui review fixes', () => {
 
       expect(file).toContain('form-type="submit"')
     }
+
+    const questionnaireNavigation = readFileSync(
+      resolve('src/components/access/QuestionnaireBottomNavigation.vue'),
+      'utf8'
+    )
+
+    expect(questionnaireNavigation).toContain('@click="emit(\'submit\')"')
+    expect(questionnaireNavigation).not.toContain('form-type="submit"')
   })
 
 
@@ -755,19 +762,57 @@ describe('ui review fixes', () => {
     expect(longQuestionnaireForm).not.toContain('rating-option--rounded')
   })
 
-  it('gives long-questionnaire prompts and actions more breathing room', () => {
-    const longQuestionnaireForm = readFileSync(
+  it('uses a restrained single-question layout with contextual navigation', () => {
+    const progressHeader = readFileSync(
+      resolve('src/components/access/QuestionnaireProgressHeader.vue'),
+      'utf8'
+    )
+    const questionPanel = readFileSync(
+      resolve('src/components/access/QuestionnaireQuestionPanel.vue'),
+      'utf8'
+    )
+    const runner = readFileSync(
       resolve('src/components/access/LongQuestionnaireForm.vue'),
       'utf8'
     )
+    const navigation = readFileSync(
+      resolve('src/components/access/QuestionnaireBottomNavigation.vue'),
+      'utf8'
+    )
 
-    expect(longQuestionnaireForm).toContain('long-questionnaire-form__card')
-    expect(longQuestionnaireForm).toContain('long-questionnaire-form__prompt')
-    expect(longQuestionnaireForm).toContain('long-questionnaire-form__options')
-    expect(longQuestionnaireForm).toContain('long-questionnaire-form__actions')
-    expect(longQuestionnaireForm).toContain('gap: 40rpx;')
-    expect(longQuestionnaireForm).toContain('margin-bottom: 40rpx;')
-    expect(longQuestionnaireForm).toContain('padding-bottom: 72rpx;')
+    expect(progressHeader).toContain('border: 4rpx solid rgba(255, 211, 132, 0.24);')
+    expect(progressHeader).not.toContain('rgba(137, 207, 255')
+    expect(questionPanel).toContain('questionnaire-question__prompt')
+    expect(questionPanel).toContain('questionnaire-runner__options')
+    expect(questionPanel).toContain('min-height: 92rpx;')
+    expect(questionPanel).toContain('border-radius: 24rpx;')
+    expect(questionPanel).toContain('border-color: #FF8B8B;')
+    expect(questionPanel).toContain('border: 4rpx solid #E9E2DE;')
+    expect(questionPanel).toContain('background: #FFFCF8;')
+    expect(questionPanel).toContain('color: #FF8B8B;')
+    expect(questionPanel).not.toContain('#E5A2C0')
+    expect(questionPanel).not.toContain('#A84369')
+    expect(questionPanel).not.toContain('background: #FFF0F7;')
+    expect(questionPanel).not.toContain('background: #FFF5FA;')
+    expect(questionPanel).not.toContain('background: #F4BDD5;')
+    expect(questionPanel).not.toContain('questionnaire-runner__option-indicator')
+    expect(questionPanel).not.toContain("'✓'")
+    expect(questionPanel).not.toContain('background: rgba(255, 139, 139, 0.18);')
+    expect(questionPanel).not.toContain('#2563EB')
+    expect(runner).toContain('border: 4rpx solid rgba(255, 211, 132, 0.24);')
+    expect(runner).not.toContain('rgba(168, 230, 207')
+    expect(navigation).toContain('questionnaire-runner__actions')
+    expect(navigation).not.toContain('已保存在本机')
+    expect(navigation).toContain('class="questionnaire-runner__primary btn-primary"')
+    expect(navigation).toContain('flex-direction: column;')
+    expect(navigation).toContain('v-if="canContinue"')
+    expect(navigation).not.toContain('#F7C948')
+    expect(navigation).not.toContain('UniIcons')
+    expect(navigation).toContain('margin-top: 24rpx;')
+    expect(navigation).toContain('padding: 0 0 80rpx;')
+    expect(navigation).toContain('background: #FF8B8B;')
+    expect(navigation).toContain('box-shadow: 0 10rpx 0 #DE7272;')
+    expect(navigation).toContain('color: #1A202C;')
   })
 
   it('aligns the short post-training questionnaire with the shared questionnaire layout language', () => {

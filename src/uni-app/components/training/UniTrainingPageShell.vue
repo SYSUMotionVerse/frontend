@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import FloatingDock from '../navigation/FloatingDock.vue'
-import { ensureProtectedStudentAccess } from '../../composables/useNavigationGuard'
+import {
+  ensureProtectedStudentAccess,
+  type ProtectedAccessMode
+} from '../../composables/useNavigationGuard'
 
 type DockTab = 'home' | 'playground' | 'growth'
 
@@ -9,14 +12,16 @@ const props = withDefaults(defineProps<{
   dockTab?: DockTab
   showDock?: boolean
   fitViewport?: boolean
+  accessMode?: ProtectedAccessMode
 }>(), {
   dockTab: 'playground',
   showDock: true,
-  fitViewport: false
+  fitViewport: false,
+  accessMode: 'browse'
 })
 
 onMounted(() => {
-  void ensureProtectedStudentAccess()
+  void ensureProtectedStudentAccess(props.accessMode)
 })
 </script>
 

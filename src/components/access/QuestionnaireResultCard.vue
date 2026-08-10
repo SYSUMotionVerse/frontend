@@ -8,6 +8,7 @@ interface Props {
   score: number
   percentage: number
   submittedAt?: string
+  questionnaireCount?: number
 }
 
 const props = defineProps<Props>()
@@ -29,6 +30,7 @@ const level = computed(() => {
 })
 
 const checkpointLabel = computed(() => CHECKPOINT_LABELS[props.checkpoint])
+const isQuestionnaireSet = computed(() => (props.questionnaireCount ?? 1) > 1)
 const submittedAtLabel = computed(() => {
   if (!props.submittedAt) {
     return ''
@@ -57,12 +59,22 @@ function handleContinue() {
         <text>{{ checkpointLabel }} 评估</text>
       </view>
 
-      <text class="block text-[144rpx] font-900 text-brand-coral">{{ percentage }}%</text>
-      <text class="block mt-[16rpx] text-[48rpx] font-800 text-slate-600">分数：{{ score }}</text>
+      <template v-if="isQuestionnaireSet">
+        <text class="block text-[76rpx] font-900 text-brand-coral">
+          {{ questionnaireCount }} 份已完成
+        </text>
+        <text class="block mt-[16rpx] text-[32rpx] font-800 text-slate-600">
+          答案已按各量表分别保存，不生成未经验证的综合心理分数。
+        </text>
+      </template>
+      <template v-else>
+        <text class="block text-[144rpx] font-900 text-brand-coral">{{ percentage }}%</text>
+        <text class="block mt-[16rpx] text-[48rpx] font-800 text-slate-600">分数：{{ score }}</text>
+      </template>
     </view>
 
     <view class="result-card__summary-grid">
-      <view class="result-card__score-tile">
+      <view v-if="!isQuestionnaireSet" class="result-card__score-tile">
         <text class="block text-[24rpx] uppercase tracking-widest text-white/60 font-800">评估得分</text>
         <text class="block mt-[20rpx] text-[40rpx] font-900 text-white">{{ level }}</text>
       </view>
@@ -77,7 +89,7 @@ function handleContinue() {
       </view>
     </view>
 
-    <view class="mt-[32rpx] inline-flex items-center gap-[16rpx] px-[40rpx] py-[16rpx] bg-brand-leaf/15 rounded-full border-2 border-brand-leaf/25 self-center">
+    <view v-if="!isQuestionnaireSet" class="mt-[32rpx] inline-flex items-center gap-[16rpx] px-[40rpx] py-[16rpx] bg-brand-leaf/15 rounded-full border-2 border-brand-leaf/25 self-center">
       <text class="text-[40rpx] font-900 text-[#065F46]">{{ level }}</text>
     </view>
 
