@@ -59,17 +59,46 @@ export interface BackendScaleQuestion {
   id: number
   question_text: string
   question_type: BackendQuestionType
+  source_order?: number
+  dimension?: string
+  response_config?: Record<string, unknown>
+  scoring_config?: Record<string, unknown>
   order: number
   options: BackendQuestionOption[]
 }
 
 export interface BackendPsychologyScale {
   id: number
+  code?: string | null
   title: string
+  short_title?: string
   description: string
+  instructions?: string
+  response_legend?: Array<{ value: number; label: string }>
+  scoring_config?: Record<string, unknown>
+  estimated_minutes?: number
+  checkpoint?: CheckpointKey
   order: number
   created_at: string
   questions: BackendScaleQuestion[]
+}
+
+export interface BackendQuestionnairePlan {
+  checkpoint: CheckpointKey
+  questionnaire_count: number
+  completed_questionnaire_count: number
+  estimated_total_minutes: number
+  current_questionnaire_id: number | null
+  questionnaires: Array<{
+    id: number
+    code: string | null
+    title: string
+    short_title: string
+    order: number
+    estimated_minutes: number
+    question_count: number
+    completed: boolean
+  }>
 }
 
 export interface BackendPsychologyRecord {
@@ -85,6 +114,7 @@ export interface PsychologyScaleSubmitPayload {
   answers: {
     question_id: number
     selected_options: number[]
+    text_answer?: string
   }[]
 }
 
@@ -102,21 +132,31 @@ export interface PsychologyQuestionnaireOption {
 export interface PsychologyQuestionnaireQuestion {
   id: number
   prompt: string
+  questionType?: BackendQuestionType
+  sourceOrder?: number
+  dimension?: string
+  responseConfig?: Record<string, unknown>
   options: PsychologyQuestionnaireOption[]
 }
 
 export interface PsychologyQuestionnaireModel {
   scaleId: number
   title: string
+  shortTitle?: string
   description: string
+  instructions?: string
+  responseLegend?: Array<{ value: number; label: string }>
+  estimatedMinutes?: number
   checkpoint: CheckpointKey
   questions: PsychologyQuestionnaireQuestion[]
 }
 
+export type PsychologyQuestionnaireAnswer = number | number[] | string
+
 export interface LongQuestionnaireSyncInput {
   checkpoint: CheckpointKey
   scaleId: number
-  answers: Record<number, number>
+  answers: Record<number, PsychologyQuestionnaireAnswer>
   title: string
 }
 
@@ -191,6 +231,33 @@ export interface ExerciseVideoSummary {
   difficulty?: number
   order?: number
   is_active?: boolean
+  /** 动作讲解文本 */
+  tutorial_text?: string
+  /** 讲解视频 CDN 地址（为空时使用 video_file） */
+  tutorial_video_url?: string | null
+}
+
+/** 用户训练记录摘要（用于讲解页参考训记） */
+export interface ExerciseRecordBrief {
+  id: number
+  score: number | null
+  comment: string
+  status: string
+  duration: number | null
+  created_at: string
+}
+
+/** 动作讲解 API 响应 */
+export interface TutorialResponse {
+  video_id: number
+  title: string
+  description?: string
+  tutorial_video_url: string | null
+  tutorial_text: string
+  standard_data_url: string | null
+  duration: number
+  exercise_type: string
+  recent_records: ExerciseRecordBrief[]
 }
 
 export interface ExerciseArrangementSummary {
@@ -413,10 +480,14 @@ export interface StudentBackendSyncDependencies {
     exerciseType: BackendExerciseType
   ) => Promise<ExerciseArrangementSummary[]>
   getExerciseArrangement: (id: number) => Promise<ExerciseArrangementDetail>
+  getExerciseVideoTutorial: (videoId: number) => Promise<TutorialResponse>
   createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<BackendExerciseRecord>
   getExerciseScoreTrend: () => Promise<BackendExerciseScoreTrendResponse>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>
   listPsychologyScales: () => Promise<BackendPsychologyScale[]>
+  getPsychologyQuestionnairePlan?: (
+    checkpoint: CheckpointKey
+  ) => Promise<BackendQuestionnairePlan>
   getNextPsychologyScale: () => Promise<BackendPsychologyScale | { message: string }>
   submitPsychologyScale: (payload: PsychologyScaleSubmitPayload) => Promise<PsychologyScaleSubmitResponse>
   listPsychologyRecords: () => Promise<BackendPsychologyRecord[]>

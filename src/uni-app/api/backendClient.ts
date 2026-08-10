@@ -4,6 +4,7 @@ import type {
   BackendExerciseScoreTrendResponse,
   BackendExerciseType,
   BackendPhysicalTrendResponse,
+  BackendQuestionnairePlan,
   BackendPsychologyRecord,
   BackendPsychologyScale,
   PsychologyScaleSubmitPayload,
@@ -12,6 +13,7 @@ import type {
   ExerciseRecordCreatePayload,
   ExerciseVideoSummary,
   ExerciseArrangementDetail,
+  TutorialResponse,
   ExerciseArrangementSummary,
   StairsRecordCreatePayload,
   SurveyRecordCreatePayload,
@@ -423,6 +425,10 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getExerciseArrangement(id: number) {
       return request<ExerciseArrangementDetail>(`/exercises/arrangements/${id}/`)
     },
+    /** 获取动作讲解数据（含用户历史训练记录） */
+    getExerciseVideoTutorial(videoId: number) {
+      return request<TutorialResponse>(`/exercises/videos/${videoId}/tutorial/`)
+    },
     createExerciseRecord(payload: ExerciseRecordCreatePayload) {
       return request<BackendExerciseRecord>('/exercises/records/', {
         method: 'POST',
@@ -447,6 +453,11 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getNextPsychologyScale() {
       return request<BackendPsychologyScale | { message: string }>('/psychology/scales/next_scale/')
+    },
+    getPsychologyQuestionnairePlan(checkpoint: BackendQuestionnairePlan['checkpoint']) {
+      return request<BackendQuestionnairePlan>(
+        `/psychology/scales/questionnaire-plan/?checkpoint=${encodeURIComponent(checkpoint)}`
+      )
     },
     submitPsychologyScale(payload: PsychologyScaleSubmitPayload) {
       return request<PsychologyScaleSubmitResponse>('/psychology/records/submit/', {

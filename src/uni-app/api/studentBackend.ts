@@ -18,9 +18,11 @@ import type {
   BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseType,
+  BackendQuestionnairePlan,
   BackendPsychologyRecord,
   BackendSyncResult,
   ExerciseArrangementDetail,
+  TutorialResponse,
   ExerciseVideoSummary,
   LongQuestionnaireSyncResult,
   LongQuestionnaireSyncInput,
@@ -470,12 +472,21 @@ function buildShortQuestionnairePayload(
   }
 }
 
-function resolveCompletedPsychologyCheckpoints(records: BackendPsychologyRecord[]) {
+function resolveCompletedPsychologyCheckpoints(
+  records: BackendPsychologyRecord[],
+  plan?: BackendQuestionnairePlan
+) {
   const checkpoints = new Set<CheckpointKey>()
   for (const record of records) {
     if (record?.scale_info && typeof record.scale_info.order === 'number') {
       checkpoints.add(mapPsychologyRecordSummary(record).checkpoint)
     }
+  }
+  if (
+    plan?.checkpoint === 'baseline' &&
+    plan.completed_questionnaire_count < plan.questionnaire_count
+  ) {
+    checkpoints.delete('baseline')
   }
   return checkpoints
 }
@@ -557,6 +568,10 @@ export function createStudentBackendSync(
     ...resolveDefaultDependencies(),
     ...overrides
   } satisfies StudentBackendAccessDependencies
+  const questionnairePlanLoader = overrides.getPsychologyQuestionnairePlan
+    ?? (Object.keys(overrides).length === 0
+      ? dependencies.getPsychologyQuestionnairePlan
+      : undefined)
   const submissionOptions = {
     ...resolveDefaultSubmissionOptions(),
     ...submissionOverrides
@@ -681,7 +696,13 @@ export function createStudentBackendSync(
         return buildRegistrationAccessResult()
       }
 
-      const completedCheckpoints = resolveCompletedPsychologyCheckpoints(psychologyRecords)
+      const questionnairePlan = questionnairePlanLoader
+        ? await questionnairePlanLoader('baseline')
+        : undefined
+      const completedCheckpoints = resolveCompletedPsychologyCheckpoints(
+        psychologyRecords,
+        questionnairePlan
+      )
       if (!hasSequentialCompletedCheckpoints(completedCheckpoints)) {
         throw new Error('Backend checkpoint records are out of order.')
       }
@@ -721,6 +742,14 @@ export function createStudentBackendSync(
       if (hasQuestions(nextScale) && nextScale.questions.length > 0) {
         return mapBackendScaleToQuestionnaire(nextScale)
       }
+      if (
+        nextScale &&
+        'message' in nextScale &&
+        typeof nextScale.message === 'string' &&
+        isAllScalesCompletedMessage(nextScale.message)
+      ) {
+        return null
+      }
 
       const scales = await dependencies.listPsychologyScales()
       const preferredScale = preferredCheckpoint
@@ -729,6 +758,13 @@ export function createStudentBackendSync(
       const fallbackScale = preferredScale ?? scales.find(scale => scale.questions.length > 0)
 
       return fallbackScale ? mapBackendScaleToQuestionnaire(fallbackScale) : null
+    },
+    async loadQuestionnairePlan(checkpoint: CheckpointKey = 'baseline') {
+      if (!dependencies.isEnabled() || !questionnairePlanLoader) {
+        return null
+      }
+      await dependencies.ensureSession()
+      return questionnairePlanLoader(checkpoint)
     },
     async syncRegistration(profile: RegistrationSyncInput) {
       return runIfEnabled(dependencies.isEnabled(), async () => {
@@ -841,6 +877,16 @@ export function createStudentBackendSync(
       }
 
       return null
+    },
+    async loadExerciseVideoTutorial(
+      videoId: number
+    ): Promise<TutorialResponse | null> {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+
+      await dependencies.ensureSession()
+      return dependencies.getExerciseVideoTutorial(videoId)
     },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
       if (!dependencies.isEnabled()) {

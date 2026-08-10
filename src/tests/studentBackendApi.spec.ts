@@ -146,6 +146,24 @@ describe('student backend API payload mapping', () => {
     })
   })
 
+  it('preserves every option selected for a multiple-choice question', async () => {
+    const { buildPsychologyScaleSubmitPayload } = await import('../uni-app/api/psychologyModels')
+
+    expect(
+      buildPsychologyScaleSubmitPayload(1, {
+        11: [101, 102]
+      })
+    ).toEqual({
+      scale_id: 1,
+      answers: [
+        {
+          question_id: 11,
+          selected_options: [101, 102]
+        }
+      ]
+    })
+  })
+
   it('maps a visual training modality to the backend exercise type', async () => {
     const { resolveBackendExerciseType } = await import('../uni-app/api/studentBackend')
 

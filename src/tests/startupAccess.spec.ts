@@ -62,6 +62,34 @@ function createCompletedScaleRecord(order: 1 | 2 | 3 | 4) {
   }
 }
 
+function createBaselineScale(order: number) {
+  return {
+    id: 100 + order,
+    title: `基线量表 ${order}`,
+    description: '基线检查点量表',
+    checkpoint: 'baseline' as const,
+    order,
+    created_at: '2026-08-09T10:00:00Z',
+    questions: [{
+      id: 1_000 + order,
+      question_text: '最近状态如何？',
+      question_type: 'SINGLE' as const,
+      order: 1,
+      options: [{ id: 10_000 + order, option_text: '良好', score: 1, order: 1 }]
+    }]
+  }
+}
+
+function createCompletedBaselineScaleRecord(order: number) {
+  return {
+    id: 200 + order,
+    total_score: 1,
+    analysis: '状态良好',
+    completed_at: `2026-08-${String(order).padStart(2, '0')}T10:00:00Z`,
+    scale_info: createBaselineScale(order)
+  }
+}
+
 describe('startup access bootstrap', () => {
   it('maps backend user fields into a local student profile', async () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
@@ -183,6 +211,42 @@ describe('startup access bootstrap', () => {
     const result = await sync.bootstrapAccess()
 
     expect(result.targetPageUrl).toBe('/pages/access/questionnaire?checkpoint=baseline')
+  })
+
+  it('routes an incomplete multi-scale baseline plan by the backend checkpoint instead of global scale order', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const getNextPsychologyScale = vi.fn().mockResolvedValue(createBaselineScale(10))
+
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue(
+          Array.from({ length: 9 }, (_, index) => createCompletedBaselineScaleRecord(index + 1))
+        ),
+        getPsychologyQuestionnairePlan: vi.fn().mockResolvedValue({
+          checkpoint: 'baseline',
+          questionnaire_count: 10,
+          completed_questionnaire_count: 9,
+          estimated_total_minutes: 20,
+          current_questionnaire_id: 110,
+          questionnaires: []
+        }),
+        getNextPsychologyScale
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPage: 'questionnaire',
+      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline',
+      checkpoint: 'baseline'
+    })
+    expect(getNextPsychologyScale).toHaveBeenCalledTimes(1)
   })
 
   it('routes startup to a due week 4 questionnaire from backend next-scale truth', async () => {
