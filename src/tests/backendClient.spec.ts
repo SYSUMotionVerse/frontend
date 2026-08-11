@@ -143,6 +143,9 @@ describe('backend client session handling', () => {
       Cookie: 'csrftoken=test-csrf-token; sessionid=test-session',
       'X-CSRFToken': 'test-csrf-token'
     })
+    expect(uniMock.request.mock.calls[1]?.[0].url).toBe(
+      'http://api.example.com/psychology/records/submit/?response_format=summary'
+    )
   })
 
   it('rejects an invalid VITE_SHORT_QUESTIONNAIRE_ENDPOINT at client construction', async () => {
@@ -544,6 +547,9 @@ describe('backend client session handling', () => {
     expect(records).toHaveLength(1)
     expect(firstRecord).toBeDefined()
     expect(firstRecord?.id).toBe(9)
+    expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
+      'http://api.example.com/psychology/records/my_records/?response_format=summary'
+    )
   })
 
   it('requests only the supported weekly compliance trend contract', async () => {

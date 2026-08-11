@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { onHide, onLoad } from '@dcloudio/uni-app'
 import LongQuestionnaireForm from '../../../components/access/LongQuestionnaireForm.vue'
 import {
   CHECKPOINT_LABELS,
@@ -33,6 +33,9 @@ const submitErrorMessage = shallowRef('')
 const questionnaireDraft = shallowRef<QuestionnaireDraft | null>(null)
 const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
 const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
+const draftSaveDelayMs = 250
+let pendingDraft: QuestionnaireDraft | null = null
+let draftSaveTimer: ReturnType<typeof setTimeout> | undefined
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -64,6 +67,14 @@ onMounted(() => {
   }
 
   void loadQuestionnaire()
+})
+
+onHide(() => {
+  flushDraftSave()
+})
+
+onBeforeUnmount(() => {
+  flushDraftSave()
 })
 
 async function loadQuestionnaire() {
@@ -109,6 +120,7 @@ async function handleSubmit(payload: {
 
   isSubmitting.value = true
   submitErrorMessage.value = ''
+  flushDraftSave()
   try {
     const result = await studentBackendSync.syncLongQuestionnaire({
       checkpoint: checkpoint.value,
@@ -120,15 +132,13 @@ async function handleSubmit(payload: {
       return
     }
 
+    pendingDraft = null
     questionnaireDraftStorage.clear(draftStudentId.value, checkpoint.value, payload.scaleId)
     questionnaireDraft.value = null
-    if (typeof studentBackendSync.loadQuestionnairePlan === 'function') {
-      const [nextQuestionnaire, nextPlan] = await Promise.all([
-        studentBackendSync.loadLongQuestionnaire(checkpoint.value),
-        studentBackendSync.loadQuestionnairePlan(checkpoint.value)
-      ])
-      questionnairePlan.value = nextPlan
-      if (nextQuestionnaire) {
+    if (hasRemainingQuestionnaire(payload.scaleId)) {
+      const nextQuestionnaire = await studentBackendSync.loadLongQuestionnaire(checkpoint.value)
+      if (nextQuestionnaire?.checkpoint === checkpoint.value) {
+        markQuestionnaireComplete(payload.scaleId, nextQuestionnaire.scaleId)
         questionnaire.value = nextQuestionnaire
         questionnaireDraft.value = draftStudentId.value
           ? questionnaireDraftStorage.load(
@@ -180,8 +190,46 @@ function handleDraftChange(payload: {
     currentQuestionIndex: payload.currentQuestionIndex,
     updatedAt: new Date().toISOString()
   }
-  questionnaireDraftStorage.save(draft)
-  questionnaireDraft.value = draft
+  pendingDraft = draft
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+  }
+  draftSaveTimer = setTimeout(flushDraftSave, draftSaveDelayMs)
+}
+
+function flushDraftSave() {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+    draftSaveTimer = undefined
+  }
+  if (!pendingDraft) return
+
+  questionnaireDraftStorage.save(pendingDraft)
+  pendingDraft = null
+}
+
+function hasRemainingQuestionnaire(scaleId: number) {
+  const plan = questionnairePlan.value
+  if (!plan) return false
+
+  return plan.questionnaires.some(item => item.id !== scaleId && !item.completed)
+}
+
+function markQuestionnaireComplete(scaleId: number, nextScaleId: number) {
+  const plan = questionnairePlan.value
+  if (!plan) return
+
+  questionnairePlan.value = {
+    ...plan,
+    completed_questionnaire_count: Math.min(
+      plan.questionnaire_count,
+      plan.completed_questionnaire_count + 1
+    ),
+    current_questionnaire_id: nextScaleId,
+    questionnaires: plan.questionnaires.map(item =>
+      item.id === scaleId ? { ...item, completed: true } : item
+    )
+  }
 }
 
 function previewTrainingContent() {

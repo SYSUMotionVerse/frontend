@@ -460,14 +460,17 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       )
     },
     submitPsychologyScale(payload: PsychologyScaleSubmitPayload) {
-      return request<PsychologyScaleSubmitResponse>('/psychology/records/submit/', {
-        method: 'POST',
-        data: payload
-      })
+      return request<PsychologyScaleSubmitResponse>(
+        '/psychology/records/submit/?response_format=summary',
+        {
+          method: 'POST',
+          data: payload
+        }
+      )
     },
     listPsychologyRecords() {
       return request<BackendPsychologyRecord[] | PaginatedResponse<BackendPsychologyRecord>>(
-        '/psychology/records/my_records/'
+        '/psychology/records/my_records/?response_format=summary'
       ).then(response => unwrapCollectionResponse<BackendPsychologyRecord>(response))
     },
     listExerciseRecords() {

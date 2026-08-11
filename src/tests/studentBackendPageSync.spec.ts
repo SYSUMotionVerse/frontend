@@ -57,6 +57,7 @@ const studentBackendSync = {
       }
     ]
   }),
+  loadQuestionnairePlan: vi.fn().mockResolvedValue(null),
   syncLongQuestionnaire: vi.fn().mockResolvedValue({
     synced: true,
     score: 6,
@@ -145,6 +146,7 @@ const startStairSensorCapture = vi.fn()
 const notifyTrainingComplete = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
+  onHide: vi.fn(),
   onLoad: vi.fn(),
   onResize: vi.fn(),
   onShow: vi.fn(),
@@ -333,6 +335,7 @@ describe('page-level backend sync wiring', () => {
     studentBackendSync.bootstrapAccess.mockResolvedValue({
       targetPageUrl: '/pages/training/home'
     })
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValue(null)
     studentBackendSync.loadVisualExerciseVideo.mockResolvedValue({
       id: 9,
       title: '马步冲拳',
@@ -369,6 +372,7 @@ describe('page-level backend sync wiring', () => {
       redirectTo: vi.fn().mockResolvedValue(undefined),
       navigateTo: vi.fn().mockResolvedValue(undefined),
       reLaunch: vi.fn().mockResolvedValue(undefined),
+      showToast: vi.fn().mockResolvedValue(undefined),
       request: vi.fn(),
       getStorageSync: vi.fn(),
       setStorageSync: vi.fn(),
@@ -591,6 +595,97 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().navigateTo).not.toHaveBeenCalled()
   })
 
+  it('loads only the next questionnaire after an intermediate submission', async () => {
+    const firstQuestionnaire = {
+      scaleId: 1,
+      title: '第一份量表',
+      description: '第一份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 11,
+        prompt: '第一题',
+        options: [{ id: 101, label: '是', score: 1 }]
+      }]
+    }
+    const nextQuestionnaire = {
+      scaleId: 2,
+      title: '第二份量表',
+      description: '第二份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 21,
+        prompt: '第二题',
+        options: [{ id: 201, label: '是', score: 1 }]
+      }]
+    }
+    studentBackendSync.loadLongQuestionnaire
+      .mockResolvedValueOnce(firstQuestionnaire)
+      .mockResolvedValueOnce(nextQuestionnaire)
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValue({
+      checkpoint: 'baseline',
+      questionnaire_count: 2,
+      completed_questionnaire_count: 0,
+      estimated_total_minutes: 8,
+      current_questionnaire_id: 1,
+      questionnaires: [
+        {
+          id: 1,
+          code: 'one',
+          title: '第一份量表',
+          short_title: '量表一',
+          order: 1,
+          estimated_minutes: 4,
+          question_count: 1,
+          completed: false
+        },
+        {
+          id: 2,
+          code: 'two',
+          title: '第二份量表',
+          short_title: '量表二',
+          order: 2,
+          estimated_minutes: 4,
+          question_count: 1,
+          completed: false
+        }
+      ]
+    })
+    studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
+      synced: true,
+      score: 1,
+      percentage: 100,
+      analysis: '已完成。',
+      submittedAt: '2026-08-11T10:00:00.000Z'
+    })
+
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          LongQuestionnaireForm: {
+            template: '<button class="submit-questionnaire" @click="$emit(\'submit\', payload)">submit</button>',
+            data: () => ({
+              payload: {
+                scaleId: 1,
+                answers: { 11: 101 },
+                title: '第一份量表'
+              }
+            })
+          }
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('.submit-questionnaire').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(2)
+    expect(studentBackendSync.loadQuestionnairePlan).toHaveBeenCalledTimes(1)
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+  })
+
   it('reLaunches from the baseline questionnaire result into reminder consent', async () => {
     const ResultPage = (await import('../uni-app/pages/access/questionnaire-result.vue')).default
     const wrapper = mount(ResultPage, {
@@ -681,7 +776,7 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
 
     expect(wrapper.find('.detail-page__stats').exists()).toBe(false)
-    expect(wrapper.findAll('.adherence-cell')).toHaveLength(28)
+    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(28)
   })
 
   it('keeps a short questionnaire visibly pending instead of claiming server completion', async () => {

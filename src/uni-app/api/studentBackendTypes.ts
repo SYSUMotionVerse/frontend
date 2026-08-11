@@ -83,6 +83,15 @@ export interface BackendPsychologyScale {
   questions: BackendScaleQuestion[]
 }
 
+export interface BackendPsychologyScaleSummary {
+  id: number
+  code?: string | null
+  title: string
+  short_title?: string
+  checkpoint?: CheckpointKey
+  order: number
+}
+
 export interface BackendQuestionnairePlan {
   checkpoint: CheckpointKey
   questionnaire_count: number
@@ -104,9 +113,10 @@ export interface BackendQuestionnairePlan {
 export interface BackendPsychologyRecord {
   id: number
   total_score: number | string | null
+  percentage?: number | string | null
   analysis: string
   completed_at: string
-  scale_info: BackendPsychologyScale
+  scale_info: BackendPsychologyScaleSummary | BackendPsychologyScale
 }
 
 export interface PsychologyScaleSubmitPayload {

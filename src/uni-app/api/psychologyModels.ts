@@ -2,6 +2,7 @@ import type { CheckpointKey } from '../../types/student'
 import type {
   BackendPsychologyRecord,
   BackendPsychologyScale,
+  BackendPsychologyScaleSummary,
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel,
   PsychologyScaleSubmitPayload
@@ -116,13 +117,36 @@ export function calculatePsychologyPercentage(
   return Math.round((toNumber(totalScore) / maxScore) * 100)
 }
 
+function hasQuestionDetails(
+  scale: BackendPsychologyScaleSummary | BackendPsychologyScale
+): scale is BackendPsychologyScale {
+  return Array.isArray((scale as Partial<BackendPsychologyScale>).questions)
+}
+
+function toPercentage(value: number | string | null | undefined) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value) : null
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? Math.round(parsed) : null
+  }
+
+  return null
+}
+
 export function mapPsychologyRecordSummary(record: BackendPsychologyRecord) {
+  const submittedPercentage = toPercentage(record.percentage)
   return {
     checkpoint: record.scale_info.checkpoint
       ?? resolveCheckpointFromScaleOrder(record.scale_info.order),
     title: record.scale_info.title,
     score: toNumber(record.total_score),
-    percentage: calculatePsychologyPercentage(record.scale_info, record.total_score),
+    percentage: submittedPercentage
+      ?? (hasQuestionDetails(record.scale_info)
+        ? calculatePsychologyPercentage(record.scale_info, record.total_score)
+        : 0),
     analysis: record.analysis,
     submittedAt: record.completed_at
   }
