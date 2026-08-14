@@ -11,6 +11,7 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useSubmissionHandoff } from '../../composables/useSubmissionHandoff'
 import { buildMiniProgramQueryString } from '../../platform/queryString'
 import {
   questionnaireDraftStorage,
@@ -18,9 +19,20 @@ import {
 } from '../../platform/questionnaireDraftStorage'
 import type {
   BackendQuestionnairePlan,
+  LongQuestionnaireSyncResult,
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel
 } from '../../api/studentBackendTypes'
+
+interface ConfirmedQuestionnaireSubmission {
+  scaleId: number
+  result: LongQuestionnaireSyncResult & {
+    synced: true
+    score: number
+    percentage: number
+    submittedAt: string
+  }
+}
 
 const store = useStudentStore()
 const checkpoint = ref<CheckpointKey>('baseline')
@@ -30,12 +42,23 @@ const hasLoaded = shallowRef(false)
 const isSubmitting = shallowRef(false)
 const loadErrorMessage = shallowRef('')
 const submitErrorMessage = shallowRef('')
+const confirmedSubmission = shallowRef<ConfirmedQuestionnaireSubmission | null>(null)
+const isLoadingNextQuestionnaire = shallowRef(false)
+const nextQuestionnaireError = shallowRef('')
+const isFinishingCheckpoint = shallowRef(false)
+const checkpointCompletionError = shallowRef('')
 const questionnaireDraft = shallowRef<QuestionnaireDraft | null>(null)
 const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
 const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
 const draftSaveDelayMs = 250
+const navigationTimeoutMs = 5_000
+const submissionHandoffDelayMs = 260
+const { waitForConfirmation } = useSubmissionHandoff({
+  delayMs: submissionHandoffDelayMs
+})
 let pendingDraft: QuestionnaireDraft | null = null
 let draftSaveTimer: ReturnType<typeof setTimeout> | undefined
+let hasFinalizedCheckpoint = false
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -135,27 +158,85 @@ async function handleSubmit(payload: {
     pendingDraft = null
     questionnaireDraftStorage.clear(draftStudentId.value, checkpoint.value, payload.scaleId)
     questionnaireDraft.value = null
-    if (hasRemainingQuestionnaire(payload.scaleId)) {
-      const nextQuestionnaire = await studentBackendSync.loadLongQuestionnaire(checkpoint.value)
-      if (nextQuestionnaire?.checkpoint === checkpoint.value) {
-        markQuestionnaireComplete(payload.scaleId, nextQuestionnaire.scaleId)
-        questionnaire.value = nextQuestionnaire
-        questionnaireDraft.value = draftStudentId.value
-          ? questionnaireDraftStorage.load(
-              draftStudentId.value,
-              checkpoint.value,
-              nextQuestionnaire.scaleId
-            )
-          : null
-        void uni.showToast({
-          title: '本份已保存，继续下一份',
-          icon: 'none'
-        })
-        return
+    confirmedSubmission.value = {
+      scaleId: payload.scaleId,
+      result: {
+        ...result,
+        synced: true,
+        score: result.score,
+        percentage: result.percentage,
+        submittedAt: result.submittedAt
       }
     }
 
-    store.submitLongQuestionnaire(checkpoint.value, 0, 100)
+    if (!await waitForConfirmation()) {
+      return
+    }
+
+    if (hasRemainingQuestionnaire(payload.scaleId)) {
+      await loadNextQuestionnaire()
+      return
+    }
+
+    await finishCheckpoint(result)
+  } catch (error) {
+    reportBackendSyncError('问卷同步', error)
+    submitErrorMessage.value = '问卷提交失败，请检查网络后重新提交。'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+async function loadNextQuestionnaire() {
+  const submission = confirmedSubmission.value
+  if (!submission || isLoadingNextQuestionnaire.value) {
+    return
+  }
+
+  isLoadingNextQuestionnaire.value = true
+  nextQuestionnaireError.value = ''
+  try {
+    const nextQuestionnaire = await studentBackendSync.loadLongQuestionnaire(checkpoint.value)
+    if (!nextQuestionnaire || nextQuestionnaire.checkpoint !== checkpoint.value) {
+      await finishCheckpoint(submission.result)
+      return
+    }
+
+    markQuestionnaireComplete(submission.scaleId, nextQuestionnaire.scaleId)
+    questionnaire.value = nextQuestionnaire
+    questionnaireDraft.value = draftStudentId.value
+      ? questionnaireDraftStorage.load(
+          draftStudentId.value,
+          checkpoint.value,
+          nextQuestionnaire.scaleId
+        )
+      : null
+    confirmedSubmission.value = null
+    void uni.showToast({
+      title: '本份已保存，继续下一份',
+      icon: 'none'
+    })
+  } catch (error) {
+    reportBackendSyncError('下一份问卷加载', error)
+    nextQuestionnaireError.value = '下一份问卷暂时无法加载，请检查网络后重试。'
+  } finally {
+    isLoadingNextQuestionnaire.value = false
+  }
+}
+
+async function finishCheckpoint(result: ConfirmedQuestionnaireSubmission['result']) {
+  if (isFinishingCheckpoint.value) {
+    return
+  }
+
+  isFinishingCheckpoint.value = true
+  checkpointCompletionError.value = ''
+  try {
+    if (!hasFinalizedCheckpoint) {
+      store.submitLongQuestionnaire(checkpoint.value, 0, 100)
+      hasFinalizedCheckpoint = true
+    }
+
     const queryString = buildMiniProgramQueryString({
       checkpoint: checkpoint.value,
       score: '0',
@@ -164,15 +245,42 @@ async function handleSubmit(payload: {
       submittedAt: result.submittedAt
     })
 
-    void uni.redirectTo({
-      url: `/pages/access/questionnaire-result?${queryString}`
-    })
+    await redirectToQuestionnaireResult(
+      `/pages/access/questionnaire-result?${queryString}`
+    )
   } catch (error) {
-    reportBackendSyncError('问卷同步', error)
-    submitErrorMessage.value = '问卷提交失败，请检查网络后重新提交。'
+    reportBackendSyncError('问卷结果跳转', error)
+    checkpointCompletionError.value = '问卷已提交，但结果页暂时无法打开。'
   } finally {
-    isSubmitting.value = false
+    isFinishingCheckpoint.value = false
   }
+}
+
+function redirectToQuestionnaireResult(url: string) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      settle(() => reject(new Error('Questionnaire result navigation timed out.')))
+    }, navigationTimeoutMs)
+
+    function settle(action: () => void) {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeout)
+      action()
+    }
+
+    try {
+      Promise.resolve(uni.redirectTo({ url })).then(
+        () => settle(resolve),
+        error => settle(() => reject(error))
+      )
+    } catch (error) {
+      settle(() => reject(error))
+    }
+  })
 }
 
 function handleDraftChange(payload: {
@@ -261,30 +369,69 @@ function previewTrainingContent() {
     <view v-else-if="!questionnaire" class="questionnaire-page__empty-state">
       当前没有可提交的后端量表。
     </view>
-    <template v-else>
-      <view class="questionnaire-page__preview">
-        <text>想先了解训练内容？</text>
-        <button class="questionnaire-page__preview-action" type="button" @click="previewTrainingContent">
-          先浏览小程序
-        </button>
+    <view v-else class="questionnaire-page__handoff-stage">
+      <view
+        class="questionnaire-page__form-content"
+        :class="{ 'questionnaire-page__form-content--held': confirmedSubmission }"
+      >
+        <view class="questionnaire-page__preview">
+          <text>想先了解训练内容？</text>
+          <button class="questionnaire-page__preview-action" type="button" @click="previewTrainingContent">
+            先浏览小程序
+          </button>
+        </view>
+        <view :key="questionnaire.scaleId" class="questionnaire-page__form-stage">
+          <LongQuestionnaireForm
+            :questionnaire="questionnaire"
+            :submitting="isSubmitting"
+            :submit-label="submitLabel"
+            :initial-answers="questionnaireDraft?.answers"
+            :initial-question-index="questionnaireDraft?.currentQuestionIndex"
+            :questionnaire-count="questionnaireCount"
+            :questionnaire-number="questionnaireNumber"
+            :estimated-minutes="estimatedMinutes"
+            @draft-change="handleDraftChange"
+            @submit="handleSubmit"
+          />
+        </view>
+        <view v-if="submitErrorMessage" class="questionnaire-page__submit-error" aria-live="polite">
+          <text>{{ submitErrorMessage }}</text>
+        </view>
       </view>
-      <LongQuestionnaireForm
-        :key="questionnaire.scaleId"
-        :questionnaire="questionnaire"
-        :submitting="isSubmitting"
-        :submit-label="submitLabel"
-        :initial-answers="questionnaireDraft?.answers"
-        :initial-question-index="questionnaireDraft?.currentQuestionIndex"
-        :questionnaire-count="questionnaireCount"
-        :questionnaire-number="questionnaireNumber"
-        :estimated-minutes="estimatedMinutes"
-        @draft-change="handleDraftChange"
-        @submit="handleSubmit"
-      />
-      <view v-if="submitErrorMessage" class="questionnaire-page__submit-error" aria-live="polite">
-        <text>{{ submitErrorMessage }}</text>
+
+      <view v-if="confirmedSubmission" class="questionnaire-page__handoff-layer" aria-live="polite">
+        <view class="questionnaire-page__confirmed">
+          <text class="questionnaire-page__confirmed-title">本份问卷已提交</text>
+          <text v-if="isLoadingNextQuestionnaire">
+            正在准备下一份问卷，请稍候。
+          </text>
+          <template v-else-if="nextQuestionnaireError">
+            <text>{{ nextQuestionnaireError }}</text>
+            <button
+              class="questionnaire-page__next-retry"
+              type="button"
+              @click="loadNextQuestionnaire"
+            >
+              重新加载下一份
+            </button>
+          </template>
+          <text v-else-if="isFinishingCheckpoint">
+            正在打开问卷结果，请稍候。
+          </text>
+          <template v-else-if="checkpointCompletionError">
+            <text>{{ checkpointCompletionError }}</text>
+            <button
+              class="questionnaire-page__next-retry"
+              type="button"
+              @click="finishCheckpoint(confirmedSubmission.result)"
+            >
+              重新打开结果
+            </button>
+          </template>
+          <text v-else>答案已保存，正在继续。</text>
+        </view>
       </view>
-    </template>
+    </view>
   </UniAccessPageShell>
 </template>
 
@@ -300,7 +447,8 @@ function previewTrainingContent() {
 }
 
 .questionnaire-page__empty-state--error,
-.questionnaire-page__submit-error {
+.questionnaire-page__submit-error,
+.questionnaire-page__confirmed {
   border-style: solid;
   border-width: 2rpx;
   border-color: rgba(199, 107, 91, 0.32);
@@ -337,6 +485,90 @@ function previewTrainingContent() {
   font-size: 26rpx;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.questionnaire-page__handoff-stage {
+  position: relative;
+}
+
+.questionnaire-page__form-content {
+  transition:
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.questionnaire-page__form-content--held {
+  opacity: 0.42;
+  transform: scale(0.992);
+  pointer-events: none;
+}
+
+.questionnaire-page__handoff-layer {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.questionnaire-page__confirmed {
+  display: flex;
+  width: 100%;
+  max-width: 560rpx;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 32rpx 28rpx;
+  border-color: rgba(118, 174, 112, 0.36);
+  background: rgba(223, 245, 218, 0.82);
+  color: #286743;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.5;
+  animation: questionnaire-page__state-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.questionnaire-page__form-stage {
+  animation: questionnaire-page__state-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes questionnaire-page__state-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12rpx, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.questionnaire-page__confirmed-title {
+  color: #1f5135;
+  font-size: 32rpx;
+  font-weight: 900;
+}
+
+.questionnaire-page__next-retry {
+  min-height: 96rpx;
+  margin: 0;
+  border: 0;
+  border-radius: 999rpx;
+  background: #FF8B8B;
+  box-shadow: 0 8rpx 0 #DE7272;
+  color: #1A202C;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.questionnaire-page__next-retry::after {
+  border: none;
 }
 
 .questionnaire-page__preview {

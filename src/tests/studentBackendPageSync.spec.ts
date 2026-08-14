@@ -12,6 +12,7 @@ const store = {
   submitLongQuestionnaire: vi.fn(),
   completeTrainingSession: vi.fn(),
   submitShortQuestionnaireForLatestSession: vi.fn(),
+  submitShortQuestionnaireForSession: vi.fn(),
   refreshReminderEligibility: vi.fn(),
   state: {
     profile: {
@@ -543,6 +544,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
+    vi.useFakeTimers()
     studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
       synced: true,
       score: 6,
@@ -588,6 +590,16 @@ describe('page-level backend sync wiring', () => {
         title: '运动心理健康量表（第1次）'
       }
     )
+    expect(wrapper.text()).toContain('本份问卷已提交')
+    expect(wrapper.find('.questionnaire-page__handoff-layer').exists()).toBe(true)
+    expect(wrapper.find('.questionnaire-page__form-content--held').exists()).toBe(true)
+    expect(wrapper.find('.questionnaire-page__form-content--held .submit-questionnaire').exists()).toBe(true)
+    expect(store.submitLongQuestionnaire).not.toHaveBeenCalled()
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
     expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 0, 100)
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/access/questionnaire-result?checkpoint=baseline&score=0&percentage=100&questionnaireCount=1&submittedAt=2026-04-09T15%3A30%3A00.000Z'
@@ -596,6 +608,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('loads only the next questionnaire after an intermediate submission', async () => {
+    vi.useFakeTimers()
     const firstQuestionnaire = {
       scaleId: 1,
       title: '第一份量表',
@@ -681,9 +694,179 @@ describe('page-level backend sync wiring', () => {
     await wrapper.get('.submit-questionnaire').trigger('click')
     await flushPromises()
 
-    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('本份问卷已提交')
+    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadQuestionnairePlan).toHaveBeenCalledTimes(1)
     expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a confirmed questionnaire out of the resubmit path when loading the next one fails', async () => {
+    vi.useFakeTimers()
+    const firstQuestionnaire = {
+      scaleId: 1,
+      title: '第一份量表',
+      description: '第一份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 11,
+        prompt: '第一题',
+        options: [{ id: 101, label: '是', score: 1 }]
+      }]
+    }
+    const nextQuestionnaire = {
+      scaleId: 2,
+      title: '第二份量表',
+      description: '第二份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 21,
+        prompt: '第二题',
+        options: [{ id: 201, label: '是', score: 1 }]
+      }]
+    }
+    studentBackendSync.loadLongQuestionnaire
+      .mockResolvedValueOnce(firstQuestionnaire)
+      .mockRejectedValueOnce(new Error('next scale unavailable'))
+      .mockResolvedValueOnce(nextQuestionnaire)
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValue({
+      checkpoint: 'baseline',
+      questionnaire_count: 2,
+      completed_questionnaire_count: 0,
+      estimated_total_minutes: 8,
+      current_questionnaire_id: 1,
+      questionnaires: [
+        {
+          id: 1,
+          code: 'one',
+          title: '第一份量表',
+          short_title: '量表一',
+          order: 1,
+          estimated_minutes: 4,
+          question_count: 1,
+          completed: false
+        },
+        {
+          id: 2,
+          code: 'two',
+          title: '第二份量表',
+          short_title: '量表二',
+          order: 2,
+          estimated_minutes: 4,
+          question_count: 1,
+          completed: false
+        }
+      ]
+    })
+    studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
+      synced: true,
+      score: 1,
+      percentage: 100,
+      analysis: '已完成。',
+      submittedAt: '2026-08-13T10:00:00.000Z'
+    })
+
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          LongQuestionnaireForm: {
+            template: '<button class="submit-questionnaire" @click="$emit(\'submit\', payload)">submit</button>',
+            data: () => ({
+              payload: {
+                scaleId: 1,
+                answers: { 11: 101 },
+                title: '第一份量表'
+              }
+            })
+          }
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('.submit-questionnaire').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('本份问卷已提交')
+    expect(wrapper.text()).toContain('答案已保存，正在继续。')
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(studentBackendSync.syncLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('本份问卷已提交')
+    expect(wrapper.text()).toContain('重新加载下一份')
+    expect(wrapper.text()).not.toContain('问卷提交失败')
+    expect(store.submitLongQuestionnaire).not.toHaveBeenCalled()
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await wrapper.get('.questionnaire-page__next-retry').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(3)
+    expect(wrapper.text()).not.toContain('本份问卷已提交')
+  })
+
+  it('retries a failed questionnaire-result navigation without resubmitting answers', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
+      synced: true,
+      score: 6,
+      percentage: 60,
+      analysis: '心理状态正常，建议保持规律运动。',
+      submittedAt: '2026-08-13T10:00:00.000Z'
+    })
+    currentUni().redirectTo
+      .mockRejectedValueOnce(new Error('navigation unavailable'))
+      .mockResolvedValueOnce(undefined)
+
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          LongQuestionnaireForm: {
+            template: '<button class="submit-questionnaire" @click="$emit(\'submit\', payload)">submit</button>',
+            data: () => ({
+              payload: {
+                scaleId: 1,
+                answers: { 11: 101 },
+                title: '运动心理健康量表（第1次）'
+              }
+            })
+          }
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('.submit-questionnaire').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('本份问卷已提交')
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(studentBackendSync.syncLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(store.submitLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('问卷已提交，但结果页暂时无法打开。')
+    expect(wrapper.text()).toContain('重新打开结果')
+
+    await wrapper.get('.questionnaire-page__next-retry').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(store.submitLongQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
   it('reLaunches from the baseline questionnaire result into reminder consent', async () => {
@@ -808,7 +991,8 @@ describe('page-level backend sync wiring', () => {
         stubs: {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
-            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -823,7 +1007,7 @@ describe('page-level backend sync wiring', () => {
       confidence: 5,
       enjoyment: 3
     })
-    expect(store.submitShortQuestionnaireForLatestSession).toHaveBeenCalledWith({
+    expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-short-1', {
       energyLevel: 4,
       confidence: 5,
       enjoyment: 3
@@ -831,6 +1015,85 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('反馈已安全保存在本机')
     expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/feedback?sessionId=session-short-1'
+    })
+  })
+
+  it('keeps local short-questionnaire state aligned with the session in the route', async () => {
+    vi.useFakeTimers()
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [
+        {
+          id: 'session-routed',
+          modality: 'wushu',
+          date: '2026-07-18',
+          completed: true,
+          validCheckInApplied: true,
+          restartedAfterInterrupt: false,
+          shortQuestionnaire: null,
+          analysis: {
+            qualityScore: 88,
+            summary: '先完成的训练',
+            capturedBy: 'camera'
+          }
+        },
+        {
+          id: 'session-latest',
+          modality: 'hiit',
+          date: '2026-07-18',
+          completed: true,
+          validCheckInApplied: true,
+          restartedAfterInterrupt: false,
+          shortQuestionnaire: null,
+          analysis: {
+            qualityScore: 86,
+            summary: '后完成的训练',
+            capturedBy: 'camera'
+          }
+        }
+      ]
+    })
+    studentBackendSync.syncShortQuestionnaire.mockResolvedValue({ synced: true })
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+          }
+        }
+      }
+    })
+    const uniApp = await import('@dcloudio/uni-app')
+    const onLoadHandler = vi.mocked(uniApp.onLoad).mock.calls.at(-1)?.[0]
+
+    onLoadHandler?.({ sessionId: 'session-routed' })
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
+      sessionId: 'session-routed',
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-routed', {
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    expect(store.submitShortQuestionnaireForLatestSession).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('反馈已保存，正在打开训练反馈')
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(currentUni().redirectTo).toHaveBeenCalledWith({
+      url: '/pages/training/feedback?sessionId=session-routed'
     })
   })
 
@@ -863,7 +1126,8 @@ describe('page-level backend sync wiring', () => {
         stubs: {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
-            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -877,7 +1141,7 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('保存失败')
     expect(wrapper.text()).toContain('重试')
     // Must not update the in-memory store when the save itself failed
-    expect(store.submitShortQuestionnaireForLatestSession).not.toHaveBeenCalled()
+    expect(store.submitShortQuestionnaireForSession).not.toHaveBeenCalled()
     expect(currentUni().redirectTo).not.toHaveBeenCalled()
   })
 
@@ -911,7 +1175,8 @@ describe('page-level backend sync wiring', () => {
         stubs: {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
-            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button>'
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -928,6 +1193,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('continues to feedback when the short questionnaire backend seam succeeds', async () => {
+    vi.useFakeTimers()
     store.getSnapshot.mockReturnValue({
       ...initialStudentState,
       sessions: [{
@@ -953,7 +1219,8 @@ describe('page-level backend sync wiring', () => {
         stubs: {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
-            template: '<button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button>'
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -962,9 +1229,70 @@ describe('page-level backend sync wiring', () => {
     await wrapper.get('.submit-short').trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('反馈已保存，正在打开训练反馈')
+    expect(currentUni().redirectTo).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/feedback?sessionId=session-short-2'
     })
+  })
+
+  it('reopens feedback without resubmitting a short questionnaire after navigation fails', async () => {
+    vi.useFakeTimers()
+    store.getSnapshot.mockReturnValue({
+      ...initialStudentState,
+      sessions: [{
+        id: 'session-short-feedback-retry',
+        modality: 'wushu',
+        date: '2026-07-18',
+        completed: true,
+        validCheckInApplied: true,
+        restartedAfterInterrupt: false,
+        shortQuestionnaire: null,
+        analysis: {
+          qualityScore: 90,
+          summary: '完成稳定',
+          capturedBy: 'camera'
+        }
+      }]
+    })
+    studentBackendSync.syncShortQuestionnaire.mockResolvedValue({ synced: true })
+    currentUni().redirectTo
+      .mockRejectedValueOnce(new Error('feedback unavailable'))
+      .mockResolvedValueOnce(undefined)
+
+    const ShortQuestionnairePage = (await import('../uni-app/pages/training/short-questionnaire.vue')).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button><button class="open-feedback" @click="$emit(\'openFeedback\')">open</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('反馈已保存，但训练反馈页暂时无法打开。请重新打开。')
+    expect(currentUni().redirectTo).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('.open-feedback').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledTimes(1)
+    expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledTimes(1)
+    expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
   it('plays action guidance from the session clock without waiting for video time updates', async () => {
@@ -1037,10 +1365,10 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['startRecognition', 'startTraining'],
+            emits: ['startRecognition', 'poseStats', 'startTraining'],
             template: `
               <div>
-                <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
               </div>
             `
@@ -1182,10 +1510,10 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['startRecognition', 'startTraining', 'videoEnded'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoEnded'],
             template: `
               <div>
-                <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
                 <button class="end-video" @click="$emit('videoEnded', { detail: { currentTime: 4 } })">end</button>
               </div>
@@ -1311,10 +1639,10 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoUrl'],
-            emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startRecognition', 'startTraining', 'poseResult'],
+            emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startRecognition', 'poseStats', 'startTraining', 'poseResult'],
             template: `<div>
               <span class="video-url">{{ videoUrl }}</span>
-              <button class="start-recognition" @click="$emit('startRecognition', 5)">camera</button>
+              <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
               <button class="start-training" @click="$emit('startTraining')">start</button>
               <button class="pose-result" @click="$emit('poseResult', {
                 angleFrame: {

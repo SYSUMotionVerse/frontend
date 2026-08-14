@@ -39,6 +39,6 @@
 
 - [x] 6.1 Test draft restore, missing-answer navigation, retry, and successful clear
 - [x] 6.2 Test preview browsing and deep-link execution blocking
-- [ ] 6.3 Run `pnpm test`
+- [x] 6.3 Run `pnpm test`
 - [x] 6.4 Run `pnpm exec vue-tsc --noEmit`
 - [ ] 6.5 Build and verify `dist/build/mp-weixin` in WeChat DevTools

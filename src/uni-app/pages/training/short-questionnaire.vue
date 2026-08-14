@@ -4,13 +4,30 @@ import { onLoad } from '@dcloudio/uni-app'
 import ShortQuestionnaireForm from '../../../components/training/ShortQuestionnaireForm.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useSubmissionHandoff } from '../../composables/useSubmissionHandoff'
 import { studentBackendSync } from '../../api/studentBackend'
+import { reportBackendSyncError } from '../../api/reportBackendSyncError'
+
+type SubmissionStatus = 'idle' | 'error' | 'saved-locally' | 'submitted'
+type StatusAction = 'retry' | 'home' | 'feedback'
+type ShortQuestionnaireResponse = {
+  energyLevel: number
+  confidence: number
+  enjoyment: number
+}
 
 const store = useStudentStore()
-const latestResponse = shallowRef<{ energyLevel: number; confidence: number; enjoyment: number } | null>(null)
 const isSubmitting = shallowRef(false)
-const statusMessage = shallowRef('')
+const submissionStatus = shallowRef<SubmissionStatus>('idle')
+const submissionMessage = shallowRef('')
+const submissionAction = shallowRef<StatusAction>('retry')
 const routeSessionId = shallowRef('')
+const feedbackNavigationTimeoutMs = 5_000
+const submissionHandoffDelayMs = 260
+const { waitForConfirmation } = useSubmissionHandoff({
+  delayMs: submissionHandoffDelayMs
+})
+let isOpeningFeedback = false
 const activeSessionId = computed(() => {
   if (routeSessionId.value) {
     return routeSessionId.value
@@ -26,18 +43,36 @@ onMounted(() => {
   void studentBackendSync.retryPendingShortQuestionnaires()
 })
 
-async function submitResponse(payload: { energyLevel: number; confidence: number; enjoyment: number }) {
-  if (isSubmitting.value) {
+function setSubmissionStatus(
+  status: SubmissionStatus,
+  message = '',
+  action: StatusAction = 'retry'
+) {
+  submissionStatus.value = status
+  submissionMessage.value = message
+  submissionAction.value = action
+}
+
+async function submitResponse(payload: ShortQuestionnaireResponse) {
+  if (
+    isSubmitting.value
+    || submissionStatus.value === 'submitted'
+    || submissionAction.value === 'feedback'
+  ) {
     return
   }
 
   if (!activeSessionId.value) {
-    statusMessage.value = '未找到本次训练记录，请返回首页后重试。'
+    setSubmissionStatus(
+      'error',
+      '未找到本次训练记录，请返回训练首页后重试。',
+      'home'
+    )
     return
   }
 
+  setSubmissionStatus('idle')
   isSubmitting.value = true
-  latestResponse.value = payload
   let result: Awaited<ReturnType<typeof studentBackendSync.syncShortQuestionnaire>>
   try {
     result = await studentBackendSync.syncShortQuestionnaire({
@@ -47,22 +82,77 @@ async function submitResponse(payload: { energyLevel: number; confidence: number
   } catch {
     // The durable save itself may have failed (quota/storage or validation).
     // Do not claim the data was safely stored — give a truthful retry message.
-    statusMessage.value = '反馈保存失败，请重试。'
+    setSubmissionStatus('error', '反馈保存失败，请重试提交。')
     return
   } finally {
     isSubmitting.value = false
   }
 
-  store.submitShortQuestionnaireForLatestSession(payload)
+  store.submitShortQuestionnaireForSession(activeSessionId.value, payload)
   if (!result.synced) {
-    statusMessage.value = result.reason === 'network-error'
-      ? '反馈已安全保存在本机，网络恢复后将自动重试。请返回首页继续使用。'
-      : '反馈已安全保存在本机，待后端开放接口后再同步。请返回首页继续使用。'
+    setSubmissionStatus(
+      'saved-locally',
+      result.reason === 'network-error'
+        ? '反馈已安全保存在本机，网络恢复后将自动重试。'
+        : '反馈已安全保存在本机，待后端开放接口后再同步。',
+      'home'
+    )
     return
   }
 
-  void uni.redirectTo({
-    url: `/pages/training/feedback?sessionId=${encodeURIComponent(activeSessionId.value)}`
+  const sessionId = activeSessionId.value
+  setSubmissionStatus('submitted', '反馈已保存，正在打开训练反馈。', 'feedback')
+  if (await waitForConfirmation()) {
+    await openFeedback(sessionId)
+  }
+}
+
+async function openFeedback(sessionId = activeSessionId.value) {
+  if (isOpeningFeedback || !sessionId) {
+    return
+  }
+
+  isOpeningFeedback = true
+  try {
+    await redirectToFeedback(sessionId)
+  } catch (error) {
+    reportBackendSyncError('训练反馈跳转', error)
+    setSubmissionStatus(
+      'error',
+      '反馈已保存，但训练反馈页暂时无法打开。请重新打开。',
+      'feedback'
+    )
+  } finally {
+    isOpeningFeedback = false
+  }
+}
+
+function redirectToFeedback(sessionId: string) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      settle(() => reject(new Error('Training feedback navigation timed out.')))
+    }, feedbackNavigationTimeoutMs)
+
+    function settle(action: () => void) {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeout)
+      action()
+    }
+
+    try {
+      Promise.resolve(uni.redirectTo({
+        url: `/pages/training/feedback?sessionId=${encodeURIComponent(sessionId)}`
+      })).then(
+        () => settle(resolve),
+        error => settle(() => reject(error))
+      )
+    } catch (error) {
+      settle(() => reject(error))
+    }
   })
 }
 
@@ -75,17 +165,35 @@ function goHome() {
 
 <template>
   <UniTrainingPageShell :show-dock="false">
-    <ShortQuestionnaireForm :submitting="isSubmitting" @submit="submitResponse" />
-
-    <section v-if="statusMessage" class="card-shell p-18 text-14 text-slate-600">
-      {{ statusMessage }}
-      <button class="btn-primary mt-16" type="button" @click="goHome">
-        返回首页
-      </button>
-    </section>
-
-    <section v-if="latestResponse" class="card-shell p-18 text-14 text-slate-600">
-      上次反馈：精力 {{ latestResponse.energyLevel }}，信心 {{ latestResponse.confidence }}，愉悦度 {{ latestResponse.enjoyment }}
-    </section>
+    <view class="short-questionnaire-page">
+      <ShortQuestionnaireForm
+        :submitting="isSubmitting"
+        :status="submissionStatus"
+        :status-message="submissionMessage"
+        :status-action="submissionAction"
+        @submit="submitResponse"
+        @open-feedback="openFeedback"
+        @go-home="goHome"
+      />
+    </view>
   </UniTrainingPageShell>
 </template>
+
+<style scoped>
+.short-questionnaire-page {
+  display: flex;
+  width: 100%;
+  min-height: 100%;
+  flex: 1;
+  flex-direction: column;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+@media (max-height: 640px) {
+  .short-questionnaire-page {
+    padding-top: 20rpx;
+    padding-bottom: 32rpx;
+  }
+}
+</style>
