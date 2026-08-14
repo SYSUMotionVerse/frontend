@@ -705,6 +705,116 @@ describe('page-level backend sync wiring', () => {
     expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenCalledTimes(2)
   })
 
+  it('recreates the runner from question one when the next questionnaire reuses a scale id', async () => {
+    vi.useFakeTimers()
+    const firstQuestionnaire = {
+      scaleId: 1,
+      title: '第一份量表',
+      description: '第一份',
+      checkpoint: 'baseline' as const,
+      questions: Array.from({ length: 20 }, (_, index) => ({
+        id: index + 1,
+        prompt: `第一份第 ${index + 1} 题`,
+        options: [{ id: index + 101, label: '是', score: 1 }]
+      }))
+    }
+    const nextQuestionnaire = {
+      scaleId: 1,
+      title: 'SRSS',
+      description: '下一份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 101,
+        prompt: 'SRSS 第一题',
+        options: [{ id: 201, label: '是', score: 1 }]
+      }]
+    }
+    studentBackendSync.loadLongQuestionnaire
+      .mockResolvedValueOnce(firstQuestionnaire)
+      .mockResolvedValueOnce(nextQuestionnaire)
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValue({
+      checkpoint: 'baseline',
+      questionnaire_count: 2,
+      completed_questionnaire_count: 0,
+      estimated_total_minutes: 8,
+      current_questionnaire_id: 1,
+      questionnaires: [
+        {
+          id: 1,
+          code: 'one',
+          title: '第一份量表',
+          short_title: '量表一',
+          order: 1,
+          estimated_minutes: 4,
+          question_count: 20,
+          completed: false
+        },
+        {
+          id: 2,
+          code: 'srss',
+          title: 'SRSS',
+          short_title: 'SRSS',
+          order: 2,
+          estimated_minutes: 4,
+          question_count: 1,
+          completed: false
+        }
+      ]
+    })
+    studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
+      synced: true,
+      score: 1,
+      percentage: 100,
+      analysis: '已完成。',
+      submittedAt: '2026-08-14T13:00:00.000Z'
+    })
+
+    const StatefulQuestionnaireForm = defineComponent({
+      props: ['questionnaire'],
+      setup(props, { emit }) {
+        const questionnaire = props.questionnaire as typeof firstQuestionnaire
+        const firstRenderedQuestionNumber = questionnaire.questions.length
+
+        function submit() {
+          emit('submit', {
+            scaleId: questionnaire.scaleId,
+            answers: { 1: 101 },
+            title: questionnaire.title
+          })
+        }
+
+        return { firstRenderedQuestionNumber, submit }
+      },
+      template: `
+        <button class="submit-questionnaire" @click="submit">
+          <text class="runner-title">{{ questionnaire.title }}</text>
+          <text class="runner-question">{{ firstRenderedQuestionNumber }}</text>
+        </button>
+      `
+    })
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          LongQuestionnaireForm: StatefulQuestionnaireForm
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(wrapper.get('.runner-title').text()).toBe('第一份量表')
+    expect(wrapper.get('.runner-question').text()).toBe('20')
+
+    await wrapper.get('.submit-questionnaire').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(wrapper.get('.runner-title').text()).toBe('SRSS')
+    expect(wrapper.get('.runner-question').text()).toBe('1')
+  })
+
   it('keeps a confirmed questionnaire out of the resubmit path when loading the next one fails', async () => {
     vi.useFakeTimers()
     const firstQuestionnaire = {

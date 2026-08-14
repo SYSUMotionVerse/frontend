@@ -49,6 +49,7 @@ const isFinishingCheckpoint = shallowRef(false)
 const checkpointCompletionError = shallowRef('')
 const questionnaireDraft = shallowRef<QuestionnaireDraft | null>(null)
 const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
+const questionnaireRunnerKey = shallowRef(0)
 const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
 const draftSaveDelayMs = 250
 const navigationTimeoutMs = 5_000
@@ -114,6 +115,7 @@ async function loadQuestionnaire() {
       loadPlan
     ])
     questionnaire.value = loadedQuestionnaire
+    questionnaireRunnerKey.value += 1
     questionnairePlan.value = loadedPlan
     questionnaireDraft.value = loadedQuestionnaire && draftStudentId.value
       ? questionnaireDraftStorage.load(
@@ -204,6 +206,7 @@ async function loadNextQuestionnaire() {
 
     markQuestionnaireComplete(submission.scaleId, nextQuestionnaire.scaleId)
     questionnaire.value = nextQuestionnaire
+    questionnaireRunnerKey.value += 1
     questionnaireDraft.value = draftStudentId.value
       ? questionnaireDraftStorage.load(
           draftStudentId.value,
@@ -380,7 +383,7 @@ function previewTrainingContent() {
             先浏览小程序
           </button>
         </view>
-        <view :key="questionnaire.scaleId" class="questionnaire-page__form-stage">
+        <view :key="questionnaireRunnerKey" class="questionnaire-page__form-stage">
           <LongQuestionnaireForm
             :questionnaire="questionnaire"
             :submitting="isSubmitting"
