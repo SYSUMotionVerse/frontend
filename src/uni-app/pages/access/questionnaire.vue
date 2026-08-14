@@ -391,6 +391,7 @@ function previewTrainingContent() {
             :questionnaire-number="questionnaireNumber"
             :estimated-minutes="estimatedMinutes"
             @draft-change="handleDraftChange"
+            @reload="loadQuestionnaire"
             @submit="handleSubmit"
           />
         </view>

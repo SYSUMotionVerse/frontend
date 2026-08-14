@@ -92,6 +92,41 @@ describe('LongQuestionnaireForm progressive runner', () => {
     ]])
   })
 
+  it('keeps a visible question when the current questionnaire is refreshed with fewer questions', async () => {
+    const questionnaire = createQuestionnaire(3)
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: {
+        questionnaire,
+        initialQuestionIndex: 2
+      }
+    })
+
+    expect(wrapper.text()).toContain('第 3 个问题')
+
+    await wrapper.setProps({
+      questionnaire: {
+        ...questionnaire,
+        questions: questionnaire.questions.slice(0, 1)
+      }
+    })
+
+    expect(wrapper.findAll('.questionnaire-question')).toHaveLength(1)
+    expect(wrapper.text()).toContain('第 1 个问题')
+  })
+
+  it('shows a recoverable state instead of a blank runner when no questions are available', async () => {
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: { questionnaire: createQuestionnaire(0) }
+    })
+
+    expect(wrapper.find('.questionnaire-runner__empty-state').exists()).toBe(true)
+    expect(wrapper.text()).toContain('暂时没有可作答的题目')
+
+    await wrapper.get('.questionnaire-runner__empty-retry').trigger('click')
+
+    expect(wrapper.emitted('reload')).toHaveLength(1)
+  })
+
   it('supports multi-select questions and submits every selected option', async () => {
     const questionnaire = createQuestionnaire(1)
     questionnaire.questions[0].questionType = 'MULTIPLE'

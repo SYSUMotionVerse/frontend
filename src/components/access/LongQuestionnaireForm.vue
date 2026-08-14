@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef } from 'vue'
+import { computed, reactive, shallowRef, watch } from 'vue'
 import type {
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel
@@ -40,6 +40,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   submit: [payload: SubmissionPayload]
   draftChange: [payload: DraftPayload]
+  reload: []
 }>()
 
 const answers = reactive<Record<number, PsychologyQuestionnaireAnswer>>({})
@@ -89,12 +90,14 @@ const visibleQuestions = computed(() => {
 })
 
 const questionCount = computed(() => visibleQuestions.value.length)
-const currentQuestionIndex = shallowRef(
-  Math.min(
-    Math.max(0, props.initialQuestionIndex),
+function clampQuestionIndex(index: number) {
+  return Math.min(
+    Math.max(0, index),
     Math.max(0, questionCount.value - 1)
   )
-)
+}
+
+const currentQuestionIndex = shallowRef(clampQuestionIndex(props.initialQuestionIndex))
 const currentQuestion = computed(() =>
   visibleQuestions.value[currentQuestionIndex.value] ?? null
 )
@@ -134,6 +137,15 @@ function emitDraft() {
     currentQuestionIndex: currentQuestionIndex.value
   })
 }
+
+watch(questionCount, () => {
+  const nextQuestionIndex = clampQuestionIndex(currentQuestionIndex.value)
+  if (nextQuestionIndex === currentQuestionIndex.value) return
+
+  currentQuestionIndex.value = nextQuestionIndex
+  validationMessage.value = ''
+  emitDraft()
+}, { flush: 'sync' })
 
 function handleResponseChange(questionId: number, optionId: number) {
   const question = props.questionnaire.questions.find(item => item.id === questionId)
@@ -261,6 +273,17 @@ function handleSubmit() {
       @integer-input="handleIntegerInput"
       @duration-input="handleDurationInput"
     />
+    <view v-else class="questionnaire-runner__empty-state" aria-live="polite">
+      <text class="questionnaire-runner__empty-title">这份问卷暂时没有可作答的题目。</text>
+      <text>请重新加载问卷；若仍无法继续，请联系研究管理员。</text>
+      <button
+        class="questionnaire-runner__empty-retry"
+        type="button"
+        @click="emit('reload')"
+      >
+        重新加载问卷
+      </button>
+    </view>
 
     <text
       v-if="validationMessage"
@@ -321,5 +344,41 @@ function handleSubmit() {
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1.45;
+}
+
+.questionnaire-runner__empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 30rpx;
+  border: 4rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 28rpx;
+  background: #FFFCF8;
+  color: #64748B;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.questionnaire-runner__empty-title {
+  color: #1A202C;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.questionnaire-runner__empty-retry {
+  min-height: 88rpx;
+  margin: 8rpx 0 0;
+  border: 0;
+  border-radius: 999rpx;
+  background: #FF8B8B;
+  box-shadow: 0 6rpx 0 #DE7272;
+  color: #1A202C;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.questionnaire-runner__empty-retry::after {
+  border: none;
 }
 </style>
