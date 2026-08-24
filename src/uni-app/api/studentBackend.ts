@@ -708,6 +708,9 @@ export function createStudentBackendSync(
         training_session_id: submission.sessionId,
         client_completed_at: submission.completedAt ?? submission.queuedAt,
         ...(submission.score !== undefined ? { score: submission.score } : {}),
+        ...(submission.scoreUnavailableReason
+          ? { score_unavailable_reason: submission.scoreUnavailableReason }
+          : {}),
         ...(submission.comment !== undefined ? { comment: submission.comment } : {}),
         ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {})
       })
@@ -970,6 +973,9 @@ export function createStudentBackendSync(
         durationSeconds: input.durationSeconds,
         ...(input.videoId ? { videoId: input.videoId } : {}),
         ...(input.score !== undefined ? { score: input.score } : {}),
+        ...(input.scoreUnavailableReason
+          ? { scoreUnavailableReason: input.scoreUnavailableReason }
+          : {}),
         ...(input.comment !== undefined ? { comment: input.comment } : {}),
         ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
         completedAt,

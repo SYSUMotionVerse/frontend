@@ -12,6 +12,7 @@ export type PendingTrainingSubmission =
       durationSeconds: number
       videoId?: number
       score?: number
+      scoreUnavailableReason?: string
       comment?: string
       poseAnalysis?: VisualPoseAnalysisPayload
       completedAt?: string
@@ -90,7 +91,12 @@ function isPendingTrainingSubmission(value: unknown): value is PendingTrainingSu
       submission.score <= maxQualityScore
     )
     const hasValidComment = submission.comment === undefined || typeof submission.comment === 'string'
-    return hasValidVideoId && hasValidScore && hasValidComment && (
+    const hasValidScoreReason = submission.scoreUnavailableReason === undefined || (
+      typeof submission.scoreUnavailableReason === 'string' &&
+      submission.scoreUnavailableReason.length > 0 &&
+      submission.scoreUnavailableReason.length <= 500
+    )
+    return hasValidVideoId && hasValidScore && hasValidComment && hasValidScoreReason && (
       submission.modality === 'wushu' || submission.modality === 'hiit'
     )
   }

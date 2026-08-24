@@ -197,6 +197,7 @@ export interface VisualSessionSyncInput {
   durationSeconds: number
   videoId?: number
   score?: number
+  scoreUnavailableReason?: string
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
   completedAt?: string
@@ -371,6 +372,8 @@ export interface BackendExerciseRecord {
   video?: number
   duration: number
   score: number | string | null
+  score_status?: 'SCORED' | 'UNAVAILABLE'
+  score_unavailable_reason?: string
   comment: string
   poseAnalysis?: VisualPoseAnalysisPayload & {
     scoreDetails?: ExerciseScoreDetails
@@ -448,6 +451,7 @@ export interface ExerciseRecordCreatePayload {
   duration: number
   training_session_id: string
   score?: number
+  score_unavailable_reason?: string
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
   client_completed_at?: string

@@ -1207,6 +1207,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       : undefined
     let qualityScore = scoring.score === undefined ? null : Math.round(scoring.score)
     let summary = scoring.summary
+    const scoreUnavailableReason = scoring.score === undefined
+      ? (scoringWarnings.value.join('; ') || 'no_valid_action_score')
+      : undefined
 
     try {
       const result = await submission.sync({
@@ -1216,6 +1219,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           ? { videoId: primaryVideoId.value }
           : {}),
         ...(scoring.score !== undefined ? { score: scoring.score } : {}),
+        ...(scoreUnavailableReason ? { scoreUnavailableReason } : {}),
         comment: scoring.summary,
         completedAt,
         ...(poseAnalysis ? { poseAnalysis } : {})
