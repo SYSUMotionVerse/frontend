@@ -10,6 +10,7 @@ import {
   setStudentActiveCheckpoint,
   setStudentPhysicalMetrics,
   setStudentReminderSource,
+  submitShortQuestionnaireForStudentSession,
   submitShortQuestionnaireForLatestStudentSession,
   submitStudentLongQuestionnaire
 } from '../../domain/student/state'
@@ -26,7 +27,7 @@ import type {
 type TrainingSessionInput = {
   sessionId?: string
   modality: TrainingModality
-  qualityScore: number
+  qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
 }
@@ -103,6 +104,17 @@ export function createStudentStore(initialState: StudentAppState = createInitial
     Object.assign(state, submitShortQuestionnaireForLatestStudentSession(getSnapshot(), payload))
   }
 
+  function submitShortQuestionnaireForSession(
+    sessionId: string,
+    payload: {
+      energyLevel: number
+      confidence: number
+      enjoyment: number
+    }
+  ) {
+    Object.assign(state, submitShortQuestionnaireForStudentSession(getSnapshot(), sessionId, payload))
+  }
+
   function reset() {
     Object.assign(state, createInitialStudentState())
   }
@@ -123,6 +135,7 @@ export function createStudentStore(initialState: StudentAppState = createInitial
     refreshReminderEligibility,
     setPhysicalMetrics,
     submitShortQuestionnaireForLatestSession,
+    submitShortQuestionnaireForSession,
     reset,
     getSnapshot,
     resolveNextPage

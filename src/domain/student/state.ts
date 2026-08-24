@@ -145,7 +145,7 @@ export function completeStudentTrainingSession(
   input: {
     sessionId?: string
     modality: TrainingModality
-    qualityScore: number
+    qualityScore: number | null
     summary: string
     capturedBy: SessionAnalysis['capturedBy']
   }
@@ -166,6 +166,30 @@ export function setStudentPhysicalMetrics(
   return nextState
 }
 
+export function submitShortQuestionnaireForStudentSession(
+  state: StudentAppState,
+  sessionId: string,
+  payload: {
+    energyLevel: number
+    confidence: number
+    enjoyment: number
+  }
+): StudentAppState {
+  const nextState = cloneState(state)
+  const session = nextState.sessions.find(item => item.id === sessionId)
+
+  if (!session) {
+    return nextState
+  }
+
+  session.shortQuestionnaire = {
+    submitted: true,
+    ...payload
+  }
+
+  return nextState
+}
+
 export function submitShortQuestionnaireForLatestStudentSession(
   state: StudentAppState,
   payload: {
@@ -174,19 +198,12 @@ export function submitShortQuestionnaireForLatestStudentSession(
     enjoyment: number
   }
 ): StudentAppState {
-  const nextState = cloneState(state)
-  const latestSession = nextState.sessions.at(-1)
-
+  const latestSession = state.sessions.at(-1)
   if (!latestSession) {
-    return nextState
+    return cloneState(state)
   }
 
-  latestSession.shortQuestionnaire = {
-    submitted: true,
-    ...payload
-  }
-
-  return nextState
+  return submitShortQuestionnaireForStudentSession(state, latestSession.id, payload)
 }
 
 export function resolveStudentNextPage(state: StudentAppState): string {

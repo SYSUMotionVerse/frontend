@@ -18,8 +18,8 @@ const segments = computed(() => Array.from(
   <view class="home-progress" aria-label="训练概览">
     <view class="home-progress__head">
       <view class="home-progress__copy">
-        <text class="home-progress__title">训练概览</text>
-        <text class="home-progress__subtitle">每一次完成，都会算进你的积累。</text>
+        <text class="home-progress__title">训练进度</text>
+        <text class="home-progress__subtitle">完成情况会在训练结束后更新。</text>
       </view>
       <text
         class="home-progress__status"
@@ -53,47 +53,19 @@ const segments = computed(() => Array.from(
 
 <style scoped>
 .home-progress {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  padding: 30rpx;
-  overflow: hidden;
-  border: 3rpx solid rgba(255, 211, 132, 0.3);
-  border-radius: 44rpx 44rpx 32rpx 44rpx;
+  padding: 32rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 44rpx;
   background: #fffaf4;
-  box-shadow: 0 10rpx 0 rgba(242, 231, 214, 0.7);
-}
-
-.home-progress::before,
-.home-progress::after {
-  position: absolute;
-  border-radius: 9999px;
-  content: '';
-  pointer-events: none;
-}
-
-.home-progress::before {
-  top: -32rpx;
-  right: -20rpx;
-  width: 100rpx;
-  height: 100rpx;
-  background: rgba(255, 139, 139, 0.12);
-}
-
-.home-progress::after {
-  right: 52rpx;
-  top: 26rpx;
-  width: 18rpx;
-  height: 18rpx;
-  background: rgba(255, 211, 132, 0.48);
+  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
 
 .home-progress__head,
 .home-progress__today,
 .home-progress__week {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -119,31 +91,31 @@ const segments = computed(() => Array.from(
 .home-progress__subtitle {
   display: block;
   color: #718096;
-  font-size: 20rpx;
-  font-weight: 700;
+  font-size: 22rpx;
+  font-weight: 600;
   line-height: 1.42;
 }
 
 .home-progress__status {
   display: inline-flex;
-  min-height: 42rpx;
+  min-height: 48rpx;
   flex: none;
   align-items: center;
   padding: 0 14rpx;
   border-radius: 9999px;
-  background: rgba(255, 139, 139, 0.16);
+  background: #ffe8e5;
   color: #c76b5b;
   font-size: 20rpx;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .home-progress__status--done {
-  background: rgba(168, 230, 207, 0.38);
-  color: #4f9070;
+  background: #e0f1f8;
+  color: #2b7cb8;
 }
 
 .home-progress__today {
-  padding: 22rpx 0 18rpx;
+  padding: 22rpx 0;
   border-top: 2rpx solid rgba(224, 111, 120, 0.1);
   border-bottom: 2rpx solid rgba(224, 111, 120, 0.1);
 }
@@ -160,7 +132,7 @@ const segments = computed(() => Array.from(
 .home-progress__week-value {
   display: block;
   color: #203042;
-  font-size: 26rpx;
+  font-size: 28rpx;
   font-weight: 900;
   line-height: 1.24;
 }
@@ -175,10 +147,10 @@ const segments = computed(() => Array.from(
   height: 14rpx;
   flex: 1;
   border-radius: 9999px;
-  background: rgba(233, 157, 149, 0.18);
+  background: rgba(199, 107, 91, 0.16);
 }
 
 .home-progress__segment--done {
-  background: #ef9b92;
+  background: #c76b5b;
 }
 </style>

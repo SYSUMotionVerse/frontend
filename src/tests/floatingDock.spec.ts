@@ -39,4 +39,5 @@ describe('floating dock', () => {
     expect(source).toContain("icon: 'medal-filled'")
     expect(source).not.toContain('shortLabel')
   })
+
 })

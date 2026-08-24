@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeProgressOverview from '../../../components/training/TrainingHomeProgressOverview.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
+import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useReminderConsent } from '../../composables/useReminderConsent'
@@ -14,6 +16,7 @@ import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
 import {
   continueRequiredQuestionnaire,
+  ensureProtectedStudentAccess,
   useProtectedAccessState
 } from '../../composables/useNavigationGuard'
 
@@ -29,30 +32,67 @@ const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
   progress,
   reminderLabel,
+  quests,
   completedQuestCount,
-  weeklyQualifyingDayCount
+  weeklyQualifyingDayCount,
+  coachCards
 } = useTrainingHomeProgressViewModel({
   progressState: trainingProgress.state,
   displayName
 })
-const coachCards = computed(() => [
-  {
-    id: 'quote',
-    eyebrow: '教练金句',
-    title: '今天先把动作做扎实',
-    body: `“${displayName.value}，真正的进步不是一次爆发，而是把每一次基本动作都做对。”`,
-    footer: 'Coach Harris',
-    tone: 'quote' as const
+
+const trainingHints: Record<TrainingModality, string> = {
+  wushu: '跟着示范完成一轮动作训练。',
+  hiit: '准备一轮间歇动作训练。',
+  stair: '准备好后开始 30 秒连续上楼。'
+}
+
+const trainingVisuals: Record<TrainingModality, {
+  icon: 'camera-filled' | 'fire-filled' | 'navigate-filled'
+  iconColor: string
+  tone: 'coral' | 'teal' | 'gold'
+}> = {
+  wushu: {
+    icon: 'camera-filled',
+    iconColor: '#c76b5b',
+    tone: 'coral'
   },
-  {
-    id: 'recovery',
-    eyebrow: '恢复建议',
-    title: '补水和放松别落下',
-    body: '开练前活动一下关节，训练后喝水并做两分钟放松拉伸。',
-    footer: '恢复优先，明天会更稳。',
-    tone: 'tip' as const
+  hiit: {
+    icon: 'fire-filled',
+    iconColor: '#2b7cb8',
+    tone: 'teal'
+  },
+  stair: {
+    icon: 'navigate-filled',
+    iconColor: '#a76c1c',
+    tone: 'gold'
   }
-])
+}
+
+const nextTraining = computed(() => {
+  const nextQuest = quests.value.find(quest => quest.highlight)
+  if (!nextQuest) return null
+
+  return {
+    ...nextQuest,
+    hint: trainingHints[nextQuest.id],
+    ...trainingVisuals[nextQuest.id]
+  }
+})
+
+const nextActionLabel = computed(() => {
+  if (!nextTraining.value) return ''
+  if (isBrowseOnly.value) return '去解锁'
+  return '开始'
+})
+
+const nextActionAriaLabel = computed(() => {
+  const next = nextTraining.value
+  if (!next) return ''
+  return isBrowseOnly.value
+    ? `完成问卷以解锁${next.title}`
+    : `开始${next.title}`
+})
 onLoad((query) => {
   const nextQuery = query ?? {}
   reminderReturn.capture({
@@ -76,6 +116,28 @@ onShow(async () => {
 
 function handleReminderAuthorizationRetry() {
   void reminderConsent.authorize()
+}
+
+async function startNextTraining() {
+  const next = nextTraining.value
+  if (!next) return
+
+  if (isBrowseOnly.value) {
+    continueRequiredQuestionnaire()
+    return
+  }
+
+  const canExecute = await ensureProtectedStudentAccess('execute')
+  if (!canExecute) return
+
+  if (next.id === 'stair') {
+    void uni.navigateTo({ url: '/pages/training/stair-session' })
+    return
+  }
+
+  void uni.navigateTo({
+    url: `/subpackages/training/visual-session?modality=${next.id}`
+  })
 }
 </script>
 
@@ -102,6 +164,39 @@ function handleReminderAuthorizationRetry() {
         @continue-questionnaire="continueRequiredQuestionnaire"
       />
 
+      <button
+        v-if="nextTraining"
+        class="home-next-action home-next-action__button"
+        type="button"
+        form-type="button"
+        hover-class="home-next-action--pressed"
+        :aria-label="nextActionAriaLabel"
+        :data-training-modality="nextTraining.id"
+        @click="startNextTraining"
+      >
+        <view :class="['home-next-action__mark', `home-next-action__mark--${nextTraining.tone}`]">
+          <uni-icons :type="nextTraining.icon" size="20" :color="nextTraining.iconColor" />
+        </view>
+        <view class="home-next-action__copy">
+          <text class="home-next-action__eyebrow">
+            今日下一项
+          </text>
+          <text class="home-next-action__title">{{ nextTraining.title }}</text>
+          <text class="home-next-action__detail">
+            {{ isBrowseOnly ? '完成问卷后即可开始今天的训练。' : nextTraining.hint }}
+          </text>
+        </view>
+        <view class="home-next-action__enter" aria-hidden="true">
+          <text>{{ nextActionLabel }}</text>
+          <uni-icons type="right" size="16" :color="isBrowseOnly ? '#a76c1c' : '#c76b5b'" />
+        </view>
+      </button>
+
+      <view v-else-if="progress?.goalCompleted" class="home-next-action home-next-action--complete">
+        <text class="home-next-action__eyebrow">今日训练已完成</text>
+        <text class="home-next-action__complete-copy">三项训练都已记录，按自己的节奏恢复和补水。</text>
+      </view>
+
       <TrainingHomeProgressOverview
         v-if="progress"
         :completed-count="completedQuestCount"
@@ -118,7 +213,7 @@ function handleReminderAuthorizationRetry() {
       <view class="home-page__section">
         <view class="home-page__section-copy">
           <text class="home-page__section-title">教练建议</text>
-          <text class="home-page__section-subtitle">今天的重点和恢复建议，先看一眼再开练。</text>
+          <text class="home-page__section-subtitle">需要时回看，保持动作和恢复节奏。</text>
         </view>
 
         <view class="home-page__feed">
@@ -129,7 +224,6 @@ function handleReminderAuthorizationRetry() {
             :eyebrow="card.eyebrow"
             :footer="card.footer"
             :title="card.title"
-            :tone="card.tone"
           />
         </view>
       </view>
@@ -140,25 +234,133 @@ function handleReminderAuthorizationRetry() {
 
 <style scoped>
 .home-page {
+  --home-ink: #203042;
+  --home-muted: #718096;
+  --home-surface: #fffaf4;
   display: flex;
   flex-direction: column;
-  gap: 40rpx;
+  gap: 32rpx;
+  padding-bottom: 32rpx;
+}
+
+.home-next-action {
+  display: flex;
+  width: 100%;
+  min-height: 128rpx;
+  margin: 0;
+  padding: 22rpx 20rpx;
+  align-items: center;
+  gap: 20rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 44rpx;
+  background: var(--home-surface);
+  box-sizing: border-box;
+  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
+  color: var(--home-ink);
+  text-align: left;
+  transition: background-color 160ms ease-out, opacity 160ms ease-out, transform 160ms ease-out;
+}
+
+.home-next-action::after { display: none; }
+
+.home-next-action--complete {
+  width: auto;
+  min-height: 0;
+  padding: 28rpx 30rpx;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10rpx;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.home-next-action--pressed {
+  opacity: 0.76;
+  transform: scale(0.985);
+}
+
+.home-next-action__mark {
+  display: inline-flex;
+  width: 60rpx;
+  height: 60rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+}
+
+.home-next-action__mark--coral { background: #ffe8e5; }
+.home-next-action__mark--teal { background: #e0f1f8; }
+.home-next-action__mark--gold { background: #fff1cf; }
+
+.home-next-action__button {
+  line-height: normal;
+}
+
+.home-next-action__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.home-next-action__eyebrow {
+  display: block;
+  color: #c76b5b;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+}
+
+.home-next-action__title {
+  display: block;
+  color: var(--home-ink);
+  font-size: 30rpx;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.24;
+}
+
+.home-next-action__detail,
+.home-next-action__complete-copy {
+  display: block;
+  color: var(--home-muted);
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1.48;
+}
+
+.home-next-action__enter {
+  display: inline-flex;
+  min-height: 56rpx;
+  flex: none;
+  align-self: center;
+  align-items: center;
+  gap: 4rpx;
+  margin-left: auto;
+  color: #c76b5b;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .home-page__section {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 18rpx;
+  padding-top: 8rpx;
 }
 
 .home-page__progress-status {
-  padding: 28rpx;
-  border-radius: 32rpx;
-  background: rgba(123, 135, 152, 0.08);
-  color: #718096;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.5;
+  padding: 30rpx 32rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 44rpx;
+  background: var(--home-surface);
+  color: var(--home-muted);
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1.48;
 }
 
 .home-page__section-copy {
@@ -170,16 +372,16 @@ function handleReminderAuthorizationRetry() {
 
 .home-page__section-title {
   display: block;
-  color: #203042;
-  font-size: 36rpx;
+  color: var(--home-ink);
+  font-size: 30rpx;
   line-height: 1.2;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 900;
+  letter-spacing: -0.01em;
 }
 
 .home-page__section-subtitle {
   display: block;
-  color: #7b8798;
+  color: var(--home-muted);
   font-size: 22rpx;
   line-height: 1.48;
   font-weight: 600;
@@ -188,7 +390,7 @@ function handleReminderAuthorizationRetry() {
 .home-page__feed {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 16rpx;
 }
 
 </style>

@@ -124,7 +124,7 @@ describe('authoritative training progress', () => {
     expect('progress' in progress.state.value).toBe(false)
   })
 
-  it('marks backend-provided modality state directly on each playground lane', async () => {
+  it('puts the first backend-confirmed pending mode first and marks every playground row', async () => {
     const TrainingSelectPage = (await import('../uni-app/pages/training/select.vue')).default
     const { useTrainingProgress } = await import('../uni-app/composables/useTrainingProgress')
     useTrainingProgress().invalidate()
@@ -140,9 +140,14 @@ describe('authoritative training progress', () => {
     await flushPromises()
 
     expect(loadTrainingProgress).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('.select-page__launch-list').text()).toContain('武术（Wushu）')
-    expect(wrapper.get('.select-page__launch-list').text()).toContain('已完成')
-    expect(wrapper.get('.select-page__launch-list').text()).toContain('HIIT Blast')
-    expect(wrapper.get('.select-page__launch-list').text()).toContain('待完成')
-  })
+    const launchRows = wrapper.findAll('.select-page__launch-action')
+
+    expect(launchRows).toHaveLength(3)
+    expect(launchRows[0].text()).toContain('HIIT Blast')
+    expect(launchRows[0].text()).toContain('推荐')
+    expect(launchRows[1].text()).toContain('武术（Wushu）')
+    expect(launchRows[1].text()).toContain('已完成')
+    expect(launchRows[2].text()).toContain('跑楼梯（Stairs）')
+    expect(launchRows[2].text()).toContain('待完成')
+  }, 15000)
 })

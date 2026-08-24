@@ -28,6 +28,7 @@ export function useStudentAppState() {
     refreshReminderEligibility: store.refreshReminderEligibility,
     setPhysicalMetrics: store.setPhysicalMetrics,
     submitShortQuestionnaireForLatestSession: store.submitShortQuestionnaireForLatestSession,
+    submitShortQuestionnaireForSession: store.submitShortQuestionnaireForSession,
     resetStudentState
   }
 }

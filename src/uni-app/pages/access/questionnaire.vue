@@ -102,6 +102,9 @@ onBeforeUnmount(() => {
 })
 
 async function loadQuestionnaire() {
+  // A reload remounts the runner. Persist the latest in-memory checkpoint
+  // first so a fast answer cannot be replaced by an older stored snapshot.
+  flushDraftSave()
   hasLoaded.value = true
   isLoading.value = true
   loadErrorMessage.value = ''
@@ -301,6 +304,9 @@ function handleDraftChange(payload: {
     currentQuestionIndex: payload.currentQuestionIndex,
     updatedAt: new Date().toISOString()
   }
+  // Keep the current checkpoint in reactive memory immediately. Storage is
+  // still debounced, but any runner remount now receives the newest answers.
+  questionnaireDraft.value = draft
   pendingDraft = draft
   if (draftSaveTimer) {
     clearTimeout(draftSaveTimer)

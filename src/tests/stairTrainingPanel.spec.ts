@@ -22,20 +22,23 @@ function mountPanel(overrides: Partial<InstanceType<typeof StairTrainingPanel>['
 }
 
 describe('stair training panel', () => {
-  it('renders the redesigned training hero with four core metric tiles', () => {
+  it('keeps the live view focused on the two metrics needed during the climb', () => {
     const wrapper = mountPanel()
 
     expect(wrapper.find('.stair-panel__hero').exists()).toBe(true)
     expect(wrapper.find('.stair-panel__countdown-card').exists()).toBe(true)
     expect(wrapper.find('.stair-panel__sensor-chip').exists()).toBe(true)
-    expect(wrapper.findAll('.stair-panel__metric-card')).toHaveLength(4)
-    expect(wrapper.text()).toContain('阶梯冲刺')
+    expect(wrapper.find('.stair-panel__metric-strip').exists()).toBe(true)
+    expect(wrapper.findAll('.stair-panel__metric-card')).toHaveLength(2)
+    expect(wrapper.text()).toContain('阶梯训练')
     expect(wrapper.text()).toContain('18')
     expect(wrapper.text()).toContain('126.4')
     expect(wrapper.text()).toContain('38')
-    expect(wrapper.text()).toContain('0.47')
-    expect(wrapper.text()).toContain('3.2')
     expect(wrapper.text()).toContain('采集中')
+    expect(wrapper.text()).not.toContain('爬升速度')
+    expect(wrapper.text()).not.toContain('楼层速度')
+    expect(wrapper.text()).not.toContain('0.47')
+    expect(wrapper.text()).not.toContain('3.2')
     expect(wrapper.text()).not.toContain('识别置信度')
     expect(wrapper.text()).not.toContain('样本计数')
     expect(wrapper.text()).not.toContain('84%')
@@ -54,11 +57,21 @@ describe('stair training panel', () => {
       sampleCount: 0
     })
 
-    expect(wrapper.find('.stair-panel__hero-support').text()).toContain('等待开始')
-    expect(wrapper.find('.stair-panel__primary-action').text()).toContain('开始训练')
+    expect(wrapper.find('.stair-panel__hero-support').text()).toContain('准备好后开始')
+    expect(wrapper.find('.stair-panel__primary-action').text()).toContain('30 秒训练')
     expect(wrapper.text()).toContain('传感器就绪')
     expect(wrapper.text()).toContain('等待开始')
     expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps the primary and secondary session actions wired to their explicit events', async () => {
+    const wrapper = mountPanel({ isRunning: false })
+
+    await wrapper.get('.stair-panel__primary-action').trigger('click')
+    await wrapper.get('.stair-panel__secondary-action').trigger('click')
+
+    expect(wrapper.emitted('start')).toHaveLength(1)
+    expect(wrapper.emitted('interrupt')).toHaveLength(1)
   })
 
   it('stretches the stair session card to consume the available page height above the dock', () => {
@@ -90,6 +103,13 @@ describe('stair training panel', () => {
     expect(panelSource).toMatch(/\.stair-panel__hero\s*\{[\s\S]*display:\s*flex;/)
     expect(panelSource).toMatch(/\.stair-panel__hero\s*\{[\s\S]*box-sizing:\s*border-box;/)
     expect(panelSource).toMatch(/\.stair-panel__actions\s*\{[\s\S]*margin-top:\s*auto;/)
+    expect(panelSource).toContain('stair-panel__metric-strip')
+    expect(panelSource).not.toContain('backdrop-filter')
+    expect(panelSource).not.toContain('radial-gradient(')
+    expect(panelSource).not.toContain('linear-gradient(')
+    expect(panelSource).not.toContain('stair-panel__hero-mark')
+    expect(panelSource).toContain("'stair-panel__primary-action--disabled': isRunning")
+    expect(panelSource).not.toContain('.stair-panel__primary-action[disabled]')
     expect(panelSource).not.toContain('height: calc(100vh - 272rpx);')
   })
 })

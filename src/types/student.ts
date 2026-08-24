@@ -31,7 +31,7 @@ export interface ShortQuestionnaireState {
 }
 
 export interface SessionAnalysis {
-  qualityScore: number
+  qualityScore: number | null
   summary: string
   capturedBy: 'camera' | 'sensor'
 }

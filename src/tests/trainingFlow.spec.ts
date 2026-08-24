@@ -105,6 +105,40 @@ describe('student training and adherence flow', () => {
     expect(store.resolveNextPage()).toBe('/home')
   })
 
+  it('attaches a short questionnaire to its routed session instead of the latest session', async () => {
+    const { createStudentStore } = await import('../uni-app/composables/useStudentStore')
+    const store = createStudentStore()
+    store.completeTrainingSession({
+      sessionId: 'session-earlier',
+      modality: 'wushu',
+      qualityScore: 80,
+      summary: 'Earlier session',
+      capturedBy: 'camera'
+    })
+    store.completeTrainingSession({
+      sessionId: 'session-latest',
+      modality: 'hiit',
+      qualityScore: 84,
+      summary: 'Latest session',
+      capturedBy: 'camera'
+    })
+
+    store.submitShortQuestionnaireForSession('session-earlier', {
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+
+    const [earlierSession, latestSession] = store.getSnapshot().sessions
+    expect(earlierSession?.shortQuestionnaire).toMatchObject({
+      submitted: true,
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+    expect(latestSession?.shortQuestionnaire).toBeNull()
+  })
+
   it('creates state snapshots even when structuredClone is unavailable', async () => {
     const originalStructuredClone = globalThis.structuredClone
     const { createStudentStore } = await import('../uni-app/composables/useStudentStore')

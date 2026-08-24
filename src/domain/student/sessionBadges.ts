@@ -31,8 +31,25 @@ const MODALITY_LABELS: Record<TrainingModality, string> = {
 }
 
 export function buildSessionBadge(session: SessionRecord): SessionBadge {
-  const score = Math.round(session.analysis.qualityScore)
-  const badge = resolveBadgeDefinition(score)
+  const score = session.analysis.qualityScore === null
+    ? null
+    : Math.round(session.analysis.qualityScore)
+  const badge = resolveBadgeDefinition(score ?? 0)
+
+  if (score === null) {
+    return {
+      id: `${session.id}-badge`,
+      level: 'bronze',
+      title: '完成记录章',
+      description: '本次训练已完成，但暂未获得可用动作评分。',
+      scoreLabel: '暂无评分',
+      sessionDate: session.date,
+      modalityLabel: MODALITY_LABELS[session.modality],
+      svgName: badge.svgName,
+      shareTitle: '我完成了一次 Sport Snack 训练',
+      sharePath: '/pages/access/startup'
+    }
+  }
 
   return {
     id: `${session.id}-badge`,

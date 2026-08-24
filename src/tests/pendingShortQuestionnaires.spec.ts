@@ -547,6 +547,72 @@ describe('pending short questionnaire storage', () => {
     expect(saveCalls[1][0].response).toEqual({ energyLevel: 5, confidence: 5, enjoyment: 5 })
   })
 
+  it('does not make a new session wait for a blocked historical retry', async () => {
+    const entries = new Map<string, PendingShortQuestionnaireSubmission>([
+      ['historical-session', {
+        sessionId: 'historical-session',
+        response: { energyLevel: 1, confidence: 2, enjoyment: 3 },
+        queuedAt: '2026-07-18T10:00:00.000Z'
+      }]
+    ])
+    const pendingShortQuestionnaires = {
+      list: vi.fn(() => [...entries.values()]),
+      save: vi.fn((entry: PendingShortQuestionnaireSubmission) => entries.set(entry.sessionId, entry)),
+      remove: vi.fn((sessionId: string) => entries.delete(sessionId)),
+      clear: vi.fn(() => entries.clear())
+    }
+
+    let resolveHistoricalSubmit: () => void
+    const historicalSubmit = new Promise<void>(resolve => { resolveHistoricalSubmit = resolve })
+    const submitShortQuestionnaire = vi.fn(async (payload: { training_session_id: string }) => {
+      if (payload.training_session_id === 'historical-session') {
+        await historicalSubmit
+      }
+      return {
+        id: 1,
+        user: 1,
+        ...payload,
+        energy_level: 4,
+        confidence: 5,
+        enjoyment: 3,
+        created_at: '2026-07-19T10:00:00Z',
+        updated_at: '2026-07-19T10:00:00Z'
+      }
+    })
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      { isEnabled: () => true, ensureSession: vi.fn().mockResolvedValue(undefined), submitShortQuestionnaire },
+      {},
+      { pendingShortQuestionnaires }
+    )
+
+    const retryPromise = sync.retryPendingShortQuestionnaires()
+    await vi.waitFor(() => expect(submitShortQuestionnaire).toHaveBeenCalledWith({
+      training_session_id: 'historical-session',
+      energy_level: 1,
+      confidence: 2,
+      enjoyment: 3
+    }))
+
+    const currentResult = await sync.syncShortQuestionnaire({
+      sessionId: 'current-session',
+      energyLevel: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+
+    expect(currentResult).toEqual({ synced: true })
+    expect(submitShortQuestionnaire).toHaveBeenCalledWith({
+      training_session_id: 'current-session',
+      energy_level: 4,
+      confidence: 5,
+      enjoyment: 3
+    })
+
+    resolveHistoricalSubmit!()
+    await retryPromise
+  })
+
   it('does not let an in-flight retry remove a newly saved response for the same session', async () => {
     const entries = new Map<string, PendingShortQuestionnaireSubmission>([
       ['session-A', {

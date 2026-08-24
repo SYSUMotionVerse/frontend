@@ -157,35 +157,33 @@ describe('ui review fixes', () => {
     expect(feedbackPage).toContain('uni.redirectTo')
   })
 
-  it('restyles the training playground selection page as a level-based flow with the shared tab header', () => {
+  it('uses unified, stateful training rows in the playground', () => {
     const selectionPage = readFileSync(
       resolve('src/uni-app/pages/training/select.vue'),
       'utf8'
     )
-    const trainingModeCard = readFileSync(
-      resolve('src/components/training/TrainingModeCard.vue'),
-      'utf8'
-    )
 
     expect(selectionPage).toContain('mini-tag="训练游乐场"')
-    expect(selectionPage).toContain('从还没点亮的赛道开始，直接开练。')
+    expect(selectionPage).toContain('推荐先做${recommendedMode.title}，完成后点亮今日进度。')
+    expect(selectionPage).toContain('问卷未解锁')
+    expect(selectionPage).toContain('进度同步中')
     expect(selectionPage).toContain('完成任一训练后，将更新今日达标状态。')
     expect(selectionPage).toContain('trainingModes')
     expect(selectionPage).toContain('select-page__launch-list')
     expect(selectionPage).toContain('@click="chooseMode(mode.modality)"')
-    expect(selectionPage).toContain('select-page__launch-trail')
     expect(selectionPage).toContain(':type="mode.icon"')
-    expect(selectionPage).toContain('select-page__launch-completion')
+    expect(selectionPage).toContain('select-page__launch-status')
+    expect(selectionPage).toContain('const hasAuthoritativeStatus = completed !== undefined')
+    expect(selectionPage).toContain("!progress.value || !hasAuthoritativeStatus")
+    expect(selectionPage).toContain("`select-page__launch-action--${mode.status}`")
     expect(selectionPage).not.toContain('TrainingProgressSnapshot')
-    expect(selectionPage).toContain('gap: 48rpx;')
+    expect(selectionPage).not.toContain('select-page__launch-trail')
+    expect(selectionPage).not.toContain('select-page__launch-action--wushu')
+    expect(selectionPage).toContain('min-height: 124rpx;')
+    expect(selectionPage).toContain('border: 2rpx solid rgba(255, 211, 132, 0.3);')
+    expect(selectionPage).not.toContain('width: 112rpx;')
     expect(selectionPage).not.toContain('TrainingModeCard')
     expect(selectionPage).toContain('select-page__streak-note')
-    expect(trainingModeCard).toContain('training-level-card__poster')
-    expect(trainingModeCard).toContain('training-level-card__cta')
-    expect(trainingModeCard).toContain('min-height: 296rpx;')
-    expect(trainingModeCard).toContain('training-level-card--${props.modality}')
-    expect(trainingModeCard).toContain('.training-level-card--hiit .training-level-card__poster')
-    expect(trainingModeCard).toContain('.training-level-card--stair .training-level-card__poster')
   })
 
   it('adds a profile greeting header to the training playground', () => {
@@ -586,7 +584,7 @@ describe('ui review fixes', () => {
     expect(summaryCards).toContain('summary-card--highlight')
   })
 
-  it('adds richer video-frame and coach-bubble details to the training home feed cards', () => {
+  it('keeps coach guidance quiet after the current training task', () => {
     const featureCard = readFileSync(
       resolve('src/components/training/TrainingHomeFeatureCard.vue'),
       'utf8'
@@ -599,9 +597,10 @@ describe('ui review fixes', () => {
     expect(featureCard).toContain('feature-card__frame')
     expect(featureCard).toContain('feature-card__screen-glow')
     expect(featureCard).toContain('feature-card__poster-stripe')
-    expect(coachCard).toContain('coach-card__bubble-tail')
-    expect(coachCard).toContain('coach-card__speaker')
-    expect(coachCard).toContain('coach-card__avatar')
+    expect(coachCard).toContain('coach-card__footer')
+    expect(coachCard).not.toContain('coach-card__bubble-tail')
+    expect(coachCard).not.toContain('coach-card__avatar')
+    expect(coachCard).not.toContain('linear-gradient')
   })
 
   it('keeps the home header aligned with the playground language without oversizing it', () => {
@@ -696,13 +695,13 @@ describe('ui review fixes', () => {
     )
 
     expect(homePage).not.toContain('home-page__section-kicker')
-    expect(homePage).toContain('font-size: 36rpx;')
+    expect(homePage).toContain('font-size: 30rpx;')
     expect(featureCard).toContain('feature-card__eyebrow')
     expect(featureCard).toContain('font-size: 18rpx;')
     expect(featureCard).toContain('letter-spacing: 0.14em;')
     expect(coachCard).toContain('coach-card__eyebrow')
-    expect(coachCard).toContain('font-size: 18rpx;')
-    expect(coachCard).toContain('letter-spacing: 0.14em;')
+    expect(coachCard).toContain('font-size: 20rpx;')
+    expect(coachCard).toContain('letter-spacing: 0.08em;')
   })
 
   it('keeps today training as the only prominent task heading', () => {
@@ -717,7 +716,7 @@ describe('ui review fixes', () => {
     expect(questPanel).toContain('font-size: 22rpx;')
   })
 
-  it('keeps today-training status labels compact without a home CTA', () => {
+  it('gives the first unfinished training the homepage primary action', () => {
     const homePage = readFileSync(
       resolve('src/uni-app/pages/training/home.vue'),
       'utf8'
@@ -727,7 +726,9 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(homePage).not.toContain('home-page__cta')
+    expect(homePage).toContain('home-next-action')
+    expect(homePage).toContain('startNextTraining')
+    expect(homePage).toContain("ensureProtectedStudentAccess('execute')")
     expect(homePage).not.toContain('选择训练')
     expect(questPanel).toContain('min-height: 34rpx;')
     expect(questPanel).toContain('padding: 6rpx 10rpx;')
@@ -741,12 +742,12 @@ describe('ui review fixes', () => {
     )
 
     expect(homePage).toContain('class="home-page"')
-    expect(homePage).toContain('gap: 40rpx;')
-    expect(homePage).toContain('gap: 24rpx;')
+    expect(homePage).toContain('gap: 32rpx;')
+    expect(homePage).toContain('gap: 18rpx;')
   })
 
 
-  it('routes every rounded questionnaire option through the short check-in surface only', () => {
+  it('keeps the short check-in rating control distinct from the long questionnaire options', () => {
     const shortQuestionnaireForm = readFileSync(
       resolve('src/components/training/ShortQuestionnaireForm.vue'),
       'utf8'
@@ -756,9 +757,9 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(shortQuestionnaireForm).toContain('rating-option rating-option--rounded')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__options')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__option')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__scores')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__score')
+    expect(shortQuestionnaireForm).not.toContain('rating-option')
     expect(longQuestionnaireForm).not.toContain('rating-option--rounded')
   })
 
@@ -815,21 +816,24 @@ describe('ui review fixes', () => {
     expect(navigation).toContain('color: #1A202C;')
   })
 
-  it('aligns the short post-training questionnaire with the shared questionnaire layout language', () => {
+  it('keeps the short post-training questionnaire as one calm, continuous check-in surface', () => {
     const shortQuestionnaireForm = readFileSync(
       resolve('src/components/training/ShortQuestionnaireForm.vue'),
       'utf8'
     )
 
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__hero')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__hero-badge')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__card')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__prompt')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__intro')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__questions')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__question')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__status')
     expect(shortQuestionnaireForm).toContain('short-questionnaire-form__actions')
-    expect(shortQuestionnaireForm).toContain('请完成全部打卡项')
-    expect(shortQuestionnaireForm).toContain('提交打卡 ✨')
+    expect(shortQuestionnaireForm).toContain('完成 ${completedCount.value}/3 项后提交')
+    expect(shortQuestionnaireForm).toContain('提交并查看反馈')
+    expect(shortQuestionnaireForm).not.toContain('chunky-shadow')
+    expect(shortQuestionnaireForm).not.toContain('🙂')
+    expect(shortQuestionnaireForm).not.toContain('rating-option--rounded')
     expect(shortQuestionnaireForm).not.toContain('Incomplete')
-    expect(shortQuestionnaireForm).not.toContain('Continue ✨')
+    expect(shortQuestionnaireForm).not.toContain('Continue')
   })
 
   it('relaxes shared shell and entry-page spacing across the miniapp surfaces', () => {
@@ -862,12 +866,12 @@ describe('ui review fixes', () => {
     expect(accessShell).toContain('gap: 56rpx;')
     expect(uniAccessShell).toContain('padding: 56rpx 48rpx 120rpx;')
     expect(uniAccessShell).toContain('gap: 32rpx;')
-    expect(uniTrainingShell).toContain('padding: 56rpx 32rpx 216rpx;')
+    expect(uniTrainingShell).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
-    expect(uniGrowthShell).toContain('padding: 56rpx 32rpx 216rpx;')
+    expect(uniGrowthShell).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
-    expect(miniappHomePage).toContain('gap: 40rpx;')
-    expect(miniappHomePage).toContain('gap: 24rpx;')
+    expect(miniappHomePage).toContain('gap: 32rpx;')
+    expect(miniappHomePage).toContain('gap: 18rpx;')
     expect(miniappGrowthPage).toContain('--growth-space-4: 56rpx;')
     expect(miniappGrowthPage).toContain('padding: 28rpx 26rpx;')
   })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { onLoad, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import { buildSessionBadge, resolveModalityLabel } from '../../../domain/student/sessionBadges'
 import type { SessionRecord } from '../../../domain/student/types'
@@ -7,22 +7,31 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
-const sessionId = ref('latest')
-const remoteSession = ref<SessionRecord | null>(null)
-const loadingSession = ref(false)
-const sessionLoadError = ref('')
+const sessionId = shallowRef('latest')
+const remoteSession = shallowRef<SessionRecord | null>(null)
+const loadingSession = shallowRef(false)
+const sessionLoadError = shallowRef('')
 
-onLoad(async (query) => {
+onLoad((query) => {
   const nextQuery = query ?? {}
   sessionId.value = nextQuery.sessionId?.toString() ?? 'latest'
+  remoteSession.value = null
+
+  void loadSession()
+})
+
+async function loadSession() {
   const localSession = resolveLocalSession()
-  if (localSession || sessionId.value === 'latest') return
+  if (localSession || sessionId.value === 'latest' || loadingSession.value) {
+    sessionLoadError.value = ''
+    return
+  }
 
   loadingSession.value = true
   sessionLoadError.value = ''
   try {
     const loaded = await studentBackendSync.loadTrainingSession(sessionId.value)
-    if (!loaded || loaded.qualityScore === null) {
+    if (!loaded) {
       sessionLoadError.value = '未找到这次训练记录'
       return
     }
@@ -45,7 +54,7 @@ onLoad(async (query) => {
   } finally {
     loadingSession.value = false
   }
-})
+}
 
 onShow(() => {
   store.refreshReminderEligibility()
@@ -61,6 +70,9 @@ function resolveLocalSession() {
 }
 
 const session = computed(() => resolveLocalSession() ?? remoteSession.value)
+const canReloadSession = computed(() => (
+  Boolean(sessionLoadError.value) && sessionId.value !== 'latest'
+))
 
 const modalityLabel = computed(() => {
   if (!session.value) {
@@ -70,7 +82,8 @@ const modalityLabel = computed(() => {
   return resolveModalityLabel(session.value.modality)
 })
 
-const qualityScore = computed(() => session.value?.analysis.qualityScore ?? 0)
+const qualityScore = computed<number | null>(() => session.value?.analysis.qualityScore ?? null)
+const numericQualityScore = computed(() => qualityScore.value ?? 0)
 const sessionBadge = computed(() => session.value ? buildSessionBadge(session.value) : null)
 const previousComparableSession = computed(() => {
   if (!session.value) return null
@@ -81,7 +94,11 @@ const previousComparableSession = computed(() => {
 })
 const scoreChangeLabel = computed(() => {
   const previousScore = previousComparableSession.value?.analysis.qualityScore
+  if (qualityScore.value === null) {
+    return '暂无可比较评分'
+  }
   if (previousScore === undefined) return '首次训练基线'
+  if (previousScore === null) return '暂无可比较评分'
   const difference = qualityScore.value - previousScore
   if (difference > 0) return `较上次提升 ${difference} 分`
   if (difference < 0) return `较上次 ${difference} 分`
@@ -89,7 +106,7 @@ const scoreChangeLabel = computed(() => {
 })
 const scoreChangeTone = computed(() => {
   const previousScore = previousComparableSession.value?.analysis.qualityScore
-  if (previousScore === undefined) return 'baseline'
+  if (qualityScore.value === null || previousScore === undefined || previousScore === null) return 'baseline'
   if (qualityScore.value > previousScore) return 'improved'
   if (qualityScore.value < previousScore) return 'declined'
   return 'steady'
@@ -100,11 +117,14 @@ const feedbackSummary = computed(() => (
 ))
 
 const encouragementTitle = computed(() => {
-  if (qualityScore.value >= 85) {
+  if (qualityScore.value === null) {
+    return '训练已完成'
+  }
+  if (numericQualityScore.value >= 85) {
     return '动作表现非常稳定'
   }
 
-  if (qualityScore.value >= 70) {
+  if (numericQualityScore.value >= 70) {
     return '节奏已经进入状态'
   }
 
@@ -112,11 +132,14 @@ const encouragementTitle = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (qualityScore.value >= 85) {
+  if (qualityScore.value === null) {
+    return '本次暂无评分'
+  }
+  if (numericQualityScore.value >= 85) {
     return '本次状态优'
   }
 
-  if (qualityScore.value >= 70) {
+  if (numericQualityScore.value >= 70) {
     return '本次状态良好'
   }
 
@@ -124,11 +147,14 @@ const statusText = computed(() => {
 })
 
 const scoreDescription = computed(() => {
-  if (qualityScore.value >= 85) {
+  if (qualityScore.value === null) {
+    return '本次没有采集到足够的动作数据，但训练记录已经保存。'
+  }
+  if (numericQualityScore.value >= 85) {
     return '整体动作控制和完成度都很好，可以继续保持现在的训练状态。'
   }
 
-  if (qualityScore.value >= 70) {
+  if (numericQualityScore.value >= 70) {
     return '基础动作已经完成得不错，继续稳定节奏会让整体表现更完整。'
   }
 
@@ -159,9 +185,6 @@ onShareAppMessage((options) => {
 
 <template>
   <view class="feedback-page">
-    <view class="feedback-page__halo feedback-page__halo--peach" />
-    <view class="feedback-page__halo feedback-page__halo--sky" />
-
     <view class="feedback-page__inner">
       <view v-if="loadingSession" class="feedback-page__state-card">
         <text class="feedback-page__state-title">正在加载训练结果</text>
@@ -170,148 +193,137 @@ onShareAppMessage((options) => {
 
       <view v-else-if="!session" class="feedback-page__state-card">
         <text class="feedback-page__state-title">{{ sessionLoadError || '暂无可展示的训练结果' }}</text>
-        <text class="feedback-page__state-copy">你可以返回训练首页开始一次新的训练。</text>
-        <button class="feedback-page__primary-action" type="button" @click="goHome">
+        <text class="feedback-page__state-copy">
+          {{ canReloadSession ? '请检查网络后重新加载，结果不会以临时数据替代。' : '你可以返回训练首页开始一次新的训练。' }}
+        </text>
+        <view v-if="canReloadSession" class="feedback-page__state-actions">
+          <button
+            class="feedback-page__primary-action feedback-page__retry-action"
+            type="button"
+            hover-class="feedback-page__primary-action--pressed"
+            @click="loadSession"
+          >
+            重新加载结果
+          </button>
+          <button
+            class="feedback-page__secondary-action"
+            type="button"
+            hover-class="feedback-page__secondary-action--pressed"
+            @click="goHome"
+          >
+            返回首页
+          </button>
+        </view>
+        <button
+          v-else
+          class="feedback-page__primary-action"
+          type="button"
+          hover-class="feedback-page__primary-action--pressed"
+          @click="goHome"
+        >
           返回首页
         </button>
       </view>
 
-      <view v-if="session && !loadingSession" class="feedback-page__hero">
-        <view class="feedback-page__heading">
-          <text class="feedback-page__eyebrow">训练已记录</text>
-          <text class="feedback-page__title">{{ modalityLabel }}训练完成</text>
-          <text class="feedback-page__subtitle">
-            {{ statusText }}，继续关注动作质量，训练效果会更稳定。
-          </text>
-        </view>
-      </view>
-
-      <view v-if="session && !loadingSession" class="feedback-page__score-card">
-        <view class="feedback-page__score-decor feedback-page__score-decor--left">
-          <text>✦</text>
-        </view>
-        <view class="feedback-page__score-decor feedback-page__score-decor--right">
-          <text>✦</text>
+      <template v-if="session && !loadingSession">
+        <view class="feedback-page__hero">
+          <view class="feedback-page__heading">
+            <text class="feedback-page__eyebrow">训练已记录</text>
+            <text class="feedback-page__title">{{ modalityLabel }}训练完成</text>
+            <text class="feedback-page__subtitle">{{ statusText }}，结果已经为你保存。</text>
+          </view>
         </view>
 
-        <text class="feedback-page__score-label">质量考评</text>
-        <text class="feedback-page__score-value">{{ qualityScore }}</text>
-        <view class="feedback-page__score-change" :class="`feedback-page__score-change--${scoreChangeTone}`">
-          <text>{{ scoreChangeLabel }}</text>
-        </view>
-        <text class="feedback-page__score-copy">{{ scoreDescription }}</text>
-      </view>
+        <view class="feedback-page__score-card">
+          <view class="feedback-page__score-summary">
+            <text class="feedback-page__score-label">质量得分</text>
+            <view class="feedback-page__score-value-row">
+              <text class="feedback-page__score-value">{{ qualityScore === null ? '—' : qualityScore }}</text>
+              <text class="feedback-page__score-unit">{{ qualityScore === null ? '暂无评分' : '/ 100' }}</text>
+            </view>
+          </view>
 
-      <view v-if="sessionBadge" class="feedback-page__badge-card">
-        <view class="feedback-page__badge-visual" :class="`feedback-page__badge-visual--${sessionBadge.svgName}`">
-          <view class="feedback-page__badge-ring" />
-          <text class="feedback-page__badge-mark">
-            {{ sessionBadge.svgName === 'full-power' ? '冠' : sessionBadge.svgName === 'stable-star' ? '星' : sessionBadge.svgName === 'rhythm-spark' ? '火' : '芽' }}
-          </text>
-        </view>
-
-        <view class="feedback-page__badge-body">
-          <text class="feedback-page__badge-kicker">本次获得徽章</text>
-          <text class="feedback-page__badge-title">{{ sessionBadge.title }}</text>
-          <text class="feedback-page__badge-copy">{{ sessionBadge.description }}</text>
-          <button
-            class="feedback-page__share-action"
-            type="button"
-            open-type="share"
-            :data-share-title="sessionBadge.shareTitle"
-            :data-share-path="sessionBadge.sharePath"
-          >
-            <text>分享徽章</text>
-          </button>
-        </view>
-      </view>
-
-      <view v-if="session && !loadingSession" class="feedback-page__encouragement-card">
-        <view class="feedback-page__encouragement-icon">
-          <text>🌟</text>
+          <view class="feedback-page__score-detail">
+            <view class="feedback-page__score-change" :class="`feedback-page__score-change--${scoreChangeTone}`">
+              <text>{{ scoreChangeLabel }}</text>
+            </view>
+            <text class="feedback-page__score-copy">{{ scoreDescription }}</text>
+          </view>
         </view>
 
-        <view class="feedback-page__encouragement-body">
+        <view class="feedback-page__encouragement">
+          <text class="feedback-page__encouragement-kicker">下一步</text>
           <text class="feedback-page__encouragement-title">{{ encouragementTitle }}</text>
           <text class="feedback-page__encouragement-copy">{{ feedbackSummary }}</text>
         </view>
-      </view>
 
-      <view v-if="session && !loadingSession" class="feedback-page__status-pill">
-        <text>{{ statusText }}</text>
-      </view>
+        <view v-if="sessionBadge" class="feedback-page__badge-card">
+          <view class="feedback-page__badge-visual" :class="`feedback-page__badge-visual--${sessionBadge.svgName}`">
+            <text class="feedback-page__badge-mark">
+              {{ sessionBadge.svgName === 'full-power' ? '冠' : sessionBadge.svgName === 'stable-star' ? '星' : sessionBadge.svgName === 'rhythm-spark' ? '火' : '芽' }}
+            </text>
+          </view>
 
-      <view v-if="session && !loadingSession" class="feedback-page__actions">
-        <button
-          class="feedback-page__primary-action"
-          type="button"
-          @click="goHome"
-        >
-          <text>返回首页</text>
-        </button>
-        <button
-          class="feedback-page__secondary-action"
-          type="button"
-          @click="goGrowthCenter"
-        >
-          <text>查看成长中心</text>
-        </button>
-      </view>
+          <view class="feedback-page__badge-body">
+            <text class="feedback-page__badge-kicker">本次获得徽章</text>
+            <text class="feedback-page__badge-title">{{ sessionBadge.title }}</text>
+            <text class="feedback-page__badge-copy">{{ sessionBadge.description }}</text>
+            <button
+              class="feedback-page__share-action"
+              type="button"
+              hover-class="feedback-page__share-action--pressed"
+              open-type="share"
+              :data-share-title="sessionBadge.shareTitle"
+              :data-share-path="sessionBadge.sharePath"
+            >
+              <text>分享徽章</text>
+            </button>
+          </view>
+        </view>
+
+        <view class="feedback-page__actions">
+          <button
+            class="feedback-page__primary-action"
+            type="button"
+            hover-class="feedback-page__primary-action--pressed"
+            @click="goHome"
+          >
+            <text>返回首页</text>
+          </button>
+          <button
+            class="feedback-page__secondary-action"
+            type="button"
+            hover-class="feedback-page__secondary-action--pressed"
+            @click="goGrowthCenter"
+          >
+            <text>查看成长中心</text>
+          </button>
+        </view>
+      </template>
     </view>
   </view>
 </template>
 
 <style scoped>
 .feedback-page {
-  --feedback-bg: #fcf6ef;
-  --feedback-ink: #243245;
-  --feedback-muted: #6f7e92;
-  --feedback-coral: #ff8b73;
-  --feedback-coral-shadow: #f46f5b;
-  --feedback-sun: #ffd97c;
-  --feedback-blue: #8fd6ff;
-  --feedback-card: rgba(255, 255, 255, 0.92);
-  --feedback-line: rgba(255, 255, 255, 0.95);
+  --feedback-bg: #fcf7f0;
+  --feedback-ink: #263442;
+  --feedback-muted: #657284;
+  --feedback-surface: #fffaf4;
+  --feedback-subtle-surface: #f4ede4;
+  --feedback-line: #ddd2c5;
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(255, 217, 124, 0.32), transparent 28%),
-    radial-gradient(circle at left 30%, rgba(143, 214, 255, 0.18), transparent 24%),
-    var(--feedback-bg);
+  background: var(--feedback-bg);
   color: var(--feedback-ink);
 }
 
-.feedback-page__halo {
-  position: absolute;
-  border-radius: 9999px;
-  pointer-events: none;
-  filter: blur(4rpx);
-}
-
-.feedback-page__halo--peach {
-  top: 132rpx;
-  right: -48rpx;
-  width: 220rpx;
-  height: 220rpx;
-  background: rgba(255, 180, 145, 0.24);
-}
-
-.feedback-page__halo--sky {
-  left: -52rpx;
-  top: 520rpx;
-  width: 196rpx;
-  height: 196rpx;
-  background: rgba(143, 214, 255, 0.2);
-}
-
 .feedback-page__inner {
-  position: relative;
-  z-index: 1;
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  padding: 48rpx 40rpx 88rpx;
+  padding: 48rpx 40rpx calc(56rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .feedback-page__state-card {
@@ -323,8 +335,10 @@ onShareAppMessage((options) => {
   gap: 20rpx;
   margin-top: 112rpx;
   padding: 48rpx 36rpx;
+  border: 2rpx solid var(--feedback-line);
   border-radius: 28rpx;
-  background: var(--feedback-card);
+  background: var(--feedback-surface);
+  box-sizing: border-box;
   text-align: center;
 }
 
@@ -340,6 +354,14 @@ onShareAppMessage((options) => {
   line-height: 1.6;
 }
 
+.feedback-page__state-actions {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
 .feedback-page__hero {
   display: flex;
   flex-direction: column;
@@ -352,285 +374,305 @@ onShareAppMessage((options) => {
 }
 
 .feedback-page__eyebrow {
-  color: #c76b5b;
-  font-size: 20rpx;
+  color: #8f5e4c;
+  font-size: 21rpx;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
 .feedback-page__title {
+  color: var(--feedback-ink);
   font-size: 44rpx;
   font-weight: 900;
+  letter-spacing: -0.035em;
   line-height: 1.15;
-  color: #263447;
 }
 
 .feedback-page__subtitle {
   max-width: 600rpx;
-  font-size: 24rpx;
-  line-height: 1.55;
-  color: var(--feedback-muted);
-}
-
-.feedback-page__score-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-  margin-top: 28rpx;
-  padding: 32rpx 40rpx;
-  border: 2rpx solid rgba(255, 211, 132, 0.36);
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 20rpx 44rpx rgba(241, 167, 130, 0.14);
-  text-align: center;
-}
-
-.feedback-page__score-label {
-  font-size: 22rpx;
-  font-weight: 800;
-  color: #7c8897;
-}
-
-.feedback-page__score-value {
-  font-size: 96rpx;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  color: var(--feedback-coral);
-  text-shadow: 0 10rpx 0 rgba(255, 139, 115, 0.12);
-}
-
-.feedback-page__score-copy {
-  font-size: 24rpx;
-  line-height: 1.55;
-  color: var(--feedback-muted);
-}
-
-.feedback-page__score-change {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: #edf1f5;
-  color: #596b7f;
-  font-size: 22rpx;
-  font-weight: 900;
-  padding: 10rpx 18rpx;
-}
-
-.feedback-page__score-change--improved {
-  background: #e4f4ed;
-  color: #28766a;
-}
-
-.feedback-page__score-change--declined {
-  background: #fff0ed;
-  color: #a24f44;
-}
-
-.feedback-page__score-change--steady,
-.feedback-page__score-change--baseline {
-  background: #edf1f5;
-  color: #596b7f;
-}
-
-.feedback-page__badge-card {
-  display: flex;
-  align-items: center;
-  gap: 26rpx;
-  margin-top: 28rpx;
-  padding: 30rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.9);
-  border-radius: 40rpx;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, #fff8e9 100%);
-  box-shadow: 0 16rpx 34rpx rgba(111, 126, 146, 0.08);
-}
-
-.feedback-page__badge-visual {
-  position: relative;
-  flex: 0 0 136rpx;
-  display: inline-flex;
-  width: 136rpx;
-  height: 136rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 40rpx;
-  overflow: hidden;
-}
-
-.feedback-page__badge-visual--full-power {
-  background: linear-gradient(145deg, #89d6ff 0%, #ffd384 100%);
-}
-
-.feedback-page__badge-visual--stable-star {
-  background: linear-gradient(145deg, #ffd384 0%, #ffad88 100%);
-}
-
-.feedback-page__badge-visual--rhythm-spark {
-  background: linear-gradient(145deg, #a8e6cf 0%, #89d6ff 100%);
-}
-
-.feedback-page__badge-visual--steady-seed {
-  background: linear-gradient(145deg, #d9b38c 0%, #a8e6cf 100%);
-}
-
-.feedback-page__badge-ring {
-  position: absolute;
-  inset: 20rpx;
-  border: 8rpx solid rgba(255, 255, 255, 0.82);
-  border-radius: 9999px;
-}
-
-.feedback-page__badge-mark {
-  position: relative;
-  z-index: 1;
-  color: #263447;
-  font-size: 48rpx;
-  font-weight: 900;
-}
-
-.feedback-page__badge-body {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.feedback-page__badge-kicker {
-  color: #2f78a9;
-  font-size: 23rpx;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-}
-
-.feedback-page__badge-title {
-  color: #263447;
-  font-size: 34rpx;
-  font-weight: 900;
-}
-
-.feedback-page__badge-copy {
   color: var(--feedback-muted);
   font-size: 25rpx;
   font-weight: 700;
   line-height: 1.55;
 }
 
-.feedback-page__share-action {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 64rpx;
-  align-items: center;
-  justify-content: center;
-  margin: 8rpx 0 0;
-  padding: 0 28rpx;
-  border: none;
-  border-radius: 9999px;
-  background: #263447;
-  color: #fffaf2;
-  font-size: 24rpx;
-  font-weight: 900;
-}
-
-.feedback-page__encouragement-card {
+.feedback-page__score-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24rpx;
-  margin-top: 28rpx;
+  gap: 24rpx 32rpx;
+  margin-top: 32rpx;
   padding: 28rpx 30rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.88);
-  border-radius: 36rpx;
-  background: var(--feedback-card);
-  box-shadow: 0 16rpx 34rpx rgba(111, 126, 146, 0.08);
+  border: 2rpx solid var(--feedback-line);
+  border-radius: 28rpx;
+  background: var(--feedback-subtle-surface);
 }
 
-.feedback-page__encouragement-icon {
-  flex: 0 0 96rpx;
-  display: inline-flex;
-  width: 96rpx;
-  height: 96rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: linear-gradient(180deg, #9fe0ff 0%, #77c9ff 100%);
-  box-shadow: 0 12rpx 0 rgba(119, 201, 255, 0.24);
-  font-size: 42rpx;
-}
-
-.feedback-page__encouragement-body {
-  min-width: 0;
+.feedback-page__score-summary {
   display: flex;
+  min-width: 176rpx;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 10rpx;
 }
 
-.feedback-page__encouragement-title {
-  font-size: 34rpx;
+.feedback-page__score-label {
+  color: #5d6b79;
+  font-size: 22rpx;
   font-weight: 800;
-  color: #263447;
+  line-height: 1.2;
+}
+
+.feedback-page__score-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.feedback-page__score-value {
+  color: var(--feedback-ink);
+  font-size: 64rpx;
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 0.92;
+}
+
+.feedback-page__score-unit {
+  color: var(--feedback-muted);
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.feedback-page__score-detail {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 260rpx;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.feedback-page__score-change {
+  display: inline-flex;
+  min-height: 48rpx;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0 14rpx;
+  border: 2rpx solid #d2d9dd;
+  border-radius: 9999px;
+  background: #eff2f3;
+  color: #4e5e6e;
+  font-size: 21rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.feedback-page__score-change--improved {
+  border-color: #c9ded4;
+  background: #eaf3ee;
+  color: #356654;
+}
+
+.feedback-page__score-change--declined {
+  border-color: #e4cec4;
+  background: #fbefeb;
+  color: #8a5146;
+}
+
+.feedback-page__score-copy {
+  color: var(--feedback-muted);
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.feedback-page__encouragement {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  margin-top: 32rpx;
+  padding: 28rpx 0 0;
+  border-top: 2rpx solid var(--feedback-line);
+}
+
+.feedback-page__encouragement-kicker {
+  color: #8f5e4c;
+  font-size: 21rpx;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+.feedback-page__encouragement-title {
+  color: var(--feedback-ink);
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .feedback-page__encouragement-copy {
-  font-size: 27rpx;
-  line-height: 1.65;
   color: var(--feedback-muted);
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.6;
 }
 
-.feedback-page__status-pill {
+.feedback-page__badge-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+  margin-top: 32rpx;
+  padding: 24rpx;
+  border: 2rpx solid var(--feedback-line);
+  border-radius: 28rpx;
+  background: var(--feedback-surface);
+}
+
+.feedback-page__badge-visual {
   display: inline-flex;
-  align-self: center;
+  width: 92rpx;
+  height: 92rpx;
+  flex: none;
   align-items: center;
   justify-content: center;
-  margin-top: 30rpx;
-  padding: 18rpx 34rpx;
-  border: 4rpx solid rgba(186, 231, 255, 0.9);
+  border-radius: 24rpx;
+}
+
+.feedback-page__badge-visual--full-power {
+  background: #eaf2f1;
+  color: #365f54;
+}
+
+.feedback-page__badge-visual--stable-star {
+  background: #f8efdf;
+  color: #86651f;
+}
+
+.feedback-page__badge-visual--rhythm-spark {
+  background: #eaf2f4;
+  color: #3e6f7c;
+}
+
+.feedback-page__badge-visual--steady-seed {
+  background: #f0ebe2;
+  color: #6c5945;
+}
+
+.feedback-page__badge-mark {
+  font-size: 42rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.feedback-page__badge-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.feedback-page__badge-kicker {
+  color: #8f5e4c;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+.feedback-page__badge-title {
+  color: var(--feedback-ink);
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.28;
+}
+
+.feedback-page__badge-copy {
+  color: var(--feedback-muted);
+  font-size: 23rpx;
+  font-weight: 700;
+  line-height: 1.48;
+}
+
+.feedback-page__share-action {
+  display: inline-flex;
+  width: 100%;
+  min-height: 88rpx;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #cfc3b4;
   border-radius: 9999px;
-  background: rgba(166, 224, 255, 0.4);
-  color: #2f78a9;
-  font-size: 28rpx;
+  background: #fffaf4;
+  box-sizing: border-box;
+  color: #394756;
+  font-size: 24rpx;
   font-weight: 800;
 }
 
 .feedback-page__actions {
   display: flex;
   flex-direction: column;
-  gap: 22rpx;
+  gap: 16rpx;
   margin-top: auto;
-  padding-top: 56rpx;
+  padding-top: 48rpx;
 }
 
 .feedback-page__primary-action,
 .feedback-page__secondary-action {
-  width: 100%;
-  min-height: 98rpx;
   display: inline-flex;
+  width: 100%;
+  min-height: 100rpx;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  font-size: 30rpx;
+  box-sizing: border-box;
+  font-size: 29rpx;
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .feedback-page__primary-action {
-  border: none;
-  background: var(--feedback-coral);
-  box-shadow: 0 14rpx 0 var(--feedback-coral-shadow);
-  color: #ffffff;
+  border: 2rpx solid var(--feedback-ink);
+  background: var(--feedback-ink);
+  color: #fffaf4;
 }
 
 .feedback-page__secondary-action {
-  border: 4rpx solid rgba(255, 255, 255, 0.96);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12rpx 24rpx rgba(36, 50, 69, 0.06);
-  color: #415366;
+  border: 2rpx solid #cfc3b4;
+  background: var(--feedback-surface);
+  color: #394756;
+}
+
+.feedback-page__primary-action--pressed {
+  background: #1e2a36;
+}
+
+.feedback-page__secondary-action--pressed,
+.feedback-page__share-action--pressed {
+  background: #f4ede4;
 }
 
 .feedback-page__primary-action::after,
 .feedback-page__secondary-action::after,
 .feedback-page__share-action::after {
   display: none;
+}
+
+@media (max-height: 640px) {
+  .feedback-page__inner {
+    padding-top: 32rpx;
+  }
+
+  .feedback-page__score-card,
+  .feedback-page__encouragement,
+  .feedback-page__badge-card {
+    margin-top: 24rpx;
+  }
+
+  .feedback-page__actions {
+    padding-top: 32rpx;
+  }
 }
 </style>

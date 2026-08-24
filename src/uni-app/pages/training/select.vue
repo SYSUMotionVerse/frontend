@@ -19,48 +19,64 @@ import {
 type TrainingModeSummary = {
   modality: TrainingModality
   title: string
-  duration: string
-  difficulty: string
   actionHint: string
   routeLabel: string
   icon: string
-  tone: 'wushu' | 'hiit' | 'stair'
   iconColor: string
+  tone: 'coral' | 'teal' | 'gold'
+}
+
+type TrainingModeStatus = 'recommended' | 'pending' | 'completed' | 'locked' | 'syncing'
+
+type TrainingLaunchMode = TrainingModeSummary & {
+  status: TrainingModeStatus
+  statusLabel: string
+  actionLabel: string
+}
+
+const modeStatusLabels: Record<TrainingModeStatus, string> = {
+  recommended: '推荐',
+  pending: '待完成',
+  completed: '已完成',
+  locked: '问卷未解锁',
+  syncing: '进度同步中'
+}
+
+const modeActionLabels: Record<TrainingModeStatus, string> = {
+  recommended: '开始',
+  pending: '进入',
+  completed: '再练',
+  locked: '解锁',
+  syncing: '开始'
 }
 
 const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'wushu',
     title: '武术（Wushu）',
-    duration: '按动作编排',
-    difficulty: '中等',
     actionHint: '跟镜头出招',
     routeLabel: '镜头跟练',
     icon: 'camera-filled',
-    tone: 'wushu',
-    iconColor: '#c76b5b'
+    iconColor: '#c76b5b',
+    tone: 'coral'
   },
   {
     modality: 'hiit',
     title: 'HIIT Blast',
-    duration: '按动作编排',
-    difficulty: '挑战',
     actionHint: '开始间歇冲刺',
     routeLabel: '镜头跟练',
     icon: 'fire-filled',
-    tone: 'hiit',
-    iconColor: '#2b7cb8'
+    iconColor: '#2b7cb8',
+    tone: 'teal'
   },
   {
     modality: 'stair',
     title: '跑楼梯（Stairs）',
-    duration: '30 秒',
-    difficulty: '轻松',
     actionHint: '拿起手机登阶',
     routeLabel: '传感器记录',
     icon: 'navigate-filled',
-    tone: 'stair',
-    iconColor: '#a76c1c'
+    iconColor: '#a76c1c',
+    tone: 'gold'
   }
 ]
 
@@ -90,18 +106,51 @@ const launchModes = computed(() => {
   const completionByModality = new Map(
     (progress.value?.modalities ?? []).map(item => [item.id, item.completed])
   )
+  const firstPendingModality = progress.value
+    ? progress.value.modalities.find(item => !item.completed)?.id
+    : undefined
 
-  return trainingModes.map(mode => ({
-    ...mode,
-    completed: completionByModality.get(mode.modality) ?? false
-  }))
+  const modes = trainingModes.map<TrainingLaunchMode>(mode => {
+    const completed = completionByModality.get(mode.modality)
+    const hasAuthoritativeStatus = completed !== undefined
+    const status: TrainingModeStatus = isBrowseOnly.value
+      ? 'locked'
+      : !progress.value || !hasAuthoritativeStatus
+        ? 'syncing'
+        : completed
+          ? 'completed'
+          : mode.modality === firstPendingModality
+            ? 'recommended'
+            : 'pending'
+
+    return {
+      ...mode,
+      status,
+      statusLabel: modeStatusLabels[status],
+      actionLabel: modeActionLabels[status]
+    }
+  })
+
+  return firstPendingModality
+    ? [...modes].sort((left, right) =>
+        Number(right.status === 'recommended') - Number(left.status === 'recommended'))
+    : modes
 })
 
 const heroCopy = computed(() => {
-  if (progress.value?.goalCompleted) {
-    return '今天的三条跑道都点亮了，想继续练哪一条都可以。'
+  if (isBrowseOnly.value) {
+    return '先完成问卷，解锁适合你的训练。'
   }
-  return '从还没点亮的赛道开始，直接开练。'
+  const recommendedMode = launchModes.value.find(mode => mode.status === 'recommended')
+  if (recommendedMode) {
+    return `推荐先做${recommendedMode.title}，完成后点亮今日进度。`
+  }
+  if (progress.value?.goalCompleted) {
+    return '今天的训练已完成，按自己的节奏选择加练。'
+  }
+  return progress.value
+    ? '选择一项训练，继续完成今天的安排。'
+    : '选择一项训练，进度同步后会标出下一项推荐。'
 })
 
 async function chooseMode(modality: TrainingModality) {
@@ -144,6 +193,7 @@ async function chooseMode(modality: TrainingModality) {
       />
 
       <view class="select-page__hero">
+        <text class="select-page__eyebrow">今日训练</text>
         <text class="select-page__hero-copy">{{ heroCopy }}</text>
       </view>
 
@@ -153,39 +203,43 @@ async function chooseMode(modality: TrainingModality) {
           :key="mode.modality"
           :class="[
             'select-page__launch-action',
-            `select-page__launch-action--${mode.tone}`,
-            { 'select-page__launch-action--locked': isBrowseOnly }
+            `select-page__launch-action--${mode.status}`
           ]"
           form-type="button"
           type="button"
+          :aria-label="`${mode.title}，${mode.statusLabel}。${mode.actionHint}`"
           @click="chooseMode(mode.modality)"
         >
           <view :class="['select-page__launch-mark', `select-page__launch-mark--${mode.tone}`]">
-            <uni-icons :type="mode.icon" size="30" :color="mode.iconColor" />
+            <uni-icons :type="mode.icon" size="20" :color="mode.iconColor" />
           </view>
           <view class="select-page__launch-copy">
-            <view class="select-page__launch-title-row">
-              <text class="select-page__launch-title">{{ mode.title }}</text>
-              <text
-                class="select-page__launch-completion"
-                :class="{ 'select-page__launch-completion--done': mode.completed }"
-              >
-                {{ mode.completed ? '已完成' : '待完成' }}
-              </text>
-            </view>
+            <text class="select-page__launch-title">{{ mode.title }}</text>
             <text class="select-page__launch-hint">{{ mode.actionHint }}</text>
             <view class="select-page__launch-route">
-            <text>{{ isBrowseOnly ? '完成问卷后解锁' : mode.routeLabel }}</text>
-              <view :class="['select-page__launch-trail', `select-page__launch-trail--${mode.tone}`]">
-                <view v-for="step in 3" :key="step" class="select-page__launch-trail-step" />
-              </view>
+              <text>{{ mode.routeLabel }}</text>
+              <text
+                :class="[
+                  'select-page__launch-status',
+                  `select-page__launch-status--${mode.status}`
+                ]"
+              >
+                · {{ mode.statusLabel }}
+              </text>
             </view>
           </view>
-          <view class="select-page__launch-meta">
-            <text>{{ mode.duration }}</text>
-            <text>{{ mode.difficulty }}</text>
+          <view class="select-page__launch-enter" aria-hidden="true">
+            <text
+              :class="{ 'select-page__launch-enter--recommended': mode.status === 'recommended' }"
+            >
+              {{ mode.actionLabel }}
+            </text>
+            <uni-icons
+              type="right"
+              size="15"
+              :color="mode.status === 'recommended' ? '#c76b5b' : '#8a97a8'"
+            />
           </view>
-          <uni-icons type="right" size="18" :color="mode.iconColor" />
         </button>
       </view>
 
@@ -202,138 +256,96 @@ async function chooseMode(modality: TrainingModality) {
   display: flex;
   flex-direction: column;
   gap: 40rpx;
-  padding-bottom: 44rpx;
+  padding-bottom: 48rpx;
 }
 
 .select-page__hero {
-  padding: 0 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  padding: 4rpx 8rpx 0;
+}
+
+.select-page__eyebrow {
+  display: block;
+  color: #c76b5b;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
 }
 
 .select-page__hero-copy {
   display: block;
-  color: #667588;
-  font-size: 26rpx;
-  font-weight: 700;
-  line-height: 1.58;
+  max-width: 500rpx;
+  color: #203042;
+  font-size: 40rpx;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .select-page__launch-list {
   display: flex;
   flex-direction: column;
-  gap: 48rpx;
+  gap: 12rpx;
+  padding: 12rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.3);
+  border-radius: 44rpx;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
 
 .select-page__launch-action {
-  position: relative;
   display: flex;
   width: 100%;
-  min-height: 176rpx;
+  min-height: 124rpx;
   align-items: center;
-  gap: 18rpx;
-  padding: 30rpx 96rpx 30rpx 30rpx;
+  gap: 20rpx;
+  box-sizing: border-box;
+  padding: 22rpx 20rpx;
   border: none;
+  border-radius: 28rpx;
+  background: #fcf7f0;
   color: #203042;
-  overflow: hidden;
   text-align: left;
-  transition: transform 160ms ease-out, opacity 160ms ease-out;
+  transition: background-color 160ms ease-out, transform 160ms ease-out, opacity 160ms ease-out;
 }
 
-.select-page__launch-action::before {
-  position: absolute;
-  content: '';
-  opacity: 0.7;
-  pointer-events: none;
+.select-page__launch-action::after {
+  border: none;
 }
 
-.select-page__launch-action::after { display: none; }
-
-.select-page__launch-action--locked {
-  opacity: 0.68;
-}
-
-.select-page__launch-action--wushu {
-  margin-right: 20rpx;
-  width: calc(100% - 20rpx);
-  border-radius: 46rpx 46rpx 46rpx 20rpx;
-  background: #fff0eb;
-}
-
-.select-page__launch-action--wushu::before {
-  right: 124rpx;
-  bottom: -60rpx;
-  width: 104rpx;
-  height: 104rpx;
-  border: 8rpx solid rgba(231, 144, 134, 0.2);
-  border-radius: 9999px;
-  box-shadow: 36rpx -24rpx 0 -20rpx rgba(231, 144, 134, 0.4);
-}
-
-.select-page__launch-action--hiit {
-  margin-left: 20rpx;
-  width: calc(100% - 20rpx);
-  border-radius: 24rpx 48rpx 24rpx 48rpx;
-  background: #edf8fd;
-}
-
-.select-page__launch-action--hiit::before {
-  right: 122rpx;
-  bottom: 20rpx;
-  width: 72rpx;
-  height: 12rpx;
-  border-radius: 9999px;
-  background: rgba(105, 169, 205, 0.22);
-  box-shadow: 20rpx -22rpx 0 -2rpx rgba(105, 169, 205, 0.2), 40rpx 20rpx 0 -1rpx rgba(105, 169, 205, 0.2);
-}
-
-.select-page__launch-action--stair {
-  margin-right: 12rpx;
-  width: calc(100% - 12rpx);
-  border-radius: 50rpx 22rpx 50rpx 50rpx;
-  background: #fff7e4;
-}
-
-.select-page__launch-action--stair::before {
-  right: 128rpx;
-  bottom: 12rpx;
-  width: 18rpx;
-  height: 26rpx;
-  border-radius: 8rpx 8rpx 0 0;
-  background: rgba(204, 153, 54, 0.22);
-  box-shadow: 22rpx -16rpx 0 rgba(204, 153, 54, 0.2), 44rpx -32rpx 0 rgba(204, 153, 54, 0.18);
+.select-page__launch-action--recommended {
+  background: #ffe8e5;
 }
 
 .select-page__launch-action:active {
   opacity: 0.76;
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 
-.select-page__launch-action:active .select-page__launch-trail-step {
-  transform: translateY(-2rpx);
+.select-page__launch-action--locked {
+  background: #faf5ef;
+  opacity: 0.82;
 }
 
 .select-page__launch-mark {
   display: flex;
-  width: 76rpx;
-  height: 76rpx;
+  width: 60rpx;
+  height: 60rpx;
   flex: none;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.76);
+  border-radius: 20rpx;
 }
 
-.select-page__launch-mark--wushu {
-  border-radius: 30rpx 22rpx 30rpx 22rpx;
-  box-shadow: 0 6rpx 0 rgba(231, 144, 134, 0.16);
-}
+.select-page__launch-mark--coral { background: #ffe8e5; }
+.select-page__launch-mark--teal { background: #e0f1f8; }
+.select-page__launch-mark--gold { background: #fff1cf; }
 
-.select-page__launch-mark--hiit {
-  border-radius: 9999px;
-  box-shadow: 0 6rpx 0 rgba(105, 169, 205, 0.16);
-}
-
-.select-page__launch-mark--stair {
-  border-radius: 24rpx 34rpx 18rpx 34rpx;
-  box-shadow: 0 6rpx 0 rgba(204, 153, 54, 0.16);
+.select-page__launch-action--recommended .select-page__launch-mark--coral {
+  background: rgba(255, 255, 255, 0.68);
 }
 
 .select-page__launch-copy {
@@ -341,143 +353,76 @@ async function chooseMode(modality: TrainingModality) {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 5rpx;
-  padding-right: 12rpx;
+  gap: 6rpx;
   box-sizing: border-box;
 }
 
 .select-page__launch-title {
   color: #203042;
-  font-size: 30rpx;
-  font-weight: 900;
+  font-size: 26rpx;
+  font-weight: 800;
   line-height: 1.24;
-}
-
-.select-page__launch-title-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.select-page__launch-completion {
-  display: inline-flex;
-  min-height: 30rpx;
-  flex: none;
-  align-items: center;
-  padding: 0 8rpx;
-  border-radius: 9999px;
-  background: rgba(255, 139, 139, 0.16);
-  color: #c76b5b;
-  font-size: 16rpx;
-  font-weight: 900;
-  line-height: 1.2;
-}
-
-.select-page__launch-completion--done {
-  background: rgba(168, 230, 207, 0.42);
-  color: #4f9070;
 }
 
 .select-page__launch-hint {
   color: #718096;
-  font-size: 22rpx;
-  font-weight: 700;
+  font-size: 20rpx;
+  font-weight: 600;
   line-height: 1.4;
 }
 
 .select-page__launch-route {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin-top: 3rpx;
-  color: #718096;
-  font-size: 18rpx;
-  font-weight: 800;
-  line-height: 1;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-top: 2rpx;
+  color: #8a97a8;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-.select-page__launch-trail {
-  display: flex;
-  width: 48rpx;
-  height: 20rpx;
+.select-page__launch-status {
+  color: #c76b5b;
+}
+
+.select-page__launch-status--completed {
+  color: #2b7cb8;
+}
+
+.select-page__launch-status--pending,
+.select-page__launch-status--syncing {
+  color: #718096;
+}
+
+.select-page__launch-status--locked {
+  color: #a76c1c;
+}
+
+.select-page__launch-enter {
+  display: inline-flex;
+  min-height: 56rpx;
+  flex: none;
   align-items: center;
-  gap: 5rpx;
-}
-
-.select-page__launch-trail-step {
-  display: block;
-  flex: none;
-}
-
-.select-page__launch-trail--wushu .select-page__launch-trail-step {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 9999px;
-  background: #e99d95;
-}
-
-.select-page__launch-trail--wushu .select-page__launch-trail-step:nth-child(2) {
-  transform: translateY(-5rpx);
-}
-
-.select-page__launch-trail--hiit {
-  align-items: flex-end;
-}
-
-.select-page__launch-trail--hiit .select-page__launch-trail-step {
-  width: 10rpx;
-  border-radius: 8rpx 8rpx 2rpx 2rpx;
-  background: #7db5d7;
-}
-
-.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(1) { height: 8rpx; }
-.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(2) { height: 18rpx; }
-.select-page__launch-trail--hiit .select-page__launch-trail-step:nth-child(3) { height: 12rpx; }
-
-.select-page__launch-trail--stair {
-  align-items: flex-end;
+  justify-content: center;
   gap: 2rpx;
-}
-
-.select-page__launch-trail--stair .select-page__launch-trail-step {
-  width: 14rpx;
-  border-radius: 6rpx 6rpx 0 0;
-  background: #d8a84e;
-}
-
-.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(1) { height: 7rpx; }
-.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(2) { height: 12rpx; }
-.select-page__launch-trail--stair .select-page__launch-trail-step:nth-child(3) { height: 18rpx; }
-
-.select-page__launch-meta {
-  position: absolute;
-  right: 64rpx;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6rpx;
-  color: #718096;
+  color: #8a97a8;
   font-size: 20rpx;
   font-weight: 800;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
-.select-page__launch-action > .uni-icons {
-  position: absolute;
-  right: 28rpx;
-  top: 50%;
-  transform: translateY(-50%);
+.select-page__launch-enter--recommended {
+  color: #c76b5b;
 }
 
 .select-page__streak-note {
   display: block;
-  padding: 4rpx 8rpx 0;
+  padding: 0 8rpx;
   color: #718096;
-  font-size: 22rpx;
+  font-size: 21rpx;
   font-weight: 600;
   line-height: 1.5;
 }

@@ -4,7 +4,7 @@ import type { SessionAnalysis, StudentAppState, TrainingModality } from './types
 export interface CompletionInput {
   sessionId?: string
   modality: TrainingModality
-  qualityScore: number
+  qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
 }

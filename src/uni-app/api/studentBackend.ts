@@ -197,6 +197,7 @@ function resolveExerciseVideoUrl(video: ExerciseVideoSummary): ExerciseVideoSumm
   return {
     ...video,
     video_file: resolveAbsoluteUrl(video.video_file),
+    tutorial_video_url: resolveAbsoluteUrl(video.tutorial_video_url),
     standard_data_url: resolveAbsoluteUrl(video.standard_data_url)
   }
 }
@@ -223,6 +224,14 @@ function resolveExerciseArrangementUrls(
         standard_data_url: resolveAbsoluteAssetUrl(item.standard_data_url),
         video: resolveExerciseVideoUrl(item.video)
       }))
+  }
+}
+
+function resolveTutorialResponseUrls(response: TutorialResponse): TutorialResponse {
+  return {
+    ...response,
+    tutorial_video_url: resolveAbsoluteAssetUrl(response.tutorial_video_url),
+    standard_data_url: resolveAbsoluteAssetUrl(response.standard_data_url)
   }
 }
 
@@ -362,7 +371,7 @@ function resolveBackendGenderLabel(gender: BackendCurrentUser['gender']): Studen
 
 function resolveVisualSessionSummary(
   fallback: {
-    qualityScore: number
+    qualityScore: number | null
     summary: string
   },
   record: BackendExerciseRecord | undefined
@@ -371,8 +380,10 @@ function resolveVisualSessionSummary(
     return fallback
   }
 
-  const backendScore = toPositiveNumber(record.score)
-  const qualityScore = backendScore !== null ? Math.round(backendScore) : fallback.qualityScore
+  const backendScore = record.score === null || record.score === undefined
+    ? null
+    : toPositiveNumber(record.score)
+  const qualityScore = backendScore !== null ? Math.round(backendScore) : null
   const summary = hasTextValue(record.comment) ? record.comment.trim() : fallback.summary
 
   return {
@@ -576,11 +587,22 @@ export function createStudentBackendSync(
     ...resolveDefaultSubmissionOptions(),
     ...submissionOverrides
   } satisfies StudentBackendSubmissionOptions
-  let shortQuestionnaireOperation = Promise.resolve()
+  const shortQuestionnaireOperations = new Map<string, Promise<void>>()
+  let pendingShortQuestionnaireRetry: Promise<{ attempted: number; succeeded: number }> | null = null
 
-  function enqueueShortQuestionnaireOperation<T>(operation: () => Promise<T>) {
-    const result = shortQuestionnaireOperation.then(operation, operation)
-    shortQuestionnaireOperation = result.then(() => undefined, () => undefined)
+  function enqueueShortQuestionnaireOperation<T>(
+    sessionId: string,
+    operation: () => Promise<T>
+  ) {
+    const previous = shortQuestionnaireOperations.get(sessionId) ?? Promise.resolve()
+    const result = previous.then(operation, operation)
+    const settled = result.then(() => undefined, () => undefined)
+    shortQuestionnaireOperations.set(sessionId, settled)
+    void settled.then(() => {
+      if (shortQuestionnaireOperations.get(sessionId) === settled) {
+        shortQuestionnaireOperations.delete(sessionId)
+      }
+    })
     return result
   }
 
@@ -603,21 +625,60 @@ export function createStudentBackendSync(
 
     let succeeded = 0
     for (const submission of submissions) {
-      try {
-        await submitShortQuestionnaire({
-          training_session_id: submission.sessionId,
-          energy_level: submission.response.energyLevel,
-          confidence: submission.response.confidence,
-          enjoyment: submission.response.enjoyment
-        })
-        submissionOptions.pendingShortQuestionnaires.remove(submission.sessionId)
+      const synced = await enqueueShortQuestionnaireOperation(
+        submission.sessionId,
+        async () => {
+          // A concurrent retry or a newer response may have already changed
+          // this session while this job waited for its per-session turn.
+          const current = submissionOptions.pendingShortQuestionnaires.list()
+            .find(item => item.sessionId === submission.sessionId)
+          if (!current) {
+            return false
+          }
+
+          try {
+            await submitShortQuestionnaire({
+              training_session_id: current.sessionId,
+              energy_level: current.response.energyLevel,
+              confidence: current.response.confidence,
+              enjoyment: current.response.enjoyment
+            })
+            submissionOptions.pendingShortQuestionnaires.remove(current.sessionId)
+            return true
+          } catch {
+            // Keep failed and ambiguous submissions durable for a later retry.
+            return false
+          }
+        }
+      )
+      if (synced) {
         succeeded += 1
-      } catch {
-        // Keep failed and ambiguous submissions durable for a later retry.
       }
     }
 
     return { attempted: submissions.length, succeeded }
+  }
+
+  function startPendingShortQuestionnaireRetry() {
+    if (pendingShortQuestionnaireRetry) {
+      return pendingShortQuestionnaireRetry
+    }
+
+    const retry = retryPendingShortQuestionnairesNow()
+    pendingShortQuestionnaireRetry = retry
+    void retry.then(
+      () => {
+        if (pendingShortQuestionnaireRetry === retry) {
+          pendingShortQuestionnaireRetry = null
+        }
+      },
+      () => {
+        if (pendingShortQuestionnaireRetry === retry) {
+          pendingShortQuestionnaireRetry = null
+        }
+      }
+    )
+    return retry
   }
 
   async function submitPendingTrainingJob(
@@ -692,7 +753,7 @@ export function createStudentBackendSync(
         })
         // After a successful authenticated bootstrap, retry any pending short
         // questionnaires non-blockingly (not only when the page mounts).
-        void enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
+        void startPendingShortQuestionnaireRetry()
         return buildRegistrationAccessResult()
       }
 
@@ -727,7 +788,7 @@ export function createStudentBackendSync(
       // collection: the backend endpoint must make training_session_id
       // idempotent/unique and treat repeats as success before the env var
       // can be enabled. See docs/mini-program-production-release.md.
-      void enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
+      void startPendingShortQuestionnaireRetry()
 
       return buildBootstrapAccessResult(dueCheckpoint)
     },
@@ -789,17 +850,17 @@ export function createStudentBackendSync(
       }
       const submitShortQuestionnaire = dependencies.submitShortQuestionnaire
       if (!dependencies.isEnabled() || !submitShortQuestionnaire) {
-        // Serialize the durable save with retry/remove so an in-flight retry
-        // keyed by sessionId cannot delete a newly saved response.
-        return enqueueShortQuestionnaireOperation(async () => {
+        // Serialize only this session's save with its retry/remove. A slow
+        // historical response must not keep a newer training feedback waiting.
+        return enqueueShortQuestionnaireOperation(input.sessionId, async () => {
           submissionOptions.pendingShortQuestionnaires.save(submission)
           return { synced: false, reason: 'pending-backend-endpoint' } as const
         })
       }
 
-      return enqueueShortQuestionnaireOperation(async () => {
-        // Save before network, but inside the serialized queue so an older
-        // in-flight retry/remove cannot delete this newly saved response.
+      return enqueueShortQuestionnaireOperation(input.sessionId, async () => {
+        // Save before network, while retaining per-session ordering so an
+        // older retry cannot delete a newer response for the same session.
         submissionOptions.pendingShortQuestionnaires.save(submission)
         try {
           await dependencies.ensureSession()
@@ -886,7 +947,9 @@ export function createStudentBackendSync(
       }
 
       await dependencies.ensureSession()
-      return dependencies.getExerciseVideoTutorial(videoId)
+      return resolveTutorialResponseUrls(
+        await dependencies.getExerciseVideoTutorial(videoId)
+      )
     },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
       if (!dependencies.isEnabled()) {
@@ -959,7 +1022,7 @@ export function createStudentBackendSync(
       }
     },
     async retryPendingShortQuestionnaires() {
-      return enqueueShortQuestionnaireOperation(retryPendingShortQuestionnairesNow)
+      return startPendingShortQuestionnaireRetry()
     },
     async loadGrowthHistory() {
       if (!dependencies.isEnabled()) {

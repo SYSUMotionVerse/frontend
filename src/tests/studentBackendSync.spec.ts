@@ -302,9 +302,13 @@ describe('student backend sync orchestration', () => {
           video_file: '/media/hiit.mp4',
           standard_data_url: '/media/hiit.json'
         },
+        pretraining_mode: 'FULL',
+        pretraining_countdown_duration: 0,
         expected_duration: 30,
-        countdown_duration: 3,
+        formal_countdown_duration: 3,
         rest_duration: 10,
+        rest_countdown_duration: 3,
+        countdown_duration: 3,
         standard_data_url: '/media/hiit.json',
         order: 1
       }]

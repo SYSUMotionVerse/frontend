@@ -69,6 +69,7 @@ export class BackendRequestError extends Error {
 const methodsRequiringCsrf = new Set<RequestMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 const defaultApiBaseUrl = 'http://127.0.0.1:8000/api'
 const requestTimeoutMs = 15000
+const loginTimeoutMs = requestTimeoutMs
 
 function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, '')
@@ -206,6 +207,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
   const shortQuestionnaireEndpoint = resolveShortQuestionnaireEndpoint()
   let sessionCookie = ''
   let hasAuthenticatedSession = false
+  let sessionBootstrapPromise: Promise<void> | null = null
   const cookieJar = new Map<string, string>()
 
   function isEnabled() {
@@ -218,19 +220,37 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     }
 
     return new Promise<string>((resolve, reject) => {
-      uni.login({
-        success(result) {
-          if (!result.code) {
-            reject(new Error('WeChat login did not return a code.'))
-            return
-          }
+      let settled = false
+      const timeout = setTimeout(() => {
+        settle(() => reject(new Error('WeChat login timed out.')))
+      }, loginTimeoutMs)
 
-          resolve(result.code)
-        },
-        fail(error) {
-          reject(error)
+      function settle(action: () => void) {
+        if (settled) {
+          return
         }
-      })
+        settled = true
+        clearTimeout(timeout)
+        action()
+      }
+
+      try {
+        uni.login({
+          success(result) {
+            if (!result.code) {
+              settle(() => reject(new Error('WeChat login did not return a code.')))
+              return
+            }
+
+            settle(() => resolve(result.code))
+          },
+          fail(error) {
+            settle(() => reject(error))
+          }
+        })
+      } catch (error) {
+        settle(() => reject(error))
+      }
     })
   }
 
@@ -248,54 +268,78 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
 
     try {
       return await new Promise<T>((resolve, reject) => {
-      uni.request({
-        url: `${baseUrl}${path}`,
-        method: method as UniApp.RequestOptions['method'],
-        data: options.data ?? {},
-        timeout: requestTimeoutMs,
-        header: {
-          'content-type': 'application/json',
-          ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-          ...(csrfToken && methodsRequiringCsrf.has(method)
-            ? { 'X-CSRFToken': csrfToken }
-            : {}),
-          ...options.headers
-        },
-        success(response) {
-          const nextCookies = resolveResponseCookies(response as {
-            header?: unknown
-            cookies?: unknown
-          })
+        let settled = false
+        let requestTask: UniApp.RequestTask | undefined
+        const timeout = setTimeout(() => {
+          settle(() => reject(new Error('Backend request timed out.')))
+          requestTask?.abort?.()
+        }, requestTimeoutMs)
 
-          nextCookies.forEach(cookie => {
-            const pair = resolveCookiePair(cookie)
-            if (!pair) {
-              return
-            }
-
-            cookieJar.set(pair[0], pair[1])
-          })
-
-          if (cookieJar.size > 0) {
-            sessionCookie = Array.from(cookieJar.entries())
-              .map(([name, value]) => `${name}=${value}`)
-              .join('; ')
-          }
-
-          if (response.statusCode >= 200 && response.statusCode < 300) {
-            resolve(response.data as T)
+        function settle(action: () => void) {
+          if (settled) {
             return
           }
-
-          reject(new BackendRequestError(
-            resolveErrorMessage(response.data, `Request failed with ${response.statusCode}`),
-            response.statusCode
-          ))
-        },
-        fail(error) {
-          reject(error)
+          settled = true
+          clearTimeout(timeout)
+          action()
         }
-      })
+
+        try {
+          requestTask = uni.request({
+            url: `${baseUrl}${path}`,
+            method: method as UniApp.RequestOptions['method'],
+            data: options.data ?? {},
+            timeout: requestTimeoutMs,
+            header: {
+              'content-type': 'application/json',
+              ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+              ...(csrfToken && methodsRequiringCsrf.has(method)
+                ? { 'X-CSRFToken': csrfToken }
+                : {}),
+              ...options.headers
+            },
+            success(response) {
+              if (settled) {
+                return
+              }
+
+              const nextCookies = resolveResponseCookies(response as {
+                header?: unknown
+                cookies?: unknown
+              })
+
+              nextCookies.forEach(cookie => {
+                const pair = resolveCookiePair(cookie)
+                if (!pair) {
+                  return
+                }
+
+                cookieJar.set(pair[0], pair[1])
+              })
+
+              if (cookieJar.size > 0) {
+                sessionCookie = Array.from(cookieJar.entries())
+                  .map(([name, value]) => `${name}=${value}`)
+                  .join('; ')
+              }
+
+              if (response.statusCode >= 200 && response.statusCode < 300) {
+                settle(() => resolve(response.data as T))
+                return
+              }
+
+              settle(() => reject(new BackendRequestError(
+                resolveErrorMessage(response.data, `Request failed with ${response.statusCode}`),
+                response.statusCode
+              )))
+            },
+            fail(error) {
+              settle(() => reject(error))
+            }
+          })
+        } catch (error) {
+          settle(() => reject(error))
+        }
       })
     } catch (error) {
       const shouldRetryAuthentication =
@@ -362,12 +406,27 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       return
     }
 
-    const code = await login()
-    await request('/users/wechat_login/', {
-      method: 'POST',
-      data: { code }
-    })
-    hasAuthenticatedSession = true
+    if (sessionBootstrapPromise) {
+      return sessionBootstrapPromise
+    }
+
+    const bootstrap = (async () => {
+      const code = await login()
+      await request('/users/wechat_login/', {
+        method: 'POST',
+        data: { code }
+      })
+      hasAuthenticatedSession = true
+    })()
+    sessionBootstrapPromise = bootstrap
+
+    try {
+      await bootstrap
+    } finally {
+      if (sessionBootstrapPromise === bootstrap) {
+        sessionBootstrapPromise = null
+      }
+    }
   }
 
   return {

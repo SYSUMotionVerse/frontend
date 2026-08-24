@@ -39,6 +39,7 @@ function createUniMock(responses: MockRequestResponse[]) {
 
 describe('backend client session handling', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllEnvs()
     vi.resetModules()
     delete (globalThis as { uni?: unknown }).uni
@@ -104,6 +105,71 @@ describe('backend client session handling', () => {
     expect(uniMock.request.mock.calls[1]?.[0].header).toMatchObject({
       Cookie: 'csrftoken=test-csrf-token; sessionid=test-session'
     })
+  })
+
+  it('shares one session bootstrap when concurrent questionnaire loads need authentication', async () => {
+    const uniMock = createUniMock([
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: ['sessionid=first-session; Path=/; HttpOnly']
+      },
+      {
+        statusCode: 200,
+        data: { user: { id: 1 } },
+        cookies: ['sessionid=second-session; Path=/; HttpOnly']
+      }
+    ])
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    await Promise.all([
+      client.ensureSession(),
+      client.ensureSession()
+    ])
+
+    expect(uniMock.login).toHaveBeenCalledTimes(1)
+    expect(uniMock.request).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops waiting when WeChat login never calls back', async () => {
+    vi.useFakeTimers()
+    const uniMock = {
+      login: vi.fn(),
+      request: vi.fn()
+    }
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    const session = client.ensureSession()
+    const expectation = expect(session).rejects.toThrow('WeChat login timed out.')
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expectation
+
+    expect(uniMock.request).not.toHaveBeenCalled()
+  })
+
+  it('stops waiting and aborts a backend request when the platform never calls back', async () => {
+    vi.useFakeTimers()
+    const abort = vi.fn()
+    const uniMock = {
+      login: vi.fn(),
+      request: vi.fn(() => ({ abort }) as unknown as UniApp.RequestTask)
+    }
+
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+
+    const client = createBackendClient('http://api.example.com')
+    const request = client.getNextPsychologyScale()
+    const expectation = expect(request).rejects.toThrow('Backend request timed out.')
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expectation
+
+    expect(abort).toHaveBeenCalledTimes(1)
   })
 
   it('sends X-CSRFToken for unsafe requests after session bootstrap', async () => {

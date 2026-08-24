@@ -16,7 +16,8 @@ const store = {
   refreshReminderEligibility: vi.fn(),
   state: {
     profile: {
-      name: ''
+      name: '',
+      studentId: ''
     },
     dailyAdherence: {
       validCheckIns: 0,
@@ -100,9 +101,13 @@ const studentBackendSync = {
         video_file: 'https://cdn.example.com/wushu.mp4',
         duration: 42
       },
+      pretraining_mode: 'FULL',
+      pretraining_countdown_duration: 0,
       expected_duration: 42,
-      countdown_duration: 0,
+      formal_countdown_duration: 0,
       rest_duration: 0,
+      rest_countdown_duration: 0,
+      countdown_duration: 0,
       order: 1
     }]
   }),
@@ -265,6 +270,7 @@ function currentUni() {
 describe('page-level backend sync wiring', () => {
   beforeEach(() => {
     vi.useRealTimers()
+    store.state.profile.studentId = ''
     Object.values(store).forEach(value => {
       if (typeof value === 'function' && 'mockReset' in value) {
         value.mockReset()
@@ -362,9 +368,13 @@ describe('page-level backend sync wiring', () => {
           video_file: 'https://cdn.example.com/wushu.mp4',
           duration: 42
         },
+        pretraining_mode: 'FULL',
+        pretraining_countdown_duration: 0,
         expected_duration: 42,
-        countdown_duration: 0,
+        formal_countdown_duration: 0,
         rest_duration: 0,
+        rest_countdown_duration: 0,
+        countdown_duration: 0,
         order: 1
       }]
     })
@@ -544,7 +554,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.syncLongQuestionnaire.mockResolvedValue({
       synced: true,
       score: 6,
@@ -605,6 +615,94 @@ describe('page-level backend sync wiring', () => {
       url: '/pages/access/questionnaire-result?checkpoint=baseline&score=0&percentage=100&questionnaireCount=1&submittedAt=2026-04-09T15%3A30%3A00.000Z'
     })
     expect(currentUni().navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps a just-answered response when the runner reloads before its draft debounce finishes', async () => {
+    vi.useFakeTimers()
+    const draftStorage = new Map<string, unknown>()
+    const questionnaire = {
+      scaleId: 1,
+      title: '第一份量表',
+      description: '第一份',
+      checkpoint: 'baseline' as const,
+      questions: [{
+        id: 11,
+        prompt: '第一题',
+        options: [{ id: 101, label: '是', score: 1 }]
+      }]
+    }
+    studentBackendSync.loadLongQuestionnaire.mockResolvedValue(questionnaire)
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValue(null)
+    store.state.profile.studentId = '20260001'
+
+    const uni = currentUni() as ReturnType<typeof currentUni> & {
+      getStorageSync: ReturnType<typeof vi.fn>
+      setStorageSync: ReturnType<typeof vi.fn>
+    }
+    uni.getStorageSync.mockImplementation((key: string) => draftStorage.get(key))
+    uni.setStorageSync.mockImplementation((key: string, value: unknown) => {
+      draftStorage.set(key, value)
+    })
+
+    const DraftRunner = defineComponent({
+      props: {
+        initialAnswers: {
+          type: Object,
+          default: () => ({})
+        }
+      },
+      emits: ['draftChange', 'reload'],
+      setup(props, { emit }) {
+        return () => h('div', { class: 'questionnaire-draft-runner' }, [
+          h(
+            'text',
+            { class: 'questionnaire-draft-answer' },
+            String((props.initialAnswers as Record<number, number>)[11] ?? '')
+          ),
+          h(
+            'button',
+            {
+              class: 'questionnaire-draft-save',
+              onClick: () => emit('draftChange', {
+                answers: { 11: 101 },
+                currentQuestionIndex: 0
+              })
+            },
+            'save'
+          ),
+          h(
+            'button',
+            {
+              class: 'questionnaire-draft-reload',
+              onClick: () => emit('reload')
+            },
+            'reload'
+          )
+        ])
+      }
+    })
+
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, {
+      global: {
+        stubs: {
+          UniAccessPageShell: { template: '<div><slot /></div>' },
+          LongQuestionnaireForm: DraftRunner
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(wrapper.get('.questionnaire-draft-answer').text()).toBe('')
+
+    await wrapper.get('.questionnaire-draft-save').trigger('click')
+    expect(wrapper.get('.questionnaire-draft-answer').text()).toBe('101')
+    expect(uni.setStorageSync).not.toHaveBeenCalled()
+
+    await wrapper.get('.questionnaire-draft-reload').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.questionnaire-draft-answer').text()).toBe('101')
   })
 
   it('loads only the next questionnaire after an intermediate submission', async () => {
@@ -1405,7 +1503,7 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
-  it('plays action guidance from the session clock without waiting for video time updates', async () => {
+  it('plays database-configured action guidance from in-session demonstration media progress only', async () => {
     vi.useFakeTimers()
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 3,
@@ -1415,6 +1513,7 @@ describe('page-level backend sync wiring', () => {
       total_duration: 8,
       is_active: true,
       order: 1,
+      countdown_tts_cues: [],
       items: [{
         id: 31,
         video_id: 9,
@@ -1426,9 +1525,22 @@ describe('page-level backend sync wiring', () => {
           standard_data_url: 'https://cdn.example.com/guidance-wushu.json',
           duration: 8
         },
+        pretraining_mode: 'FULL',
+        pretraining_countdown_duration: 0,
         expected_duration: 8,
-        countdown_duration: 0,
+        formal_countdown_duration: 0,
         rest_duration: 0,
+        rest_countdown_duration: 0,
+        countdown_duration: 0,
+        training_tts_cues: [{
+          id: 901,
+          phase: 'PRETRAINING',
+          timing: 'AFTER_OFFSET',
+          offset_seconds: 1,
+          text: '保持膝盖稳定',
+          audio_url: 'https://cdn.example.com/database-guidance-01.mp3',
+          order: 0
+        }],
         order: 1
       }]
     })
@@ -1444,10 +1556,11 @@ describe('page-level backend sync wiring', () => {
           angle_names: ['left_knee'],
           standard_sequence: [[Math.PI / 2]],
           angle_rules: {},
+          // This legacy JSON cue must not be used by the training player.
           tts_cues: [{
             time: 1,
             text: '保持膝盖稳定',
-            audio_url: 'https://cdn.example.com/guidance-01.mp3'
+            audio_url: 'https://cdn.example.com/legacy-guidance-01.mp3'
           }]
         }
       })
@@ -1474,12 +1587,15 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            props: ['videoUrl'],
-            emits: ['startRecognition', 'poseStats', 'startTraining'],
+            props: ['videoEventToken', 'videoUrl'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoTimeUpdate', 'videoPlay', 'videoEnded'],
             template: `
               <div>
                 <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="demo-guidance" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 1, duration: 8 } })">demo guidance</button>
+                <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+                <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 8 } })">end</button>
               </div>
             `
           }
@@ -1491,11 +1607,26 @@ describe('page-level backend sync wiring', () => {
       await flushPromises()
       await wrapper.get('.start-recognition').trigger('click')
       await wrapper.get('.start-training').trigger('click')
-      vi.advanceTimersByTime(3000 + 15000 + 1000)
+      await flushPromises()
+
+      expect(createInnerAudioContext).not.toHaveBeenCalled()
+      await wrapper.get('.play-video').trigger('click')
+      await flushPromises()
+      expect(createInnerAudioContext).not.toHaveBeenCalled()
+      await wrapper.get('.demo-guidance').trigger('click')
       await flushPromises()
 
       expect(createInnerAudioContext).toHaveBeenCalledOnce()
-      expect(audioContext.src).toBe('https://cdn.example.com/guidance-01.mp3')
+      expect(audioContext.src).toBe('https://cdn.example.com/database-guidance-01.mp3')
+      expect(audioContext.play).toHaveBeenCalledOnce()
+
+      await wrapper.get('.end-video').trigger('click')
+      await flushPromises()
+      await wrapper.get('.play-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(2_000)
+      await flushPromises()
+
+      expect(createInnerAudioContext).toHaveBeenCalledOnce()
       expect(audioContext.play).toHaveBeenCalledOnce()
     } finally {
       wrapper.unmount()
@@ -1503,8 +1634,8 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
-  it('plays the initial countdown and a complete second-action TTS sequence', async () => {
-    vi.useFakeTimers()
+  it('plays database-configured next-action and countdown audio during rest, not the demonstration', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 4,
       title: '两动作语音回归',
@@ -1513,6 +1644,11 @@ describe('page-level backend sync wiring', () => {
       total_duration: 13,
       is_active: true,
       order: 1,
+      countdown_tts_cues: [
+        { seconds_remaining: 3, text: '三', audio_url: 'https://cdn.example.com/database-countdown-3.mp3' },
+        { seconds_remaining: 2, text: '二', audio_url: 'https://cdn.example.com/database-countdown-2.mp3' },
+        { seconds_remaining: 1, text: '一', audio_url: 'https://cdn.example.com/database-countdown-1.mp3' }
+      ],
       items: [
         {
           id: 41,
@@ -1525,9 +1661,24 @@ describe('page-level backend sync wiring', () => {
             standard_data_url: 'https://cdn.example.com/action-1-sequence.json',
             duration: 4
           },
+          pretraining_mode: 'FULL',
+          pretraining_countdown_duration: 0,
           expected_duration: 4,
+          formal_countdown_duration: 0,
+          rest_duration: 10,
+          rest_countdown_duration: 3,
           countdown_duration: 0,
-          rest_duration: 2,
+          training_tts_cues: [
+            {
+              id: 911,
+              phase: 'REST',
+              timing: 'BEFORE_COUNTDOWN',
+              offset_seconds: 0,
+              text: '准备下一动作，go！',
+              audio_url: 'https://cdn.example.com/database-rest-go.mp3',
+              order: 0
+            }
+          ],
           order: 1
         },
         {
@@ -1541,15 +1692,39 @@ describe('page-level backend sync wiring', () => {
             standard_data_url: 'https://cdn.example.com/action-2-sequence.json',
             duration: 4
           },
+          pretraining_mode: 'FULL',
+          pretraining_countdown_duration: 0,
           expected_duration: 4,
-          countdown_duration: 0,
+          formal_countdown_duration: 5,
           rest_duration: 0,
+          rest_countdown_duration: 0,
+          countdown_duration: 3,
+          training_tts_cues: [
+            {
+              id: 912,
+              phase: 'PRETRAINING',
+              timing: 'START',
+              offset_seconds: 0,
+              text: '第二个动作指导',
+              audio_url: 'https://cdn.example.com/database-action-2-guidance.mp3',
+              order: 0
+            },
+            {
+              id: 913,
+              phase: 'FORMAL',
+              timing: 'START',
+              offset_seconds: 0,
+              text: '第二个动作正式开始',
+              audio_url: 'https://cdn.example.com/database-action-2-formal-start.mp3',
+              order: 0
+            }
+          ],
           order: 2
         }
       ]
     })
 
-    const sharedCountdown = {
+    const legacyCountdown = {
       '3': 'https://cdn.example.com/countdown-3.mp3',
       '2': 'https://cdn.example.com/countdown-2.mp3',
       '1': 'https://cdn.example.com/countdown-1.mp3'
@@ -1567,12 +1742,13 @@ describe('page-level backend sync wiring', () => {
           angle_names: ['left_knee'],
           standard_sequence: [[Math.PI / 2]],
           angle_rules: {},
-          countdown_audio_urls: sharedCountdown,
+          countdown_audio_urls: legacyCountdown,
           transition_audio_urls: {
             start: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-start.mp3`,
             end: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-end.mp3`,
-            next_action: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-next.mp3`,
-            rest_next_action: `https://cdn.example.com/${isSecondAction ? 'action-2' : 'action-1'}-rest-next.mp3`
+            ...(isSecondAction
+              ? { next_action: 'https://cdn.example.com/action-2-next.mp3' }
+              : {})
           },
           tts_cues: [{
             time: 0,
@@ -1597,7 +1773,7 @@ describe('page-level backend sync wiring', () => {
           playbackTimer = setTimeout(() => {
             completedUrls.push(this.src)
             ended?.()
-          }, this.src.includes('countdown') ? 1200 : 20)
+          }, 20)
         },
         stop() {
           if (playbackTimer) clearTimeout(playbackTimer)
@@ -1619,13 +1795,15 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            props: ['videoUrl'],
-            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoEnded'],
+            props: ['videoEventToken', 'videoUrl'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoTimeUpdate', 'videoPlay', 'videoEnded'],
             template: `
               <div>
                 <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
-                <button class="end-video" @click="$emit('videoEnded', { detail: { currentTime: 4 } })">end</button>
+                <button class="demo-guidance" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 0, duration: 4 } })">demo guidance</button>
+                <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+                <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 4 } })">end</button>
               </div>
             `
           }
@@ -1637,34 +1815,94 @@ describe('page-level backend sync wiring', () => {
       await flushPromises()
       await wrapper.get('.start-recognition').trigger('click')
       await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+      await wrapper.get('.end-video').trigger('click')
+      await flushPromises()
+      await wrapper.get('.play-video').trigger('click')
       await vi.advanceTimersByTimeAsync(4000)
+      await flushPromises()
 
-      expect(playedUrls.slice(0, 3)).toEqual([
-        sharedCountdown['3'],
-        sharedCountdown['2'],
-        sharedCountdown['1']
-      ])
-      expect(completedUrls.slice(0, 3)).toEqual([
-        sharedCountdown['3'],
-        sharedCountdown['2'],
-        sharedCountdown['1']
+      // The REST cue is deliberately scheduled at the start of the final
+      // three-second countdown, not at the beginning of the rest module.
+      await vi.advanceTimersByTimeAsync(7_000)
+      await flushPromises()
+      expect(playedUrls).toContain('https://cdn.example.com/database-rest-go.mp3')
+      expect(playedUrls).not.toContain('https://cdn.example.com/action-2-next.mp3')
+
+      const restGuidanceStart = playedUrls.length
+      await wrapper.get('.demo-guidance').trigger('click')
+      await vi.advanceTimersByTimeAsync(60)
+      expect(playedUrls.slice(restGuidanceStart)).not.toContain(
+        'https://cdn.example.com/database-action-2-guidance.mp3'
+      )
+      expect(playedUrls.slice(restGuidanceStart)).toEqual([
+        'https://cdn.example.com/database-countdown-3.mp3'
       ])
 
-      await vi.advanceTimersByTimeAsync(14000 + 4000 + 2000)
+      await vi.advanceTimersByTimeAsync(2_940)
+      await flushPromises()
+      expect(playedUrls.slice(restGuidanceStart, restGuidanceStart + 3)).toEqual([
+        'https://cdn.example.com/database-countdown-3.mp3',
+        'https://cdn.example.com/database-countdown-2.mp3',
+        'https://cdn.example.com/database-countdown-1.mp3'
+      ])
+
+      const secondDemoAudioStart = playedUrls.length
+      const secondDemoCompletedStart = completedUrls.length
+      // The next action's in-session demonstration only speaks after its
+      // native video has actually started.
+      await wrapper.get('.play-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(60)
+
+      expect(playedUrls.slice(secondDemoAudioStart)).toContain(
+        'https://cdn.example.com/database-action-2-guidance.mp3'
+      )
+      expect(completedUrls.slice(secondDemoCompletedStart)).toContain(
+        'https://cdn.example.com/database-action-2-guidance.mp3'
+      )
+      expect(playedUrls.slice(secondDemoAudioStart)).not.toContain(
+        'https://cdn.example.com/action-2-next.mp3'
+      )
+
+      const countdownStart = playedUrls.length
+      const countdownCompletedStart = completedUrls.length
+      await wrapper.get('.end-video').trigger('click')
+      // In a five-second module countdown, 3/2/1 must wait until the last
+      // three seconds rather than playing immediately at the five-second mark.
+      await vi.advanceTimersByTimeAsync(1_900)
+      expect(playedUrls.slice(countdownStart)).toEqual([])
+      await vi.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(playedUrls.slice(countdownStart)).toEqual([
+        'https://cdn.example.com/database-countdown-3.mp3'
+      ])
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      expect(playedUrls.slice(countdownStart, countdownStart + 3)).toEqual([
+        'https://cdn.example.com/database-countdown-3.mp3',
+        'https://cdn.example.com/database-countdown-2.mp3',
+        'https://cdn.example.com/database-countdown-1.mp3'
+      ])
+      expect(completedUrls.slice(countdownCompletedStart, countdownCompletedStart + 3)).toEqual([
+        'https://cdn.example.com/database-countdown-3.mp3',
+        'https://cdn.example.com/database-countdown-2.mp3',
+        'https://cdn.example.com/database-countdown-1.mp3'
+      ])
+
       const secondActionStart = playedUrls.length
       const secondActionCompleted = completedUrls.length
-      await wrapper.get('.end-video').trigger('click')
-      await vi.advanceTimersByTimeAsync(3700)
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+      await wrapper.get('.play-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(60)
 
-      const expectedSecondActionAudio = [
-        sharedCountdown['3'],
-        sharedCountdown['2'],
-        sharedCountdown['1'],
-        'https://cdn.example.com/action-2-start.mp3',
-        'https://cdn.example.com/action-2-guidance.mp3'
-      ]
+      const expectedSecondActionAudio = ['https://cdn.example.com/database-action-2-formal-start.mp3']
       expect(playedUrls.slice(secondActionStart)).toEqual(expectedSecondActionAudio)
       expect(completedUrls.slice(secondActionCompleted)).toEqual(expectedSecondActionAudio)
+      expect(playedUrls).not.toContain(legacyCountdown['3'])
+      expect(playedUrls).not.toContain(legacyCountdown['2'])
+      expect(playedUrls).not.toContain(legacyCountdown['1'])
     } finally {
       wrapper.unmount()
       vi.unstubAllGlobals()
@@ -1672,7 +1910,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('automatically submits and opens feedback after the final arranged action', async () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 3,
       title: '武术基本功入门',
@@ -1692,9 +1930,13 @@ describe('page-level backend sync wiring', () => {
           standard_data_url: 'https://cdn.example.com/wushu.json',
           duration: 42
         },
+        pretraining_mode: 'FULL',
+        pretraining_countdown_duration: 0,
         expected_duration: 42,
-        countdown_duration: 0,
+        formal_countdown_duration: 0,
         rest_duration: 0,
+        rest_countdown_duration: 0,
+        countdown_duration: 0,
         order: 1
       }]
     })
@@ -1748,12 +1990,14 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            props: ['videoUrl'],
+            props: ['videoEventToken', 'videoUrl'],
             emits: ['videoTimeUpdate', 'videoPlay', 'videoEnded', 'startRecognition', 'poseStats', 'startTraining', 'poseResult'],
             template: `<div>
               <span class="video-url">{{ videoUrl }}</span>
               <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
               <button class="start-training" @click="$emit('startTraining')">start</button>
+              <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+              <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 42 } })">end</button>
               <button class="pose-result" @click="$emit('poseResult', {
                 angleFrame: {
                   tsMs: 123,
@@ -1769,24 +2013,19 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
     await wrapper.get('.start-recognition').trigger('click')
     await wrapper.get('.start-training').trigger('click')
-    vi.advanceTimersByTime(3000)
     await flushPromises()
-    vi.advanceTimersByTime(15000)
+    await wrapper.get('.end-video').trigger('click')
+    await flushPromises()
+    await wrapper.get('.play-video').trigger('click')
     await flushPromises()
     await wrapper.get('.pose-result').trigger('click')
-    vi.advanceTimersByTime(41000)
-    await flushPromises()
-
-    expect(studentBackendSync.syncVisualSession).not.toHaveBeenCalled()
-    expect(store.completeTrainingSession).not.toHaveBeenCalled()
-
-    vi.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(42000)
     await flushPromises()
 
     expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: expect.any(String),
       modality: 'wushu',
-      durationSeconds: 42,
+      durationSeconds: 84,
       videoId: 9,
       score: 100,
       comment: '教学视频已完成，本次动作评分 100 分，整体动作完成稳定。',

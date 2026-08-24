@@ -39,7 +39,7 @@ onMounted(() => {
   overflow: hidden;
   min-height: 100vh;
   background: #FCF7F0;
-  padding: 56rpx 32rpx 216rpx;
+  padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));
 }
 
 .growth-shell__halo {
