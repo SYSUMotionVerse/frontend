@@ -29,6 +29,8 @@ import type {
   BackendReminderReturnPayload,
   BackendShortQuestionnaireRecord,
   ShortQuestionnaireCreatePayload,
+  TrainingCredentialRequest,
+  TrainingCredentialResponse,
 } from './studentBackendTypes'
 import type {
   ReminderAuthorizationConfig,
@@ -493,6 +495,12 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         method: 'POST',
         data: payload
       })
+    },
+    createTrainingCredential(payload: TrainingCredentialRequest) {
+      return request<TrainingCredentialResponse>(
+        '/exercises/records/session-credential/',
+        { method: 'POST', data: payload }
+      )
     },
     getExerciseScoreTrend() {
       return request<BackendExerciseScoreTrendResponse>(

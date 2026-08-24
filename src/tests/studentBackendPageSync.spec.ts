@@ -76,6 +76,11 @@ const studentBackendSync = {
       status: 'COMPLETED'
     }
   }),
+  prepareVisualTrainingSession: vi.fn().mockResolvedValue({
+    credential: 'signed-training-credential',
+    issued_at: '2026-08-24T09:59:00.000Z',
+    expires_at: '2026-08-24T15:59:00.000Z'
+  }),
   loadVisualExerciseVideo: vi.fn().mockResolvedValue({
     id: 9,
     title: '马步冲拳',
@@ -287,6 +292,11 @@ describe('page-level backend sync wiring', () => {
 
     store.getSnapshot.mockReturnValue(initialStudentState)
     studentBackendSync.loadAdherenceData.mockResolvedValue(null)
+    studentBackendSync.prepareVisualTrainingSession.mockResolvedValue({
+      credential: 'signed-training-credential',
+      issued_at: '2026-08-24T09:59:00.000Z',
+      expires_at: '2026-08-24T15:59:00.000Z'
+    })
 
     stairSensorCaptureSession.getSnapshot.mockReset()
     stairSensorCaptureSession.stop.mockReset()

@@ -16,6 +16,9 @@ export type PendingTrainingSubmission =
       comment?: string
       poseAnalysis?: VisualPoseAnalysisPayload
       completedAt?: string
+      trainingCredential?: string
+      scoreAlgorithmVersion?: string
+      clientVersion?: string
       queuedAt: string
     }
   | {
@@ -96,7 +99,15 @@ function isPendingTrainingSubmission(value: unknown): value is PendingTrainingSu
       submission.scoreUnavailableReason.length > 0 &&
       submission.scoreUnavailableReason.length <= 500
     )
-    return hasValidVideoId && hasValidScore && hasValidComment && hasValidScoreReason && (
+    const hasValidCredential = submission.trainingCredential === undefined || (
+      typeof submission.trainingCredential === 'string' && submission.trainingCredential.length > 0
+    )
+    const hasValidVersions = (
+      (submission.scoreAlgorithmVersion === undefined || typeof submission.scoreAlgorithmVersion === 'string') &&
+      (submission.clientVersion === undefined || typeof submission.clientVersion === 'string')
+    )
+    return hasValidVideoId && hasValidScore && hasValidComment && hasValidScoreReason &&
+      hasValidCredential && hasValidVersions && (
       submission.modality === 'wushu' || submission.modality === 'hiit'
     )
   }

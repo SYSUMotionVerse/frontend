@@ -150,6 +150,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const phaseSlot = shallowRef<VisualWorkoutPhaseSlot>('preview')
   const phaseRemainingSeconds = shallowRef(0)
   const trainingStarted = shallowRef(false)
+  const preparingTraining = shallowRef(false)
   const startCountdown = shallowRef(0)
   const sessionProgressSeconds = shallowRef(0)
   const videoAutoplay = shallowRef(false)
@@ -747,7 +748,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     startPhaseTimer(beginPretraining)
   }
 
-  function startTraining() {
+  async function startTraining() {
     if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {
         void uni.showToast({
@@ -762,11 +763,34 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
     if (
       trainingStarted.value
+      || preparingTraining.value
       || !arrangement.value
       || !videoUrl.value
       || videoLoading.value
       || videoError.value
     ) return
+
+    const videoId = primaryVideoId.value
+    if (!videoId) {
+      videoError.value = '训练动作配置不完整'
+      return
+    }
+    preparingTraining.value = true
+    try {
+      await submission.prepare({
+        modality: options.modality.value,
+        videoId,
+        arrangementId: arrangement.value.id
+      })
+    } catch (error) {
+      reportBackendSyncError('训练会话准备', error)
+      if (typeof uni.showToast === 'function') {
+        void uni.showToast({ title: '暂时无法开始训练，请检查网络', icon: 'none' })
+      }
+      return
+    } finally {
+      preparingTraining.value = false
+    }
 
     trainingStarted.value = true
     startCountdown.value = 0
@@ -1222,6 +1246,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         ...(scoreUnavailableReason ? { scoreUnavailableReason } : {}),
         comment: scoring.summary,
         completedAt,
+        scoreAlgorithmVersion: ACTION_SCORING_VERSION,
+        clientVersion: '0.1.0',
         ...(poseAnalysis ? { poseAnalysis } : {})
       })
 

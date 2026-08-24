@@ -207,6 +207,22 @@ export interface VisualSessionSyncInput {
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
   completedAt?: string
+  trainingCredential?: string
+  scoreAlgorithmVersion?: string
+  clientVersion?: string
+}
+
+export interface TrainingCredentialRequest {
+  training_session_id: string
+  modality: Exclude<BackendExerciseType, 'STAIRS'>
+  video_id: number
+  arrangement_id?: number
+}
+
+export interface TrainingCredentialResponse {
+  training_session_id: string
+  credential: string
+  expires_at: string
 }
 
 export interface StairSessionSummary {
@@ -461,6 +477,9 @@ export interface ExerciseRecordCreatePayload {
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
   client_completed_at?: string
+  training_credential?: string
+  score_algorithm_version?: string
+  client_version?: string
 }
 
 export interface StairsRecordCreatePayload {
@@ -554,6 +573,9 @@ export interface StudentBackendSyncDependencies {
   getExerciseArrangement: (id: number) => Promise<ExerciseArrangementDetail>
   getExerciseVideoTutorial: (videoId: number) => Promise<TutorialResponse>
   createExerciseRecord: (payload: ExerciseRecordCreatePayload) => Promise<BackendExerciseRecord>
+  createTrainingCredential?: (
+    payload: TrainingCredentialRequest
+  ) => Promise<TrainingCredentialResponse>
   getExerciseScoreTrend: () => Promise<BackendExerciseScoreTrendResponse>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>
   listPsychologyScales: () => Promise<BackendPsychologyScale[]>

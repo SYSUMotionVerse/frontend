@@ -74,6 +74,37 @@ describe('pending training submissions', () => {
     expect(items[89].sessionId).toBe('session-day29-s2')
   })
 
+  it('preserves score verification provenance for a queued visual session', () => {
+    const now = new Date('2026-08-24T10:00:00.000Z')
+    let stored: unknown = []
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => stored),
+      setStorageSync: vi.fn((_key: string, value: unknown) => { stored = value })
+    })
+    const store = createPendingTrainingSubmissionStore({ now: () => now })
+
+    store.save({
+      kind: 'visual',
+      sessionId: 'signed-session',
+      modality: 'wushu',
+      durationSeconds: 42,
+      score: 88.5,
+      trainingCredential: 'signed-training-credential',
+      scoreAlgorithmVersion: 'action-scoring-ts-v1',
+      clientVersion: '0.1.0',
+      queuedAt: now.toISOString()
+    })
+
+    expect(createPendingTrainingSubmissionStore({ now: () => now }).list()).toEqual([
+      expect.objectContaining({
+        sessionId: 'signed-session',
+        trainingCredential: 'signed-training-credential',
+        scoreAlgorithmVersion: 'action-scoring-ts-v1',
+        clientVersion: '0.1.0'
+      })
+    ])
+  })
+
   it('drops malformed and legacy entries during read', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
     const stored: unknown = [

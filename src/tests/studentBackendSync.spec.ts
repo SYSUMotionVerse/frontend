@@ -198,6 +198,9 @@ describe('student backend sync orchestration', () => {
       durationSeconds: 30,
       completedAt: '2026-08-24T10:00:00.000Z',
       score: 88.5,
+      trainingCredential: 'signed-training-credential',
+      scoreAlgorithmVersion: 'pose-score-v1',
+      clientVersion: '0.1.0',
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',
@@ -233,6 +236,9 @@ describe('student backend sync orchestration', () => {
       training_session_id: 'visual-session-123',
       client_completed_at: '2026-08-24T10:00:00.000Z',
       score: 88.5,
+      training_credential: 'signed-training-credential',
+      score_algorithm_version: 'pose-score-v1',
+      client_version: '0.1.0',
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',

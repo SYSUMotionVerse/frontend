@@ -328,6 +328,37 @@ describe('backend client session handling', () => {
     }))
   })
 
+  it('requests a server credential bound to the visual training context', async () => {
+    const uniMock = createUniMock([{
+      statusCode: 201,
+      data: {
+        credential: 'signed-training-credential',
+        issued_at: '2026-08-24T09:59:00.000Z',
+        expires_at: '2026-08-24T15:59:00.000Z'
+      }
+    }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await client.createTrainingCredential?.({
+      training_session_id: 'visual-session-123',
+      modality: 'MARTIAL_ARTS',
+      video_id: 9,
+      arrangement_id: 3
+    })
+
+    expect(uniMock.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://api.example.com/exercises/records/session-credential/',
+      method: 'POST',
+      data: {
+        training_session_id: 'visual-session-123',
+        modality: 'MARTIAL_ARTS',
+        video_id: 9,
+        arrangement_id: 3
+      }
+    }))
+  })
+
   it('synchronizes reminder authorization through the authenticated reminder endpoint', async () => {
     const uniMock = createUniMock([
       {

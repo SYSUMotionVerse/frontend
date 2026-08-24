@@ -33,6 +33,7 @@ import type {
   StairSessionSummary,
   StairSessionSyncInput,
   StairsRecordCreatePayload,
+  TrainingCredentialResponse,
   StudentBackendSyncDependencies,
   SurveyRecordCreatePayload,
   UserUpdatePayload,
@@ -708,17 +709,31 @@ export function createStudentBackendSync(
         videoId = video.id
       }
 
+      const hasVerifiedScore = (
+        submission.score !== undefined && Boolean(submission.trainingCredential)
+      )
       return dependencies.createExerciseRecord({
         video: videoId,
         duration: submission.durationSeconds,
         training_session_id: submission.sessionId,
         client_completed_at: submission.completedAt ?? submission.queuedAt,
-        ...(submission.score !== undefined ? { score: submission.score } : {}),
-        ...(submission.scoreUnavailableReason
-          ? { score_unavailable_reason: submission.scoreUnavailableReason }
+        ...(hasVerifiedScore ? { score: submission.score } : {}),
+        ...(!hasVerifiedScore && submission.score !== undefined
+          ? { score_unavailable_reason: 'legacy_unsigned_pending_score' }
+          : submission.scoreUnavailableReason
+            ? { score_unavailable_reason: submission.scoreUnavailableReason }
           : {}),
         ...(submission.comment !== undefined ? { comment: submission.comment } : {}),
-        ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {})
+        ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {}),
+        ...(submission.trainingCredential
+          ? { training_credential: submission.trainingCredential }
+          : {}),
+        ...(submission.scoreAlgorithmVersion
+          ? { score_algorithm_version: submission.scoreAlgorithmVersion }
+          : {}),
+        ...(submission.clientVersion
+          ? { client_version: submission.clientVersion }
+          : {})
       })
     }
 
@@ -994,6 +1009,26 @@ export function createStudentBackendSync(
         await dependencies.getExerciseVideoTutorial(videoId)
       )
     },
+    async prepareVisualTrainingSession(input: {
+      sessionId: string
+      modality: VisualSessionSyncInput['modality']
+      videoId: number
+      arrangementId?: number
+    }): Promise<TrainingCredentialResponse | null> {
+      if (!dependencies.isEnabled()) {
+        return null
+      }
+      if (!dependencies.createTrainingCredential) {
+        throw new Error('Training credential endpoint is unavailable.')
+      }
+      await dependencies.ensureSession()
+      return dependencies.createTrainingCredential({
+        training_session_id: input.sessionId,
+        modality: input.modality === 'wushu' ? 'MARTIAL_ARTS' : 'HIIT',
+        video_id: input.videoId,
+        ...(input.arrangementId ? { arrangement_id: input.arrangementId } : {})
+      })
+    },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
       if (!dependencies.isEnabled()) {
         return {
@@ -1016,6 +1051,13 @@ export function createStudentBackendSync(
         ...(input.comment !== undefined ? { comment: input.comment } : {}),
         ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
         completedAt,
+        ...(input.trainingCredential
+          ? { trainingCredential: input.trainingCredential }
+          : {}),
+        ...(input.scoreAlgorithmVersion
+          ? { scoreAlgorithmVersion: input.scoreAlgorithmVersion }
+          : {}),
+        ...(input.clientVersion ? { clientVersion: input.clientVersion } : {}),
         queuedAt: new Date().toISOString()
       }
       submissionOptions.pendingSubmissions.save(submission)
