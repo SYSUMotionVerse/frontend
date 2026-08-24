@@ -50,12 +50,12 @@ const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [
       </view>
       <view class="stat-item">
         <span class="stat-value">{{ complianceRatePercent }}%</span>
-        <span class="stat-label">依从率</span>
+        <span class="stat-label">达标日/有训练日</span>
       </view>
     </section>
 
     <section v-if="complianceLoaded && complianceTrend.length > 0" class="detail-page__card">
-      <h2 class="detail-page__section-title">周达标趋势</h2>
+      <h2 class="detail-page__section-title">周达标日/有训练日</h2>
       <view class="trend-bars">
         <view v-for="item in complianceTrend" :key="item.period" class="trend-bar-item">
           <view class="trend-bar-track">

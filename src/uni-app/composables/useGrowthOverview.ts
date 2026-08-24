@@ -203,13 +203,13 @@ export function useGrowthOverview() {
         key: 'valid-checkins',
         label: '累计达标天',
         value: String(adherence.completedDays),
-        description: `累计训练 ${adherence.totalTrainingDays} 天。`
+        description: `累计有训练 ${adherence.totalTrainingDays} 天。`
       },
       {
         key: 'current-streak',
-        label: '依从率',
+        label: '达标日/有训练日',
         value: `${Math.round(adherence.complianceRate * 100)}%`,
-        description: '基于后端达标记录计算。'
+        description: '以有训练的日为分母计算。'
       },
       {
         key: 'weekly-goal',

@@ -111,7 +111,7 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadPhysicalMetrics).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadVisualScoreTrend).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('最近一周达标3 天')
-    expect(wrapper.text()).toContain('依从率67%')
+    expect(wrapper.text()).toContain('达标日/有训练日67%')
     expect(wrapper.text()).toContain('2 / 3 已解锁')
     expect(wrapper.text()).toContain('1 次训练 · 1 次评估')
     expect(wrapper.text()).not.toContain('后端动作分析结果。')

@@ -46,9 +46,9 @@ const overviewStats = computed(() => [
     iconColor: '#c76b5b'
   },
   {
-    label: complianceRate.value?.label ?? '依从率',
+    label: complianceRate.value?.label ?? '达标日/有训练日',
     value: complianceRate.value?.value ?? '暂无数据',
-    description: '基于已记录的训练计算。',
+    description: '以有训练的日为分母计算。',
     icon: 'star-filled',
     tone: 'gold',
     iconColor: '#a76c1c'

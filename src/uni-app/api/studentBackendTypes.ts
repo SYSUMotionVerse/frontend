@@ -659,6 +659,9 @@ export interface BackendComplianceSummary {
   total_training_days: number
   completed_days: number
   compliance_rate: number
+  active_days?: number
+  qualifying_days?: number
+  qualification_rate?: number
 }
 
 export interface BackendComplianceCalendarDay {
@@ -667,6 +670,8 @@ export interface BackendComplianceCalendarDay {
   weekday: number
   training_count: number
   is_completed: boolean
+  is_active_day?: boolean
+  is_qualifying_day?: boolean
 }
 
 export interface BackendComplianceCalendar {
@@ -686,6 +691,9 @@ export interface BackendComplianceTrendPoint {
   total_count: number
   completed_days: number
   completion_rate: number
+  active_days?: number
+  qualifying_days?: number
+  qualification_rate?: number
 }
 
 export interface BackendComplianceTrend {

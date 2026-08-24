@@ -1173,25 +1173,25 @@ export function createStudentBackendSync(
       return {
         todayCount: compliance.today_count,
         todayCompleted: compliance.today_completed,
-        totalTrainingDays: compliance.total_training_days,
-        completedDays: compliance.completed_days,
-        complianceRate: compliance.compliance_rate,
+        totalTrainingDays: compliance.active_days ?? compliance.total_training_days,
+        completedDays: compliance.qualifying_days ?? compliance.completed_days,
+        complianceRate: compliance.qualification_rate ?? compliance.compliance_rate,
         calendar: calendar.days.map(day => ({
           date: day.date,
           completedSessions: day.training_count,
-          status: day.is_completed
+          status: (day.is_qualifying_day ?? day.is_completed)
             ? 'met-goal' as const
-            : day.training_count > 0
+            : (day.is_active_day ?? day.training_count > 0)
               ? 'partial' as const
               : 'none' as const
         })),
         trend: trend.trend.map(point => ({
           period: point.period,
           label: point.label,
-          trainingDays: point.training_days,
+          trainingDays: point.active_days ?? point.training_days,
           totalCount: point.total_count,
-          completedDays: point.completed_days,
-          completionRate: point.completion_rate
+          completedDays: point.qualifying_days ?? point.completed_days,
+          completionRate: point.qualification_rate ?? point.completion_rate
         }))
       }
     }
