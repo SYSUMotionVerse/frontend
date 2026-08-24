@@ -82,6 +82,42 @@ describe('PoseCamera native readiness', () => {
     wrapper.unmount()
   })
 
+  it('stops a pending frame listener when the component unmounts', async () => {
+    const listener = {
+      start: vi.fn(),
+      stop: vi.fn()
+    }
+    const createCameraContext = vi.fn(() => ({
+      onCameraFrame: vi.fn(() => listener)
+    }))
+
+    vi.stubGlobal('wx', { createCameraContext })
+    vi.stubGlobal('uni', {
+      createSelectorQuery: vi.fn(() => ({
+        in: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        fields: vi.fn().mockReturnThis(),
+        exec: vi.fn((callback: (result: unknown[]) => void) => callback([]))
+      }))
+    })
+
+    const wrapper = mount(PoseCamera, {
+      props: {
+        onFrame: vi.fn()
+      }
+    })
+    const camera = wrapper.vm as unknown as { startCamera: () => void }
+
+    await wrapper.get('camera').trigger('initdone', {
+      detail: { maxZoom: 1 }
+    })
+    camera.startCamera()
+
+    expect(listener.start).toHaveBeenCalledOnce()
+    wrapper.unmount()
+    expect(listener.stop).toHaveBeenCalledOnce()
+  })
+
   it('binds the CameraContext factory to the native custom-component scope', () => {
     const nativeComponentScope = { id: 'pose-camera-native-scope' }
     const createCameraContext = vi.fn(() => ({ id: 'camera-context' }))
@@ -93,6 +129,32 @@ describe('PoseCamera native readiness', () => {
 
     expect(createCameraContext).toHaveBeenCalledWith(nativeComponentScope)
     expect(context).toEqual({ id: 'camera-context' })
+  })
+
+  it('binds an explicit measured size to the native camera and overlay canvas', async () => {
+    vi.stubGlobal('wx', {
+      createSelectorQuery: vi.fn(() => ({
+        in: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        fields: vi.fn().mockReturnThis(),
+        exec: vi.fn((callback: (result: unknown[]) => void) => callback([]))
+      }))
+    })
+
+    const wrapper = mount(PoseCamera, {
+      props: {
+        onFrame: vi.fn(),
+        mediaSize: { width: 336, height: 448 }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.get('camera').attributes('style')).toContain('width: 336px')
+    expect(wrapper.get('camera').attributes('style')).toContain('height: 448px')
+    expect(wrapper.get('#pose-canvas').attributes('style')).toContain('width: 336px')
+    expect(wrapper.get('#pose-canvas').attributes('style')).toContain('height: 448px')
+
+    wrapper.unmount()
   })
 
   it('does not resize the native overlay canvas again when frame dimensions are unchanged', async () => {

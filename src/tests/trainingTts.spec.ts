@@ -38,6 +38,25 @@ describe('trainingTts', () => {
     expect(contexts[1].play).toHaveBeenCalledOnce()
   })
 
+  it('queues every cue that becomes due in the same clock update', () => {
+    const first = createAudioContext()
+    const second = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+    const player = createTrainingTtsPlayer(createContext)
+    const cues = [
+      { time: 7, text: '准备下一动作', audio_url: 'https://cdn.example.com/go.mp3' },
+      { time: 7, text: '三', audio_url: 'https://cdn.example.com/3.mp3' }
+    ]
+
+    player.sync(cues, 7)
+
+    expect(first.src).toBe(cues[0].audio_url)
+    first.onEnded.mock.calls[0][0]()
+    expect(second.src).toBe(cues[1].audio_url)
+  })
+
   it('plays the first action guidance after the start prompt', () => {
     const start = createAudioContext()
     const guidance = createAudioContext()

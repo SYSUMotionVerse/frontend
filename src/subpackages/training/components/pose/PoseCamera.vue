@@ -18,6 +18,11 @@ import { createComponentContext, getNode } from './utils';
 
 const instance = getCurrentInstance();
 
+type PoseMediaSize = Readonly<{
+  width: number
+  height: number
+}>
+
 // FrameAdapter — throttles camera frames to avoid flooding the detector.
 class FrameAdapter {
   private processCb?: (frame: Frame) => void;
@@ -62,6 +67,8 @@ const props = defineProps<{
   onStatus?: (evt: { type: string; detail?: string }) => void;
   showOverlay?: boolean;
   targetFps?: number;
+  /** Measured preview dimensions for native camera layers, in device px. */
+  mediaSize?: PoseMediaSize;
 }>();
 
 const state = reactive({
@@ -76,10 +83,49 @@ const state = reactive({
 
 const targetFps = computed(() => Math.max(1, Math.round(props.targetFps ?? 5)))
 const frameGap = computed(() => Math.max(1, Math.round(30 / targetFps.value)))
+const measuredMediaSize = computed(() => {
+  const size = props.mediaSize
+  if (
+    !size
+    || !Number.isFinite(size.width)
+    || !Number.isFinite(size.height)
+    || size.width <= 0
+    || size.height <= 0
+  ) {
+    return null
+  }
+
+  const width = Math.round(size.width)
+  const height = Math.round(size.height)
+  if (width < 1 || height < 1) return null
+
+  return {
+    width,
+    height
+  }
+})
+const nativeMediaStyle = computed(() => {
+  const size = measuredMediaSize.value
+  if (!size) return undefined
+
+  return {
+    width: `${size.width}px`,
+    height: `${size.height}px`
+  }
+})
+const overlayCanvasStyle = computed(() => {
+  if (nativeMediaStyle.value) return nativeMediaStyle.value
+
+  return {
+    width: state.canvasDisplayW ? state.canvasDisplayW + 'px' : '100%',
+    height: state.canvasDisplayH ? state.canvasDisplayH + 'px' : '100%'
+  }
+})
 const frameAdapter = new FrameAdapter(() => frameGap.value);
 let cameraContext: any = null;
 let cameraListener: any = null;
 let shouldStartFrameListener = false;
+let cameraStartGeneration = 0;
 let canvasCtx: CanvasRenderingContext2D | null = null;
 let overlayCanvas: HTMLCanvasElement | null = null;
 
@@ -129,13 +175,24 @@ function startCamera() {
   if (!cameraContext) return;
 
   try {
-    cameraListener = cameraContext.onCameraFrame(frameAdapter.triggerFrame.bind(frameAdapter));
-    cameraListener.start({
+    const generation = ++cameraStartGeneration;
+    const listener = cameraContext.onCameraFrame(frameAdapter.triggerFrame.bind(frameAdapter));
+    cameraListener = listener;
+    listener.start({
       success: () => {
+        if (
+          generation !== cameraStartGeneration
+          || !shouldStartFrameListener
+          || cameraListener !== listener
+        ) {
+          listener.stop?.();
+          return;
+        }
         state.isActive = true;
         props.onStatus?.({ type: 'frameListenerStarted' });
       },
       fail: (err: any) => {
+        if (generation !== cameraStartGeneration || cameraListener !== listener) return;
         state.cameraError = err?.errMsg ?? 'start failed';
         state.isActive = false;
         cameraListener = null;
@@ -150,10 +207,11 @@ function startCamera() {
 
 function stopCamera() {
   shouldStartFrameListener = false;
-  if (!state.isActive) return;
-  cameraListener?.stop();
+  cameraStartGeneration += 1;
+  const listener = cameraListener;
   cameraListener = null;
   state.isActive = false;
+  listener?.stop();
 }
 
 function resolveCameraContextWaiters() {
@@ -191,20 +249,23 @@ function waitForCameraContext(): Promise<any> {
 }
 
 function initializeCameraContext() {
-  if (cameraContext) return
+  if (cameraContext) return true
   try {
     cameraContext = createComponentContext(
       instance?.proxy,
       component => wx.createCameraContext(component)
     )
+    if (!cameraContext) throw new Error('createCameraContext returned no context')
     cameraInitializationError = ''
     resolveCameraContextWaiters()
     if (shouldStartFrameListener) startCamera()
+    return true
   } catch (err: any) {
     cameraInitializationError = err?.message ?? 'createCameraContext failed'
     state.cameraError = cameraInitializationError
     rejectCameraContextWaiters(new Error(cameraInitializationError))
     props.onStatus?.({ type: 'cameraFail', detail: cameraInitializationError })
+    return false
   }
 }
 
@@ -304,7 +365,7 @@ function drawKeypoints(keypoints: Array<{ x: number; y: number; score?: number; 
 
 /** Handle camera component initdone event — camera preview is actually ready. */
 function onCameraInitDone(e: any) {
-  initializeCameraContext()
+  if (!initializeCameraContext()) return
   props.onStatus?.({ type: 'cameraReady', detail: `maxZoom: ${e.detail?.maxZoom}` });
 }
 
@@ -326,6 +387,7 @@ defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, sta
       class="camera-layer"
       frame-size="small"
       device-position="front"
+      :style="nativeMediaStyle"
       @initdone="onCameraInitDone"
       @error="onCameraError"
     />
@@ -336,10 +398,7 @@ defineExpose({ startCamera, stopCamera, takePhoto, drawFrame, drawKeypoints, sta
       id="pose-canvas"
       class="overlay-canvas"
       type="2d"
-      :style="{
-        width: state.canvasDisplayW ? state.canvasDisplayW + 'px' : '100%',
-        height: state.canvasDisplayH ? state.canvasDisplayH + 'px' : '100%'
-      }"
+      :style="overlayCanvasStyle"
     />
   </view>
 </template>

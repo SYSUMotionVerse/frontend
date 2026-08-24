@@ -11,15 +11,19 @@ const items: ExerciseArrangementItem[] = [
     video_id: 101,
     video: {
       id: 101,
-      title: '马步冲拳',
+      title: '热身',
       exercise_type: 'MARTIAL_ARTS',
-      video_file: 'https://cdn.example.com/mabu.mp4',
-      duration: 30
+      video_file: 'https://cdn.example.com/warmup.mp4',
+      duration: 15
     },
-    expected_duration: 30,
-    countdown_duration: 3,
-    rest_duration: 5,
-    standard_data_url: 'https://cdn.example.com/mabu.json',
+    pretraining_mode: 'FULL',
+    pretraining_countdown_duration: 0,
+    expected_duration: 15,
+    formal_countdown_duration: 0,
+    rest_duration: 0,
+    rest_countdown_duration: 0,
+    countdown_duration: 99,
+    standard_data_url: 'https://cdn.example.com/warmup.json',
     order: 1
   },
   {
@@ -27,81 +31,152 @@ const items: ExerciseArrangementItem[] = [
     video_id: 102,
     video: {
       id: 102,
-      title: '弓步冲拳',
+      title: '正式动作一',
       exercise_type: 'MARTIAL_ARTS',
-      video_file: 'https://cdn.example.com/gongbu.mp4',
+      video_file: 'https://cdn.example.com/action-1.mp4',
       duration: 30
     },
+    pretraining_mode: 'FULL',
+    pretraining_countdown_duration: 2,
     expected_duration: 30,
-    countdown_duration: 3,
-    rest_duration: 5,
-    standard_data_url: 'https://cdn.example.com/gongbu.json',
+    formal_countdown_duration: 3,
+    rest_duration: 20,
+    rest_countdown_duration: 3,
+    countdown_duration: 99,
+    standard_data_url: 'https://cdn.example.com/action-1.json',
     order: 2
+  },
+  {
+    id: 13,
+    video_id: 103,
+    video: {
+      id: 103,
+      title: '正式动作二',
+      exercise_type: 'MARTIAL_ARTS',
+      video_file: 'https://cdn.example.com/action-2.mp4',
+      duration: 30
+    },
+    pretraining_mode: 'NONE',
+    pretraining_countdown_duration: 0,
+    expected_duration: 30,
+    formal_countdown_duration: 3,
+    rest_duration: 0,
+    rest_countdown_duration: 0,
+    countdown_duration: 99,
+    standard_data_url: 'https://cdn.example.com/action-2.json',
+    order: 3
   }
 ]
 
 describe('visual workout timeline', () => {
-  it('builds rest, one full demonstration, and start countdown before the next action', () => {
+  it('maps the Django module configuration into a complete training sequence', () => {
     const timeline = buildVisualWorkoutTimeline(items)
 
-    expect(timeline.map(phase => [phase.kind, phase.title])).toEqual([
-      ['preview', '准备：马步冲拳'],
-      ['active', '马步冲拳'],
-      ['rest', '休息，准备：弓步冲拳'],
-      ['demonstration', '动作示范：弓步冲拳'],
-      ['countdown', '准备开始：弓步冲拳'],
-      ['active', '弓步冲拳']
+    expect(timeline.map(phase => [phase.slot, phase.itemIndex])).toEqual([
+      ['pretraining', 0],
+      ['formal-training', 0],
+      ['pretraining-countdown', 1],
+      ['pretraining', 1],
+      ['formal-countdown', 1],
+      ['formal-training', 1],
+      ['rest', 2],
+      ['formal-countdown', 2],
+      ['formal-training', 2]
     ])
     expect(timeline.map(phase => [phase.startSeconds, phase.endSeconds])).toEqual([
       [0, 15],
-      [15, 45],
-      [45, 50],
-      [50, 80],
-      [80, 83],
-      [83, 113]
+      [15, 30],
+      [30, 32],
+      [32, 62],
+      [62, 65],
+      [65, 95],
+      [95, 115],
+      [115, 118],
+      [118, 148]
     ])
-    expect(timeline[1].countdownDuration).toBe(3)
-    expect(timeline.at(-1)?.endSeconds).toBe(113)
+    expect(timeline.find(phase => phase.slot === 'rest')?.countdownDuration).toBe(3)
+    expect(timeline.at(-1)?.endSeconds).toBe(148)
   })
 
-  it('switches the active phase exactly at its start and exposes the next phase', () => {
+  it('uses the full action video only when pretraining mode is FULL', () => {
     const timeline = buildVisualWorkoutTimeline(items)
 
-    const beforeBoundary = resolveVisualWorkoutState(timeline, 14.9)
-    const atBoundary = resolveVisualWorkoutState(timeline, 15)
-
-    expect(beforeBoundary.current.title).toBe('准备：马步冲拳')
-    expect(beforeBoundary.next?.title).toBe('马步冲拳')
-    expect(beforeBoundary.remainingSeconds).toBe(1)
-
-    expect(atBoundary.current.title).toBe('马步冲拳')
-    expect(atBoundary.actionNumber).toBe(1)
-    expect(atBoundary.totalActions).toBe(2)
-    expect(atBoundary.phaseProgressPercent).toBe(0)
-    expect(atBoundary.remainingSeconds).toBe(30)
+    expect(timeline.filter(phase => phase.slot === 'pretraining')).toHaveLength(2)
+    expect(timeline.find(phase => phase.itemIndex === 2 && phase.slot === 'pretraining'))
+      .toBeUndefined()
   })
 
-  it('clamps progress at the beginning and end of the workout', () => {
-    const timeline = buildVisualWorkoutTimeline(items)
-
-    expect(resolveVisualWorkoutState(timeline, -10).sessionProgressPercent).toBe(0)
-
-    const completed = resolveVisualWorkoutState(timeline, 1_000)
-    expect(completed.current.title).toBe('弓步冲拳')
-    expect(completed.next).toBeNull()
-    expect(completed.remainingSeconds).toBe(0)
-    expect(completed.phaseProgressPercent).toBe(100)
-    expect(completed.sessionProgressPercent).toBe(100)
-  })
-
-  it('keeps the fixed initial preview and omits a zero-length rest', () => {
+  it('skips the pretraining countdown together with a disabled pretraining module', () => {
     const timeline = buildVisualWorkoutTimeline([
-      { ...items[0], countdown_duration: 0, rest_duration: 0 }
+      {
+        ...items[2],
+        pretraining_countdown_duration: 3,
+        formal_countdown_duration: 3,
+        rest_duration: 0
+      }
     ])
 
-    expect(timeline.map(phase => phase.kind)).toEqual(['preview', 'active'])
-    expect(timeline[0].endSeconds).toBe(15)
-    expect(timeline[1].countdownDuration).toBe(0)
+    expect(timeline.map(phase => phase.slot)).toEqual([
+      'formal-countdown',
+      'formal-training'
+    ])
+    expect(timeline.at(-1)?.endSeconds).toBe(33)
+  })
+
+  it('never uses a countdown value, including the legacy field, as formal-training duration', () => {
+    const timeline = buildVisualWorkoutTimeline([{ ...items[1], rest_duration: 0 }])
+    const formalTraining = timeline.find(phase => phase.slot === 'formal-training')
+
+    expect(formalTraining).toBeDefined()
+    expect(formalTraining!.endSeconds - formalTraining!.startSeconds).toBe(30)
+    expect(timeline.find(phase => phase.slot === 'formal-countdown')?.endSeconds).toBe(35)
+  })
+
+  it('keeps the rest countdown inside the configured rest duration', () => {
+    const timeline = buildVisualWorkoutTimeline([
+      { ...items[0], rest_duration: 20, rest_countdown_duration: 3 },
+      {
+        ...items[2],
+        id: 14,
+        video_id: 104,
+        pretraining_mode: 'NONE',
+        formal_countdown_duration: 0,
+        order: 2
+      }
+    ])
+    const rest = timeline.find(phase => phase.slot === 'rest')
+
+    expect(rest).toMatchObject({ startSeconds: 30, endSeconds: 50, countdownDuration: 3 })
+    expect(timeline.at(-1)?.endSeconds).toBe(80)
+  })
+
+  it('switches precisely between module slots and clamps progress', () => {
+    const timeline = buildVisualWorkoutTimeline(items)
+    const beforeBoundary = resolveVisualWorkoutState(timeline, 29.9)
+    const atBoundary = resolveVisualWorkoutState(timeline, 30)
+
+    expect(beforeBoundary.current.slot).toBe('formal-training')
+    expect(beforeBoundary.next?.slot).toBe('pretraining-countdown')
+    expect(beforeBoundary.remainingSeconds).toBe(1)
+    expect(atBoundary.current.slot).toBe('pretraining-countdown')
+    expect(atBoundary.phaseProgressPercent).toBe(0)
+    expect(resolveVisualWorkoutState(timeline, -10).sessionProgressPercent).toBe(0)
+    expect(resolveVisualWorkoutState(timeline, 1_000).next).toBeNull()
+    expect(resolveVisualWorkoutState(timeline, 1_000).sessionProgressPercent).toBe(100)
+  })
+
+  it('omits zero-length optional modules and rejects an empty workout', () => {
+    const timeline = buildVisualWorkoutTimeline([
+      {
+        ...items[0],
+        pretraining_mode: 'NONE',
+        pretraining_countdown_duration: 0,
+        formal_countdown_duration: 0,
+        rest_duration: 0
+      }
+    ])
+
+    expect(timeline.map(phase => phase.slot)).toEqual(['formal-training'])
     expect(() => resolveVisualWorkoutState([], 0)).toThrow(
       'Visual workout timeline requires at least one phase.'
     )

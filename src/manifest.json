@@ -12,6 +12,7 @@
     },
     "setting": {
       "urlCheck": true,
+      "lazyCodeLoading": "requiredComponents",
       "minified": true,
       "minifyWXSS": true,
       "minifyWXML": true,

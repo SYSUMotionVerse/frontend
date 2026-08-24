@@ -24,10 +24,17 @@ import type { DetectResult, Frame } from './PoseDetectModel';
 import { buildPoseAngleFrame } from '../../../../uni-app/components/pose/poseAnalysis'
 import PoseCamera from './PoseCamera.vue';
 
+type PoseMediaSize = Readonly<{
+  width: number
+  height: number
+}>
+
 const props = defineProps<{
   /** Runtime mode: 'production' (default) for training page, 'debug' for spike diagnostics. */
   mode?: 'production' | 'debug';
   initialFps?: 5 | 10;
+  /** Measured preview dimensions for native camera layers, in device px. */
+  mediaSize?: PoseMediaSize;
   onResult: (result: DetectResult) => void;
   onStats: (stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) => void;
 }>();
@@ -40,10 +47,20 @@ let detector: PoseDetector | null = null;
 let isMounted = false;
 let resolveCameraReady: (() => void) | null = null
 let rejectCameraReady: ((error: Error) => void) | null = null
+let detectorReadyForTraining = false
+let frameListenerStarted = false
+let frameListenerStartPromise: Promise<void> | null = null
+let frameListenerWaiter: {
+  resolve: () => void
+  reject: (error: Error) => void
+  timeoutId: ReturnType<typeof setTimeout>
+} | null = null
 const cameraReadyPromise = new Promise<void>((resolve, reject) => {
   resolveCameraReady = resolve
   rejectCameraReady = reject
 })
+
+const FRAME_LISTENER_READY_TIMEOUT_MS = 5000
 
 // Camera lifecycle state
 const cameraReady = ref(false);
@@ -129,7 +146,12 @@ onMounted(async () => {
     // fps via PoseCamera's FrameAdapter. The repeated native takePhoto()
     // shutter that caused the bright/cream overlay flash is no longer used
     // for automatic recognition.
+    const frameListenerReady = waitForFrameListenerStart()
     poseCamera.value?.startCamera()
+    await frameListenerReady
+    if (!isMounted) return
+
+    detectorReadyForTraining = true
     emitStats('ready');
   } catch (err: any) {
     if (!isMounted) return;
@@ -149,6 +171,7 @@ onMounted(async () => {
 onUnmounted(() => {
   isMounted = false;
   rejectCameraReady?.(new Error('pose detector unmounted before camera ready'))
+  rejectFrameListenerStart(new Error('pose detector unmounted before camera frame listener started'))
   // Dispose the TF.js detector to free WebGL/GPU resources.
   if (detector) {
     try { detector.dispose(); } catch { /* detector may already be disposed */ }
@@ -163,6 +186,38 @@ function emitStats(status: string) {
 
 function waitForCameraReady() {
   return cameraReadyPromise
+}
+
+function waitForFrameListenerStart() {
+  if (frameListenerStarted) return Promise.resolve()
+  if (frameListenerStartPromise) return frameListenerStartPromise
+
+  frameListenerStartPromise = new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      if (frameListenerWaiter?.timeoutId !== timeoutId) return
+      frameListenerWaiter = null
+      reject(new Error('camera frame listener start timed out'))
+    }, FRAME_LISTENER_READY_TIMEOUT_MS)
+    frameListenerWaiter = { resolve, reject, timeoutId }
+  })
+  return frameListenerStartPromise
+}
+
+function resolveFrameListenerStart() {
+  frameListenerStarted = true
+  if (!frameListenerWaiter) return
+  clearTimeout(frameListenerWaiter.timeoutId)
+  const { resolve } = frameListenerWaiter
+  frameListenerWaiter = null
+  resolve()
+}
+
+function rejectFrameListenerStart(error: Error) {
+  if (!frameListenerWaiter) return
+  clearTimeout(frameListenerWaiter.timeoutId)
+  const { reject } = frameListenerWaiter
+  frameListenerWaiter = null
+  reject(error)
 }
 
 async function warmDetector() {
@@ -378,12 +433,28 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
       const message = evt.detail ?? 'camera init failed'
       cameraError.value = message
       rejectCameraReady?.(new Error(message))
+      rejectFrameListenerStart(new Error(message))
+      if (detectorReadyForTraining) {
+        detectorReadyForTraining = false
+        emitStats('failed')
+      }
       break;
     }
+    case 'frameListenerStarted':
+      resolveFrameListenerStart()
+      break
     case 'cameraFail':
       // Surface a stable, non-flashing error state. Do not fall back to
       // repeated takePhoto() — the native shutter causes the bright overlay.
-      cameraError.value = evt.detail ?? '';
+      cameraError.value = evt.detail ?? 'camera frame listener failed';
+      if (!cameraReady.value) {
+        rejectCameraReady?.(new Error(cameraError.value))
+      }
+      rejectFrameListenerStart(new Error(cameraError.value))
+      if (detectorReadyForTraining) {
+        detectorReadyForTraining = false
+        emitStats('failed')
+      }
       break;
     case 'firstFrame':
       firstFrameReceived.value = true;
@@ -412,6 +483,7 @@ defineExpose({
     :on-status="onCameraStatus"
     :show-overlay="overlayEnabled"
     :target-fps="samplingFps"
+    :media-size="props.mediaSize"
   />
 
   <!-- Analyze button — single-shot capture -->
@@ -430,7 +502,7 @@ defineExpose({
   </view>
 
   <!-- Error indicator -->
-  <view v-if="cameraErrorBanner" class="camera-error">{{ cameraErrorBanner }}</view>
+  <cover-view v-if="cameraErrorBanner" class="camera-error">{{ cameraErrorBanner }}</cover-view>
 </template>
 
 <script lang="ts">

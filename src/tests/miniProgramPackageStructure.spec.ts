@@ -29,7 +29,10 @@ describe('mini-program package structure', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(process.cwd(), 'src/manifest.json'), 'utf8')
     ) as {
-      'mp-weixin': { optimization?: { subPackages?: boolean } }
+      'mp-weixin': {
+        optimization?: { subPackages?: boolean }
+        setting?: { lazyCodeLoading?: string }
+      }
     }
     const poseDetectionSource = readFileSync(
       resolve(
@@ -40,6 +43,7 @@ describe('mini-program package structure', () => {
     )
 
     expect(manifest['mp-weixin'].optimization?.subPackages).toBe(true)
+    expect(manifest['mp-weixin'].setting?.lazyCodeLoading).toBe('requiredComponents')
     expect(poseDetectionSource).toContain(
       "@tensorflow-models/pose-detection/dist/blazepose_tfjs/detector"
     )

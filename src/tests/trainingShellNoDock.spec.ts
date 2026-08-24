@@ -13,4 +13,31 @@ describe('UniTrainingPageShell no-dock layout', () => {
     expect(source).toMatch(/\.training-shell--no-dock\s*\{[\s\S]*padding:\s*24rpx 0 0;/)
     expect(source).toMatch(/\.training-shell__inner--no-dock\s*\{[\s\S]*height:\s*calc\(100vh - 24rpx\);/)
   })
+
+  it('removes the remaining top inset when a no-dock page explicitly fills the viewport', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/training/UniTrainingPageShell.vue'),
+      'utf8'
+    )
+
+    expect(source).toMatch(
+      /\.training-shell--no-dock\.training-shell--fit-viewport\s*\{[\s\S]*padding:\s*0;/
+    )
+    expect(source).toMatch(
+      /\.training-shell__inner--no-dock\.training-shell__inner--fit-viewport\s*\{[\s\S]*height:\s*100%;/
+    )
+  })
+
+  it('uses the same ambient treatment as growth only on ordinary docked pages', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/components/training/UniTrainingPageShell.vue'),
+      'utf8'
+    )
+
+    expect(source).toContain('background: #FCF7F0;')
+    expect(source).toContain('v-if="props.showDock && !props.fitViewport"')
+    expect(source).toContain('training-shell__halo--coral')
+    expect(source).toContain('training-shell__halo--gold')
+    expect(source).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
+  })
 })

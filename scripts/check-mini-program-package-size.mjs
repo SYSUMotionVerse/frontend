@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { relative, resolve, sep } from 'node:path'
 
-export const MAIN_PACKAGE_WARNING_LIMIT_BYTES = 1900 * 1024
+export const MAIN_PACKAGE_WARNING_LIMIT_BYTES = 1500 * 1024
 
 export async function measureMiniProgramPackage(outputDirectory) {
   const absoluteOutputDirectory = resolve(outputDirectory)

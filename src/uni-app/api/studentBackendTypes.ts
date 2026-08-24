@@ -281,19 +281,61 @@ export interface ExerciseArrangementSummary {
   order: number
 }
 
+/** Backend-authoritative TTS phases for one arrangement action. */
+export type TrainingTtsPhase = 'PRETRAINING' | 'FORMAL' | 'REST'
+export type TrainingTtsTiming =
+  | 'START'
+  | 'AFTER_OFFSET'
+  | 'BEFORE_END'
+  | 'BEFORE_COUNTDOWN'
+  | 'COMPLETE'
+
+export interface TrainingTtsCue {
+  id: number
+  phase: TrainingTtsPhase
+  timing: TrainingTtsTiming
+  offset_seconds: number
+  text: string
+  audio_url: string
+  /** A migrated legacy rest track contains its own full 3/2/1 sequence. */
+  includes_embedded_countdown?: boolean
+  order: number
+}
+
+export interface TrainingCountdownTtsCue {
+  seconds_remaining: 1 | 2 | 3
+  text: string
+  audio_url: string
+}
+
 export interface ExerciseArrangementItem {
   id: number
   video_id: number
   video: ExerciseVideoSummary
+  /** `NONE` skips pretraining; `FULL` replays the complete action video first. */
+  pretraining_mode: 'NONE' | 'FULL'
+  /** Countdown immediately before the optional pretraining module. */
+  pretraining_countdown_duration: number
+  /** The duration of the mandatory formal-training module. */
   expected_duration: number
-  countdown_duration: number
+  /** Countdown immediately before the mandatory formal-training module. */
+  formal_countdown_duration: number
+  /** Rest after this action's formal-training module. */
   rest_duration: number
+  /** Countdown displayed inside the final part of the rest window. */
+  rest_countdown_duration: number
+  /** Legacy API field retained by Django during the client rollout; never used for flow control. */
+  countdown_duration?: number
+  /** Published, phase-scoped speech. The client never falls back to action-standard JSON TTS. */
+  training_tts_cues?: TrainingTtsCue[]
   standard_data_url?: string | null
   order: number
 }
 
 export interface ExerciseArrangementDetail extends ExerciseArrangementSummary {
   items: ExerciseArrangementItem[]
+  /** Globally configured 3/2/1 audio shared by each module countdown. */
+  countdown_tts_cues?: TrainingCountdownTtsCue[]
 }
 
 export interface ExerciseScoreDimension {

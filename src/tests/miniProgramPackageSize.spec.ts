@@ -42,7 +42,7 @@ describe('mini-program package size', () => {
         totalBytes: MAIN_PACKAGE_WARNING_LIMIT_BYTES + 1,
         subpackages: [],
       }),
-    ).toThrow('exceeds the release limit of 1900 KB')
+    ).toThrow('exceeds the release limit of 1500 KB')
   })
 })
 

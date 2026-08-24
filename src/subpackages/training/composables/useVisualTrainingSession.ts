@@ -1,5 +1,6 @@
+// The visual-session controller is loaded only with the training subpackage.
 import { computed, onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue'
-import type { TrainingModality } from '../../domain/student/types'
+import type { TrainingModality } from '../../../domain/student/types'
 import type {
   ExerciseArrangementDetail,
   ExerciseArrangementItem,
@@ -7,35 +8,46 @@ import type {
   ExerciseScoreDetails,
   ExerciseVideoSummary,
   TutorialResponse
-} from '../api/studentBackendTypes'
-import { buildVisualPoseAnalysisPayload, studentBackendSync } from '../api/studentBackend'
-import { reportBackendSyncError } from '../api/reportBackendSyncError'
-import type { DetectResult } from '../../subpackages/training/components/pose/PoseDetectModel'
-import type { PoseAngleFrame } from '../components/pose/poseAnalysis'
-import { useStudentStore } from './useStudentStore'
-import { useVisualTrainingSubmission } from './useVisualTrainingSubmission'
-import { invalidateGrowthOverview } from './useGrowthOverview'
-import { useTrainingProgress } from './useTrainingProgress'
-import { trainingVideoCache } from '../platform/videoCache'
-import { actionStandardLoader } from '../platform/actionStandardLoader'
-import { createTrainingTtsPlayer } from '../platform/trainingTts'
-import { aggregateActionScores, scoreAction } from '../../domain/training/actionScoring'
+} from '../../../uni-app/api/studentBackendTypes'
+import { buildVisualPoseAnalysisPayload, studentBackendSync } from '../../../uni-app/api/studentBackend'
+import { reportBackendSyncError } from '../../../uni-app/api/reportBackendSyncError'
+import type { DetectResult } from '../components/pose/PoseDetectModel'
+import type { PoseAngleFrame } from '../../../uni-app/components/pose/poseAnalysis'
+import { useStudentStore } from '../../../uni-app/composables/useStudentStore'
+import { useVisualTrainingSubmission } from '../../../uni-app/composables/useVisualTrainingSubmission'
+import { invalidateGrowthOverview } from '../../../uni-app/composables/useGrowthOverview'
+import { useTrainingProgress } from '../../../uni-app/composables/useTrainingProgress'
+import { trainingVideoCache } from '../../../uni-app/platform/videoCache'
+import { actionStandardLoader } from '../../../uni-app/platform/actionStandardLoader'
+import { createTrainingTtsPlayer } from '../../../uni-app/platform/trainingTts'
+import { aggregateActionScores, scoreAction } from '../../../domain/training/actionScoring'
 import {
   ACTION_SCORING_VERSION,
   type ActionMotion,
   type ActionStandard,
   type ScoredActionResult
-} from '../../domain/training/actionScoringTypes'
+} from '../../../domain/training/actionScoringTypes'
 import {
   buildVisualWorkoutTimeline,
-  initialStartCountdownSeconds,
   initialPreviewDurationSeconds,
+  resolveCountdownDuration,
+  resolvePretrainingMode,
   resolveVisualWorkoutState,
-  startCueCountdownSeconds,
   type VisualTrainingPlaybackState,
   type VisualWorkoutPhaseKind,
+  type VisualWorkoutPhaseSlot,
   type VisualWorkoutState
-} from '../../features/training/visualWorkoutTimeline'
+} from '../../../features/training/visualWorkoutTimeline'
+import {
+  resolveArrangementTtsAudioUrls,
+  resolveTrainingCountdownAudioUrls,
+  resolveTrainingCountdownTtsCues,
+  resolveTrainingRestCountdownTtsCues,
+  resolveTrainingPhaseCompletionAudioUrls,
+  resolveTrainingPhaseDelayedTtsCues,
+  resolveTrainingPhaseStartAudioUrls,
+  resolveTrainingPhaseTtsCues
+} from '../../../features/training/trainingTtsConfig'
 
 export interface VisualTrainingCaptureApi {
   startRecord: () => Promise<void>
@@ -46,7 +58,33 @@ interface UseVisualTrainingSessionOptions {
   modality: ShallowRef<Exclude<TrainingModality, 'stair'>>
 }
 
+type PoseRecognitionStatus = 'idle' | 'preparing' | 'ready' | 'failed'
+
 const maxPoseAngleFrames = 18_000
+
+interface VisualVideoEventEnvelope {
+  token?: string
+  detail?: {
+    currentTime?: number
+    duration?: number
+  }
+}
+
+function readVideoEvent(event: unknown): VisualVideoEventEnvelope {
+  if (!event || typeof event !== 'object') return {}
+  const value = event as Record<string, unknown>
+  if ('token' in value || 'detail' in value) {
+    return {
+      token: typeof value.token === 'string' ? value.token : undefined,
+      detail: value.detail && typeof value.detail === 'object'
+        ? value.detail as VisualVideoEventEnvelope['detail']
+        : undefined
+    }
+  }
+  return {
+    detail: value as VisualVideoEventEnvelope['detail']
+  }
+}
 
 function toScore(value: number | string | null | undefined) {
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -59,14 +97,6 @@ function toRoundedScore(value: number) {
 
 function resolveStandardUrl(item: ExerciseArrangementItem) {
   return item.standard_data_url?.trim() || item.video.standard_data_url?.trim() || ''
-}
-
-function resolveStandardAudioUrls(standard: ActionStandard) {
-  return [
-    ...Object.values(standard.countdown_audio_urls ?? {}),
-    ...Object.values(standard.transition_audio_urls ?? {}),
-    ...(standard.tts_cues ?? []).map(cue => cue.audio_url)
-  ]
 }
 
 function buildActionMotion(angleFrames: PoseAngleFrame[]): ActionMotion | null {
@@ -117,6 +147,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const cachedVideoPaths = shallowRef<Record<string, string>>({})
   const activeItemIndex = shallowRef(0)
   const phaseKind = shallowRef<VisualWorkoutPhaseKind>('preview')
+  const phaseSlot = shallowRef<VisualWorkoutPhaseSlot>('preview')
   const phaseRemainingSeconds = shallowRef(0)
   const trainingStarted = shallowRef(false)
   const startCountdown = shallowRef(0)
@@ -134,6 +165,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const tutorialIndex = shallowRef(0)
   const tutorialText = shallowRef('')
   const tutorialRecords = shallowRef<ExerciseRecordBrief[]>([])
+  const tutorialVideoUrlOverride = shallowRef('')
   const tutorialVideoControllable = shallowRef(false)
   const tutorialLoading = shallowRef(false)
 
@@ -141,6 +173,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const recordSeconds = shallowRef(0)
   const recordedVideoPath = shallowRef('')
   const recognitionEnabled = shallowRef(false)
+  const recognitionStatus = shallowRef<PoseRecognitionStatus>('idle')
   const recognitionFps = shallowRef<5 | 10>(5)
   const livePoseFps = shallowRef(0)
   const poseFallbackSampling = shallowRef(false)
@@ -158,19 +191,43 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   let startCountdownTimer: ReturnType<typeof setInterval> | null = null
   let cacheWarmupTimer: ReturnType<typeof setTimeout> | null = null
   let videoRequestId = 0
+  let tutorialRequestId = 0
+  let videoPhaseGeneration = 0
+  let phaseClockGeneration = 0
+  let phaseDeadlineMs: number | null = null
+  let phaseRemainingExactSeconds = 0
+  let startCountdownDeadlineMs: number | null = null
+  let practiceStartPending = false
+  let preserveStartCountdownAudio = false
+  let startedMediaGuidanceToken = ''
+
+  function clockNowMs() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now()
+  }
 
   const activeItem = computed(() => arrangement.value?.items?.[activeItemIndex.value] ?? null)
   const primaryVideoId = computed(() => arrangement.value?.items?.[0]?.video_id)
   const exerciseVideo = computed<ExerciseVideoSummary | null>(() => activeItem.value?.video ?? null)
   const sourceVideoUrl = computed(() => exerciseVideo.value?.video_file?.trim() ?? '')
   const videoUrl = computed(() => cachedVideoPaths.value[sourceVideoUrl.value] ?? sourceVideoUrl.value)
+  const videoEventToken = computed(() => (
+    `${videoPhaseGeneration}:${phaseSlot.value}:${activeItemIndex.value}:${videoUrl.value}`
+  ))
+  const recognitionReady = computed(() => recognitionStatus.value === 'ready')
 
   // ── Tutorial computed ──
   const tutorialItem = computed(() => arrangement.value?.items?.[tutorialIndex.value] ?? null)
   const tutorialVideo = computed<ExerciseVideoSummary | null>(() => tutorialItem.value?.video ?? null)
   const tutorialSourceUrl = computed(() => {
     const v = tutorialVideo.value
-    return (v?.tutorial_video_url?.trim() || v?.video_file?.trim() || '').trim()
+    return (
+      tutorialVideoUrlOverride.value
+      || v?.tutorial_video_url?.trim()
+      || v?.video_file?.trim()
+      || ''
+    ).trim()
   })
   const tutorialVideoUrl = computed(() => cachedVideoPaths.value[tutorialSourceUrl.value] ?? tutorialSourceUrl.value)
   const tutorialTotalActions = computed(() => arrangement.value?.items.length ?? 0)
@@ -185,6 +242,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     current: {
       id: 'loading',
       kind: 'preview',
+      slot: 'preview',
       itemIndex: 0,
       actionNumber: 1,
       totalActions: 1,
@@ -213,7 +271,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     && Boolean(videoUrl.value)
     && !videoError.value
     && !videoLoading.value
-    && actionScores.value.length > 0
     && !completing.value
   ))
   const completionHint = computed(() => {
@@ -225,11 +282,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (!recognitionEnabled.value) return '请先开启相机，识别动作后再开始训练'
     if (startCountdown.value > 0) return `${startCountdown.value} 秒后开始准备`
     if (phaseKind.value === 'preview') return `${phaseRemainingSeconds.value} 秒后开始 ${exerciseVideo.value?.title ?? '动作'}`
+    if (phaseKind.value === 'demonstration') return `正在完整预训练示范：${exerciseVideo.value?.title ?? '动作'}`
     if (phaseKind.value === 'rest') return `休息 ${phaseRemainingSeconds.value} 秒，准备下一动作`
-    if (phaseKind.value === 'demonstration') return `观看 ${exerciseVideo.value?.title ?? '下一动作'} 示范，暂时不用跟练`
-    if (phaseKind.value === 'countdown') return `${phaseRemainingSeconds.value} 秒后开始跟练`
-    if (!videoEnded.value) return `动作 ${activeItemIndex.value + 1}/${arrangement.value?.items.length ?? 0}，完整跟随视频训练`
-    if (actionScores.value.length === 0) return '暂未识别到有效动作，请调整相机位置后重试本次训练'
+    if (phaseKind.value === 'countdown') {
+      return phaseSlot.value === 'pretraining-countdown'
+        ? `${phaseRemainingSeconds.value} 秒后开始预训练示范`
+        : `${phaseRemainingSeconds.value} 秒后开始正式训练`
+    }
+    if (!videoEnded.value) return `动作 ${activeItemIndex.value + 1}/${arrangement.value?.items.length ?? 0}，正式训练中`
     if (completing.value) return '正在保存训练记录'
     return '教学视频已完成，可以提交训练'
   })
@@ -242,10 +302,12 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function clearPhaseTimer() {
+    phaseClockGeneration += 1
     if (phaseTimer) {
       clearInterval(phaseTimer)
       phaseTimer = null
     }
+    phaseDeadlineMs = null
   }
 
   function clearStartCountdownTimer() {
@@ -253,6 +315,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       clearInterval(startCountdownTimer)
       startCountdownTimer = null
     }
+    startCountdownDeadlineMs = null
   }
 
   function clearCacheWarmupTimer() {
@@ -264,92 +327,181 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
   function syncSessionProgress() {
     const phase = workoutTimeline.value.find(item => (
-      item.itemIndex === activeItemIndex.value && item.kind === phaseKind.value
+      item.itemIndex === activeItemIndex.value && item.slot === phaseSlot.value
     ))
     if (!phase) return
 
     const phaseDuration = phase.endSeconds - phase.startSeconds
-    const elapsed = Math.max(0, phaseDuration - phaseRemainingSeconds.value)
+    const elapsed = Math.max(0, phaseDuration - phaseRemainingExactSeconds)
     sessionProgressSeconds.value = phase.startSeconds + elapsed
   }
 
-  function playCountdownSequence() {
-    const urls = activeStandard()?.countdown_audio_urls
-    ttsPlayer.replace([
-      urls?.['3'] ?? '',
-      urls?.['2'] ?? '',
-      urls?.['1'] ?? ''
-    ])
+  function setPhaseRemaining(seconds: number) {
+    phaseRemainingExactSeconds = Math.max(0, Number.isFinite(seconds) ? seconds : 0)
+    phaseRemainingSeconds.value = Math.ceil(phaseRemainingExactSeconds)
+    syncSessionProgress()
   }
 
-  function activeStandard() {
-    return actionStandards.value[activeItem.value?.id ?? 0]
+  function updatePhaseClock(generation: number) {
+    if (generation !== phaseClockGeneration || phaseDeadlineMs === null) return false
+    const remaining = Math.max(0, (phaseDeadlineMs - clockNowMs()) / 1000)
+    phaseRemainingExactSeconds = remaining
+    phaseRemainingSeconds.value = Math.ceil(remaining)
+    syncSessionProgress()
+    syncTimedTrainingGuidance()
+    return remaining <= 0
   }
 
-  function playStartCue() {
-    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.start ?? ''])
+  function playCountdownSequence(
+    duration: number,
+    preserveIntoFormalTraining = false
+  ) {
+    const cues = resolveTrainingCountdownTtsCues(
+      arrangement.value?.countdown_tts_cues,
+      duration
+    )
+    preserveStartCountdownAudio = preserveIntoFormalTraining && cues.length > 0
+    // The clock synchronizes the 3/2/1 speech at its actual remaining-second
+    // boundary. Clearing here prevents a prompt from a previous module from
+    // leaking into a newly displayed countdown.
+    ttsPlayer.reset()
   }
 
-  function playEndCue() {
-    pendingEndCue = ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.end ?? ''])
+  function pretrainingGuidanceCues() {
+    return resolveTrainingPhaseTtsCues(activeItem.value, 'PRETRAINING', {
+      phaseDurationSeconds: Math.max(1, videoDurationSeconds.value)
+    })
   }
 
-  function playNextActionCue() {
-    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.next_action ?? ''])
+  function formalGuidanceCues() {
+    return resolveTrainingPhaseTtsCues(activeItem.value, 'FORMAL', {
+      phaseDurationSeconds: Math.max(1, activeItem.value?.expected_duration ?? 1)
+    })
   }
 
-  function playRestNextActionCue() {
-    ttsPlayer.enqueue([activeStandard()?.transition_audio_urls?.rest_next_action ?? ''])
+  function restGuidanceCues() {
+    // A rest module belongs to the action that just completed. The active
+    // index already points at the next action while that module is visible.
+    const completedItem = arrangement.value?.items?.[activeItemIndex.value - 1]
+    const restDuration = Math.max(0, completedItem?.rest_duration ?? 0)
+    return resolveTrainingPhaseTtsCues(completedItem, 'REST', {
+      phaseDurationSeconds: restDuration,
+      countdownDurationSeconds: Math.min(
+        restDuration,
+        resolveCountdownDuration(completedItem?.rest_countdown_duration)
+      )
+    })
   }
 
-  function syncActiveGuidance() {
-    if (phaseKind.value !== 'active') return
-    const actionDuration = Math.max(1, activeItem.value?.expected_duration ?? 1)
-    const elapsedSeconds = Math.max(0, actionDuration - phaseRemainingSeconds.value)
-    ttsPlayer.sync(activeStandard()?.tts_cues ?? [], elapsedSeconds)
+  function restCountdownGuidanceCues() {
+    const completedItem = arrangement.value?.items?.[activeItemIndex.value - 1]
+    const hasEmbeddedCountdown = (completedItem?.training_tts_cues ?? []).some(cue => (
+      cue.phase === 'REST'
+      && cue.includes_embedded_countdown === true
+      && cue.text.trim().length > 0
+      && cue.audio_url.trim().length > 0
+    ))
+    if (hasEmbeddedCountdown) return []
+    return resolveTrainingRestCountdownTtsCues(
+      arrangement.value?.countdown_tts_cues,
+      completedItem?.rest_duration ?? 0,
+      completedItem?.rest_countdown_duration ?? 0
+    )
+  }
+
+  function queuePhaseStartGuidance(cues: ReturnType<typeof pretrainingGuidanceCues>, prefixUrls: string[] = []) {
+    const audioUrls = [
+      ...prefixUrls,
+      ...resolveTrainingPhaseStartAudioUrls(cues)
+    ]
+    if (audioUrls.length > 0) ttsPlayer.enqueue(audioUrls)
+  }
+
+  function startMediaGuidanceAfterNativePlay() {
+    if (phaseKind.value !== 'demonstration' && phaseKind.value !== 'active') return
+    const itemId = activeItem.value?.id
+    if (!itemId) return
+    const token = `${videoPhaseGeneration}:${phaseSlot.value}:${itemId}`
+    if (startedMediaGuidanceToken === token) return
+    startedMediaGuidanceToken = token
+
+    queuePhaseStartGuidance(
+      phaseKind.value === 'demonstration'
+        ? pretrainingGuidanceCues()
+        : formalGuidanceCues()
+    )
+  }
+
+  function syncDemonstrationGuidance(currentTime: number) {
+    if (phaseKind.value !== 'demonstration' || phaseSlot.value !== 'pretraining') return
+    ttsPlayer.sync(
+      resolveTrainingPhaseDelayedTtsCues(pretrainingGuidanceCues()),
+      Math.max(0, currentTime)
+    )
+  }
+
+  function syncTimedTrainingGuidance() {
+    if (phaseKind.value === 'countdown') {
+      const duration = phaseSlot.value === 'pretraining-countdown'
+        ? resolveCountdownDuration(activeItem.value?.pretraining_countdown_duration)
+        : resolveCountdownDuration(activeItem.value?.formal_countdown_duration)
+      ttsPlayer.sync(
+        resolveTrainingCountdownTtsCues(arrangement.value?.countdown_tts_cues, duration),
+        Math.max(0, duration - phaseRemainingExactSeconds)
+      )
+      return
+    }
+
+    if (phaseKind.value === 'active' && phaseSlot.value === 'formal-training') {
+      const duration = Math.max(1, activeItem.value?.expected_duration ?? 1)
+      ttsPlayer.sync(
+        resolveTrainingPhaseDelayedTtsCues(formalGuidanceCues()),
+        Math.max(0, duration - phaseRemainingExactSeconds)
+      )
+      return
+    }
+
+    if (phaseKind.value === 'rest' && phaseSlot.value === 'rest') {
+      const previousItem = arrangement.value?.items?.[activeItemIndex.value - 1]
+      const duration = Math.max(0, previousItem?.rest_duration ?? 0)
+      ttsPlayer.sync(
+        [
+          ...resolveTrainingPhaseDelayedTtsCues(restGuidanceCues()),
+          ...restCountdownGuidanceCues()
+        ],
+        Math.max(0, duration - phaseRemainingExactSeconds)
+      )
+    }
   }
 
   function startPhaseTimer(onComplete: () => void) {
     clearPhaseTimer()
-    syncSessionProgress()
-    phaseTimer = setInterval(() => {
-      phaseRemainingSeconds.value = Math.max(0, phaseRemainingSeconds.value - 1)
-      syncSessionProgress()
-      syncActiveGuidance()
-      if (
-        (phaseKind.value === 'preview' || phaseKind.value === 'countdown')
-        && phaseRemainingSeconds.value === startCueCountdownSeconds
-      ) {
-        playCountdownSequence()
-      }
-      if (phaseKind.value === 'active' && phaseRemainingSeconds.value === 3) {
-        playCountdownSequence()
-      }
-      if (phaseKind.value === 'active' && phaseRemainingSeconds.value === 0) {
-        playEndCue()
-      }
-      if (phaseRemainingSeconds.value === 0) {
-        clearPhaseTimer()
-        onComplete()
-      }
-    }, 1000)
+    const duration = phaseRemainingExactSeconds > 0
+      ? phaseRemainingExactSeconds
+      : Math.max(0, phaseRemainingSeconds.value)
+    if (duration <= 0) {
+      onComplete()
+      return
+    }
+
+    const generation = phaseClockGeneration
+    phaseDeadlineMs = clockNowMs() + duration * 1000
+    const tick = () => {
+      if (!updatePhaseClock(generation)) return
+      clearPhaseTimer()
+      onComplete()
+    }
+    tick()
+    if (phaseDeadlineMs !== null) {
+      phaseTimer = setInterval(tick, 200)
+    }
   }
 
-  function resumeCurrentPhaseTimer() {
-    if (phaseKind.value === 'preview') {
-      startPhaseTimer(beginActiveItem)
-      return
+  function pausePhaseTimer() {
+    if (phaseDeadlineMs !== null) {
+      updatePhaseClock(phaseClockGeneration)
     }
-    if (phaseKind.value === 'rest') {
-      startPhaseTimer(beginDemonstration)
-      return
-    }
-    if (phaseKind.value === 'countdown') {
-      startPhaseTimer(beginActiveItem)
-      return
-    }
-    if (phaseKind.value === 'demonstration') return
-    startPhaseTimer(beginRestOrNextItem)
+    clearPhaseTimer()
   }
 
   function rememberCachedVideo(url: string, filePath: string, itemIndex: number) {
@@ -450,16 +602,12 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     })
     actionStandards.value = standards
 
-    const firstStandard = standards[nextArrangement.items[0]?.id ?? 0]
-    if (firstStandard) {
-      await ttsPlayer.preload(resolveStandardAudioUrls(firstStandard))
-    }
-    const laterAudioUrls = nextArrangement.items
-      .slice(1)
-      .flatMap(item => {
-        const standard = standards[item.id]
-        return standard ? resolveStandardAudioUrls(standard) : []
-      })
+    const firstAudioUrls = [
+      ...resolveTrainingCountdownAudioUrls(nextArrangement.countdown_tts_cues, 3),
+      ...resolveArrangementTtsAudioUrls(nextArrangement.items.slice(0, 1))
+    ]
+    await ttsPlayer.preload(firstAudioUrls)
+    const laterAudioUrls = resolveArrangementTtsAudioUrls(nextArrangement.items.slice(1))
     void ttsPlayer.preload(laterAudioUrls)
   }
 
@@ -505,47 +653,115 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     }
   }
 
-  function beginActiveItem() {
+  function beginFormalTraining() {
     clearPhaseTimer()
+    videoPhaseGeneration += 1
+    startedMediaGuidanceToken = ''
     currentActionFrames.value = []
     phaseKind.value = 'active'
-    phaseRemainingSeconds.value = Math.max(1, activeItem.value?.expected_duration ?? 1)
+    phaseSlot.value = 'formal-training'
+    setPhaseRemaining(Math.max(1, activeItem.value?.expected_duration ?? 1))
     videoProgressSeconds.value = 0
     videoDurationSeconds.value = exerciseVideo.value?.duration ?? 0
     playbackState.value = 'idle'
     videoAutoplay.value = true
-    ttsPlayer.resetTimeline()
+    // Keep the action-level 3-2-1 sequence intact when it crosses the phase
+    // boundary. All other transitions still clear their stale prompts.
+    if (preserveStartCountdownAudio) {
+      preserveStartCountdownAudio = false
+      ttsPlayer.resetTimeline()
+    } else {
+      ttsPlayer.reset()
+    }
     pendingEndCue = undefined
     syncSessionProgress()
-    playStartCue()
-    syncActiveGuidance()
-    startPhaseTimer(beginRestOrNextItem)
   }
 
-  function beginPreview() {
+  function beginFormalCountdownOrTraining() {
+    clearPhaseTimer()
+    videoPhaseGeneration += 1
+    const countdownDuration = resolveCountdownDuration(
+      activeItem.value?.formal_countdown_duration
+    )
+    if (countdownDuration <= 0) {
+      beginFormalTraining()
+      return
+    }
+
+    phaseKind.value = 'countdown'
+    phaseSlot.value = 'formal-countdown'
+    setPhaseRemaining(countdownDuration)
+    playbackState.value = 'idle'
+    videoAutoplay.value = false
+    playCountdownSequence(countdownDuration, true)
+    startPhaseTimer(beginFormalTraining)
+  }
+
+  function beginPretraining() {
     clearPhaseTimer()
     clearStartCountdownTimer()
-    activeItemIndex.value = 0
-    phaseKind.value = 'preview'
-    phaseRemainingSeconds.value = initialPreviewDurationSeconds
+    videoPhaseGeneration += 1
+    startedMediaGuidanceToken = ''
+    preserveStartCountdownAudio = false
+
+    if (resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'NONE') {
+      beginFormalCountdownOrTraining()
+      return
+    }
+
+    videoError.value = ''
+    videoProgressSeconds.value = 0
+    videoDurationSeconds.value = Math.max(
+      1,
+      exerciseVideo.value?.duration ?? activeItem.value?.expected_duration ?? 1
+    )
+    phaseKind.value = 'demonstration'
+    phaseSlot.value = 'pretraining'
+    setPhaseRemaining(videoDurationSeconds.value)
     playbackState.value = 'idle'
     videoAutoplay.value = true
-    playNextActionCue()
-    syncSessionProgress()
-    startPhaseTimer(beginActiveItem)
+    ttsPlayer.reset()
+  }
+
+  function beginPretrainingCountdownOrPretraining() {
+    clearPhaseTimer()
+    videoPhaseGeneration += 1
+    if (resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'NONE') {
+      beginFormalCountdownOrTraining()
+      return
+    }
+    const countdownDuration = resolveCountdownDuration(
+      activeItem.value?.pretraining_countdown_duration
+    )
+    if (countdownDuration <= 0) {
+      beginPretraining()
+      return
+    }
+
+    phaseKind.value = 'countdown'
+    phaseSlot.value = 'pretraining-countdown'
+    setPhaseRemaining(countdownDuration)
+    playbackState.value = 'idle'
+    videoAutoplay.value = false
+    playCountdownSequence(countdownDuration)
+    startPhaseTimer(beginPretraining)
   }
 
   function startTraining() {
-    if (!recognitionEnabled.value) {
+    if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {
-        void uni.showToast({ title: '请先开启相机', icon: 'none' })
+        void uni.showToast({
+          title: recognitionStatus.value === 'failed'
+            ? '相机准备失败，请退出后重试'
+            : '正在准备相机，请稍候',
+          icon: 'none'
+        })
       }
       return
     }
 
     if (
       trainingStarted.value
-      || startCountdownTimer
       || !arrangement.value
       || !videoUrl.value
       || videoLoading.value
@@ -553,70 +769,58 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     ) return
 
     trainingStarted.value = true
-    startCountdown.value = initialStartCountdownSeconds
-    videoAutoplay.value = false
-    playbackState.value = 'idle'
-    playCountdownSequence()
+    startCountdown.value = 0
+    beginFirstAction()
+  }
+
+  function beginFirstAction() {
     clearStartCountdownTimer()
-    startCountdownTimer = setInterval(() => {
-      startCountdown.value = Math.max(0, startCountdown.value - 1)
-      if (startCountdown.value === 0) beginPreview()
-    }, 1000)
-  }
-
-  function beginStartCue() {
     clearPhaseTimer()
-    phaseKind.value = 'countdown'
-    phaseRemainingSeconds.value = startCueCountdownSeconds
-    playbackState.value = 'idle'
-    videoAutoplay.value = false
-    playCountdownSequence()
-    syncSessionProgress()
-    startPhaseTimer(beginActiveItem)
-  }
-
-  function beginDemonstration() {
-    clearPhaseTimer()
-    videoError.value = ''
-    videoProgressSeconds.value = 0
-    videoDurationSeconds.value = exerciseVideo.value?.duration ?? 0
-    if (videoDurationSeconds.value <= 0) {
-      beginStartCue()
-      return
-    }
-    phaseKind.value = 'demonstration'
-    phaseRemainingSeconds.value = videoDurationSeconds.value
-    playbackState.value = 'idle'
-    videoAutoplay.value = true
-    playNextActionCue()
-    syncSessionProgress()
+    activeItemIndex.value = 0
+    beginPretrainingCountdownOrPretraining()
   }
 
   function beginRestOrNextItem() {
     finalizeActiveAction()
+    const completedItem = activeItem.value
+    const formalCompletionAudioUrls = resolveTrainingPhaseCompletionAudioUrls(
+      completedItem,
+      'FORMAL'
+    )
     const isLastItem = activeItemIndex.value >= (arrangement.value?.items?.length ?? 0) - 1
     if (isLastItem) {
       videoAutoplay.value = false
       videoEnded.value = true
       playbackState.value = 'ended'
       sessionProgressSeconds.value = workoutTimeline.value.at(-1)?.endSeconds ?? 0
+      ttsPlayer.reset()
+      pendingEndCue = ttsPlayer.enqueue(formalCompletionAudioUrls)
       void finishSessionAfterPlayback(pendingEndCue)
       return
     }
 
     activeItemIndex.value += 1
+    videoPhaseGeneration += 1
+    startedMediaGuidanceToken = ''
     phaseKind.value = 'rest'
-    phaseRemainingSeconds.value = Math.max(0, arrangement.value?.items?.[activeItemIndex.value - 1]?.rest_duration ?? 0)
+    phaseSlot.value = 'rest'
+    const previousItem = arrangement.value?.items?.[activeItemIndex.value - 1]
+    const restDuration = Math.max(0, previousItem?.rest_duration ?? 0)
+    setPhaseRemaining(restDuration)
     playbackState.value = 'idle'
     videoAutoplay.value = false
     void prefetchVideoWindow(activeItemIndex.value)
     syncSessionProgress()
-    if (phaseRemainingSeconds.value === 0) {
-      beginDemonstration()
+    if (phaseRemainingExactSeconds <= 0) {
+      ttsPlayer.reset()
+      beginPretrainingCountdownOrPretraining()
       return
     }
-    playRestNextActionCue()
-    startPhaseTimer(beginDemonstration)
+    ttsPlayer.reset()
+    queuePhaseStartGuidance(restGuidanceCues(), formalCompletionAudioUrls)
+    startPhaseTimer(() => {
+      beginPretrainingCountdownOrPretraining()
+    })
   }
 
   async function stopRecording() {
@@ -642,6 +846,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     activeItemIndex.value = 0
     cachedVideoPaths.value = {}
     phaseKind.value = 'preview'
+    phaseSlot.value = 'preview'
+    phaseRemainingExactSeconds = initialPreviewDurationSeconds
     phaseRemainingSeconds.value = initialPreviewDurationSeconds
     trainingStarted.value = false
     startCountdown.value = 0
@@ -658,6 +864,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     tutorialIndex.value = 0
     tutorialText.value = ''
     tutorialRecords.value = []
+    tutorialVideoUrlOverride.value = ''
+    tutorialRequestId += 1
+    practiceStartPending = false
+    preserveStartCountdownAudio = false
+    startedMediaGuidanceToken = ''
     clearPhaseTimer()
     clearStartCountdownTimer()
     clearCacheWarmupTimer()
@@ -674,6 +885,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       } else {
         await preloadActionStandards(nextArrangement, requestId)
         if (requestId !== videoRequestId) return
+        phaseRemainingExactSeconds = initialPreviewDurationSeconds
         phaseRemainingSeconds.value = initialPreviewDurationSeconds
         syncSessionProgress()
         await restoreCachedVideo(0)
@@ -681,7 +893,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         // Enter tutorial mode after arrangement loads
         tutorialMode.value = true
         tutorialIndex.value = 0
-        await loadTutorialData(0)
+        // Tutorial text and history are optional. Do not keep the training
+        // controls unavailable while that secondary request is in flight.
+        void loadTutorialData(0)
       }
     } catch (error) {
       if (requestId !== videoRequestId) return
@@ -703,32 +917,42 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     const item = arrangement.value?.items?.[index]
     if (!item) return
 
+    const requestId = ++tutorialRequestId
+    const initialTutorialText = item.video.tutorial_text?.trim() ?? ''
+
     // Use tutorial_text from the arrangement item if available, otherwise fetch from API
-    const video = item.video
-    if (video.tutorial_text) {
-      tutorialText.value = video.tutorial_text
-    } else {
-      tutorialText.value = ''
-    }
+    tutorialText.value = initialTutorialText
 
     tutorialRecords.value = []
+    tutorialVideoUrlOverride.value = ''
     tutorialLoading.value = true
     try {
       const loadTutorial = studentBackendSync.loadExerciseVideoTutorial
       if (typeof loadTutorial !== 'function') return
 
       const resp = await loadTutorial(item.video_id)
+      const isCurrentTutorial = requestId === tutorialRequestId
+        && tutorialMode.value
+        && tutorialIndex.value === index
+        && arrangement.value?.items?.[index]?.video_id === item.video_id
+      if (!isCurrentTutorial || !resp || resp.video_id !== item.video_id) return
+
       if (resp) {
-        if (!tutorialText.value && resp.tutorial_text) {
+        if (!initialTutorialText && resp.tutorial_text) {
           tutorialText.value = resp.tutorial_text
         }
         tutorialRecords.value = resp.recent_records ?? []
+        tutorialVideoUrlOverride.value = resp.tutorial_video_url?.trim() ?? ''
       }
     } catch (error) {
       // Tutorial API is optional - silently ignore errors
-      console.warn('[VisualSession] tutorial load failed:', error)
+      if (requestId === tutorialRequestId) {
+        console.warn('[VisualSession] tutorial load failed:', error)
+      }
     } finally {
-      tutorialLoading.value = false
+      if (requestId === tutorialRequestId) {
+        tutorialLoading.value = false
+      }
     }
   }
 
@@ -748,45 +972,76 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // Exit tutorial mode and start the practice session
     tutorialMode.value = false
     activeItemIndex.value = 0
-    // Start the actual training
-    startTraining()
+    requestPracticeStart()
   }
 
   function skipTutorial() {
     // Skip directly to practice without watching all tutorials
     tutorialMode.value = false
     activeItemIndex.value = 0
-    startTraining()
+    requestPracticeStart()
+  }
+
+  function requestPracticeStart() {
+    practiceStartPending = true
+    // The pose view is deliberately unmounted in tutorial mode. Always wait
+    // for the fresh instance to report readiness rather than trusting a stale
+    // ready state from an earlier mount.
+    recognitionStatus.value = 'preparing'
+    recognitionEnabled.value = true
   }
 
 
+  function isCurrentVideoEvent(event: unknown) {
+    const envelope = readVideoEvent(event)
+    return envelope.token === videoEventToken.value
+  }
+
   function handleVideoTimeUpdate(event: unknown) {
-    if (phaseKind.value !== 'active' && phaseKind.value !== 'demonstration') return
-    const videoEvent = event as { detail?: { currentTime?: number; duration?: number } }
-    const currentTime = videoEvent.detail?.currentTime
-    const duration = videoEvent.detail?.duration
+    if (
+      (phaseKind.value !== 'active' && phaseKind.value !== 'demonstration')
+      || !isCurrentVideoEvent(event)
+    ) return
+    const currentTime = readVideoEvent(event).detail?.currentTime
+    const duration = readVideoEvent(event).detail?.duration
     if (typeof currentTime === 'number' && Number.isFinite(currentTime)) {
       videoProgressSeconds.value = currentTime
     }
     if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
       videoDurationSeconds.value = duration
     }
-    if (phaseKind.value === 'demonstration' && typeof currentTime === 'number') {
-      phaseRemainingSeconds.value = Math.max(0, Math.ceil(videoDurationSeconds.value - currentTime))
-      syncSessionProgress()
+    if (
+      phaseKind.value === 'demonstration'
+      && typeof currentTime === 'number'
+      && Number.isFinite(currentTime)
+    ) {
+      setPhaseRemaining(Math.max(0, videoDurationSeconds.value - currentTime))
+      // Pretraining guidance follows the actual native media position. Formal
+      // and rest prompts use their own backend-configured module timelines.
+      syncDemonstrationGuidance(currentTime)
     }
   }
 
-  function handleVideoPlay() {
+  function handleVideoPlay(event?: unknown) {
+    if (!isCurrentVideoEvent(event)) return
     if (!trainingStarted.value || videoEnded.value || !videoAutoplay.value) return
     playbackState.value = 'playing'
-    if (!phaseTimer) resumeCurrentPhaseTimer()
+    // This native event is the first point at which demonstration/formal
+    // speech may begin. It prevents a slow video load from causing TTS to
+    // speak before the matching media is actually visible.
+    startMediaGuidanceAfterNativePlay()
+    if (phaseKind.value === 'active' && !phaseTimer) {
+      // The action clock starts at the native play event, not when the Vue
+      // state flips to autoplay. Network/seek latency therefore cannot eat
+      // into the configured expected duration.
+      startPhaseTimer(beginRestOrNextItem)
+    }
   }
 
-  function handleVideoPause() {
-    if (videoAutoplay.value || playbackState.value === 'ended') return
-    if (phaseKind.value === 'rest' || phaseKind.value === 'countdown') return
-    clearPhaseTimer()
+  function handleVideoPause(event?: unknown) {
+    if (!isCurrentVideoEvent(event) || playbackState.value === 'ended') return
+    if (phaseKind.value !== 'active' && phaseKind.value !== 'demonstration') return
+    if (phaseKind.value === 'active') pausePhaseTimer()
     ttsPlayer.pause()
     playbackState.value = 'paused'
   }
@@ -804,7 +1059,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
     videoAutoplay.value = !videoAutoplay.value
     if (!videoAutoplay.value) {
-      clearPhaseTimer()
+      pausePhaseTimer()
+      ttsPlayer.pause()
       playbackState.value = 'paused'
     } else {
       playbackState.value = 'idle'
@@ -812,20 +1068,28 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function handleVideoEnded(event?: unknown) {
-    if (phaseKind.value === 'demonstration') {
-      beginStartCue()
-      return
-    }
-    if (phaseKind.value !== 'active') return
-    const videoEvent = event as { detail?: { duration?: number; currentTime?: number } } | undefined
-    const finalTime = videoEvent?.detail?.currentTime ?? videoEvent?.detail?.duration
+    if (!isCurrentVideoEvent(event)) return
+    const detail = readVideoEvent(event).detail
+    const finalTime = detail?.currentTime ?? detail?.duration
     if (typeof finalTime === 'number' && Number.isFinite(finalTime)) {
       videoProgressSeconds.value = finalTime
     }
-    playbackState.value = 'paused'
+    if (phaseKind.value === 'demonstration' && phaseSlot.value === 'pretraining') {
+      beginFormalCountdownOrTraining()
+      return
+    }
+    if (phaseKind.value !== 'active') return
+    // Active videos are looped by the panel. A native `ended` event is not a
+    // completion signal; the expected-duration clock is the sole transition
+    // authority. If a platform emits ended before play, start that clock now.
+    if (!phaseTimer && videoAutoplay.value) {
+      playbackState.value = 'playing'
+      startPhaseTimer(beginRestOrNextItem)
+    }
   }
 
-  function handleVideoError() {
+  function handleVideoError(event?: unknown) {
+    if (!isCurrentVideoEvent(event)) return
     const sourceUrl = sourceVideoUrl.value
     if (sourceUrl && videoUrl.value !== sourceUrl) {
       const nextCachedPaths = { ...cachedVideoPaths.value }
@@ -846,6 +1110,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     recognitionFps.value = fps
     livePoseFps.value = 0
     poseFallbackSampling.value = false
+    recognitionStatus.value = 'preparing'
     recognitionEnabled.value = true
   }
 
@@ -881,6 +1146,16 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function handlePoseStats(stats: { status: string; fps: number }) {
+    if (stats.status === 'ready') {
+      recognitionStatus.value = 'ready'
+      if (practiceStartPending) {
+        practiceStartPending = false
+        startTraining()
+      }
+    } else if (stats.status === 'failed') {
+      recognitionStatus.value = 'failed'
+      practiceStartPending = false
+    }
     poseFallbackSampling.value = stats.status === 'sampling' || stats.status === 'sampling-fallback'
     if (stats.fps > 0) {
       livePoseFps.value = stats.fps
@@ -901,15 +1176,15 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     await stopRecording()
 
     const durationSeconds = Math.max(
-      0,
-      Math.round(arrangement.value?.total_duration || videoProgressSeconds.value || 0)
+      1,
+      Math.round(
+        workoutTimeline.value.at(-1)?.endSeconds
+          ?? arrangement.value?.total_duration
+          ?? videoProgressSeconds.value
+          ?? 0
+      )
     )
     const scoring = buildSessionScoringResult(actionScores.value, scoringWarnings.value)
-    if (scoring.score === undefined) {
-      completionError.value = '暂未识别到有效动作，请调整相机位置后重试本次训练'
-      completing.value = false
-      return
-    }
     const basePoseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
     const poseAnalysis = basePoseAnalysis
       ? {
@@ -921,7 +1196,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           ...(scoring.scoreDetails ? { scoreDetails: scoring.scoreDetails } : {})
         }
       : undefined
-    let qualityScore = Math.round(scoring.score)
+    let qualityScore = scoring.score === undefined ? null : Math.round(scoring.score)
     let summary = scoring.summary
 
     try {
@@ -931,14 +1206,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         ...(primaryVideoId.value
           ? { videoId: primaryVideoId.value }
           : {}),
-        score: scoring.score,
+        ...(scoring.score !== undefined ? { score: scoring.score } : {}),
         comment: scoring.summary,
         ...(poseAnalysis ? { poseAnalysis } : {})
       })
 
       if (result.synced && result.record) {
         qualityScore = result.record.score === null || result.record.score === undefined
-          ? qualityScore
+          ? null
           : toScore(result.record.score)
         summary = result.record.comment?.trim() || (
           result.record.score !== null && result.record.score !== undefined
@@ -981,6 +1256,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   watch(options.modality, () => {
     void stopRecording()
     recognitionEnabled.value = false
+    recognitionStatus.value = 'idle'
     poseAngleFrames.value = []
     currentActionFrames.value = []
     actionStandards.value = {}
@@ -1012,10 +1288,13 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     videoError,
     videoEnded,
     videoUrl,
+    videoEventToken,
     recording,
     recordSeconds,
     recordedVideoPath,
     recognitionEnabled,
+    recognitionReady,
+    recognitionStatus,
     recognitionFps,
     livePoseFps,
     poseFallbackSampling,
@@ -1030,6 +1309,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     trainingStarted,
     startCountdown,
     phaseKind,
+    phaseSlot,
     phaseRemainingSeconds,
     // Tutorial exports
     tutorialMode,

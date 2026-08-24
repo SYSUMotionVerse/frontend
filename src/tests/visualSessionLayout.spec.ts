@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createVisualSessionLayout } from '../features/training/visualSessionLayout'
+import {
+  createVisualComparisonLayout,
+  createVisualSessionLayout
+} from '../subpackages/training/visualSessionLayout'
 
 describe('createVisualSessionLayout', () => {
   it('creates a narrower floating card on typical phone screens', () => {
@@ -70,5 +73,70 @@ describe('createVisualSessionLayout', () => {
     expect(layout.stageHeight).toBeGreaterThan(620)
     expect(layout.floatAreaHeight).toBe(layout.stageHeight)
     expect(layout.floatAreaHeight - layout.floatHeight).toBeGreaterThanOrEqual(300)
+  })
+
+  it('keeps both landscape comparison views at a 3:4 ratio on a 4:3 tablet', () => {
+    const layout = createVisualComparisonLayout({
+      pageWidth: 1024,
+      pageHeight: 768
+    })
+
+    expect(layout.mediaWidth).toBe(428)
+    expect(layout.mediaHeight).toBe(570)
+    expect(layout.mediaHeight / layout.mediaWidth).toBeCloseTo(4 / 3, 2)
+  })
+
+  it('uses the available height instead of stretching portrait frames on a wide phone', () => {
+    const layout = createVisualComparisonLayout({
+      pageWidth: 844,
+      pageHeight: 390
+    })
+
+    expect(layout.mediaWidth).toBe(271)
+    expect(layout.mediaHeight).toBe(361)
+    expect(layout.mediaHeight).toBeLessThanOrEqual(390 - 28)
+  })
+
+  it('keeps both media frames within a compact landscape phone viewport', () => {
+    const layout = createVisualComparisonLayout({
+      pageWidth: 568,
+      pageHeight: 320
+    })
+
+    expect(layout.mediaWidth).toBe(200)
+    expect(layout.mediaHeight).toBe(266)
+    expect(layout.mediaHeight).toBeLessThanOrEqual(320 - 28)
+  })
+
+  it('reserves landscape safe-area insets before sizing the comparison frames', () => {
+    const layout = createVisualComparisonLayout({
+      pageWidth: 568,
+      pageHeight: 320,
+      safeAreaInsets: {
+        left: 24,
+        right: 24,
+        top: 0,
+        bottom: 16
+      }
+    })
+
+    expect(layout.mediaWidth).toBe(176)
+    expect(layout.mediaHeight).toBe(234)
+    expect(layout.mediaHeight).toBeLessThanOrEqual(320 - 16 - 28)
+  })
+
+  it('never produces a negative media frame when safe areas consume the viewport', () => {
+    const layout = createVisualComparisonLayout({
+      pageWidth: 120,
+      pageHeight: 80,
+      safeAreaInsets: {
+        left: 60,
+        right: 60,
+        top: 40,
+        bottom: 40
+      }
+    })
+
+    expect(layout).toEqual({ mediaWidth: 0, mediaHeight: 0 })
   })
 })

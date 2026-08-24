@@ -21,7 +21,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toMatch(/<camera\s+[\s\S]*?v-else/)
   })
 
-  it('starts the camera automatically and keeps only the exit action at the bottom', () => {
+  it('starts the camera automatically without adding redundant recording controls', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -51,8 +51,8 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(infoIndex).toBeGreaterThan(cameraIndex)
     expect(source).toContain("type ActiveMedia = 'demonstration' | 'camera'")
     expect(source).toContain("const activeMedia = shallowRef<ActiveMedia>('demonstration')")
-    expect(source).toContain("@click.stop=\"selectMedia('demonstration')\"")
-    expect(source).toContain("@click.stop=\"selectMedia('camera')\"")
+    expect(source).toContain("@tap.stop=\"selectMedia('demonstration')\"")
+    expect(source).toContain("@tap.stop=\"selectMedia('camera')\"")
     expect(source).toContain('动作演示')
     expect(source).toContain('我的画面')
     expect(source).toContain("emit('startRecognition', 5)")
@@ -74,6 +74,10 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('visual-session__playback-control')
     expect(source).toContain('visual-session__position-guide')
     expect(source).toContain('站在框内')
+    expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__media-label"/)
+    expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__start-overlay"/)
+    expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__position-guide"/)
+    expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__playback-control"/)
   })
 
   it('uses a stable portrait 4:3 media stage followed by the training information', () => {
@@ -93,7 +97,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(shellSource).toContain("'training-shell--fit-viewport': props.fitViewport")
     expect(shellSource).toContain('<view v-if="props.fitViewport" class="training-shell__content">')
     expect(shellSource).toContain('<transition v-else name="shell-enter" appear>')
-    expect(pageSource).toContain('<view class="visual-session-page">')
+    expect(pageSource).toContain('class="visual-session-page"')
     expect(pageSource).toContain('class="visual-session-page__panel"')
     expect(pageSource).toMatch(
       /\.visual-session-page\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*auto;[\s\S]*min-height:\s*calc\(100vh - 24rpx\);/
@@ -123,7 +127,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(shellSource).toContain('overflow-y: auto;')
   })
 
-  it('keeps landscape comparison panels portrait-framed and puts controls in a right-side rail', () => {
+  it('keeps landscape status and controls together in the right-side rail', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -133,24 +137,60 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain(":class=\"{ 'visual-session--comparison': comparisonMode }\"")
     expect(source).not.toContain('@media (orientation: landscape)')
     expect(source).toContain('class="visual-session__comparison-layout"')
-    expect(source).toContain('v-if="comparisonMode" class="visual-session__comparison-actions"')
-    expect(source).toContain('v-if="!comparisonMode" class="visual-session__actions"')
+    expect(source).toContain('class="visual-session__comparison-actions"')
+    expect(source).toContain('class="visual-session__comparison-status"')
+    expect(source).toContain('class="visual-session__comparison-controls"')
+    expect(source).toContain('const comparisonStatus = computed(() => {')
+    expect(source).toContain('const comparisonMediaStyle = computed(() => {')
+    expect(source).toContain('const comparisonPoseMediaSize = computed(() => {')
+    expect(source).toContain(':media-size="comparisonPoseMediaSize"')
+    expect(source).toContain("label: '正在准备摄像头'")
+    expect(source).toContain("value: '准备中'")
+    expect(source).toContain(':style="comparisonMediaStyle"')
+    expect(source).toMatch(/\.visual-session__video,[\s\S]*?\.visual-session__video-state\s*\{[\s\S]*display:\s*block;/)
+    expect(source).toContain('v-if="startCountdown > 0 && !comparisonMode"')
+    expect(source).toContain('v-if="phaseCueCount && !comparisonMode"')
+    expect(source).toContain("phaseKind === 'active' && !comparisonMode")
+    expect(source).not.toContain('先观看完整动作，倒计时后开始跟练')
+    expect(source).toContain('v-if="!comparisonMode && !tutorialMode" class="visual-session__actions"')
     expect(source).toContain('class="visual-session__landscape-start"')
+    expect(source).toContain('class="visual-session__comparison-playback"')
     expect(source).toContain('class="visual-session__comparison-exit"')
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__comparison-layout--active\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*flex:\s*1;[\s\S]*gap:\s*16rpx;/
+      /\.visual-session--comparison \.visual-session__comparison-layout--active\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*flex:\s*1;[\s\S]*gap:\s*12px;/
     )
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__stage--comparison\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*flex:\s*1;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*space-between;/
+      /\.visual-session--comparison \.visual-session__stage--comparison\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*flex:\s*1;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;/
     )
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__stage--comparison \.visual-session__demonstration-stage,[\s\S]*?\.visual-session--comparison \.visual-session__stage--comparison \.visual-session__camera-stage\s*\{[\s\S]*width:\s*auto;[\s\S]*height:\s*100%;[\s\S]*max-width:\s*calc\(50% - 10rpx\);[\s\S]*aspect-ratio:\s*3\s*\/\s*4;/
+      /\.visual-session--comparison\s*\{[\s\S]*background:\s*#fcf7f0;/
     )
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__comparison-actions\s*\{[\s\S]*width:\s*144rpx;[\s\S]*flex:\s*0 0 144rpx;[\s\S]*flex-direction:\s*column;/
+      /\.visual-session--comparison \.visual-session__stage--comparison \.visual-session__demonstration-stage,[\s\S]*?\.visual-session--comparison \.visual-session__stage--comparison \.visual-session__camera-stage\s*\{[\s\S]*width:\s*auto;[\s\S]*height:\s*100%;[\s\S]*max-width:\s*calc\(50% - 6px\);[\s\S]*aspect-ratio:\s*3\s*\/\s*4;/
     )
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__landscape-start\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*88rpx;[\s\S]*flex:\s*0 0 auto;/
+      /\.visual-session--comparison \.visual-session__comparison-status\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;[\s\S]*flex:\s*0 0 auto;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__comparison-actions\s*\{[\s\S]*width:\s*112px;[\s\S]*flex:\s*0 0 112px;[\s\S]*justify-content:\s*space-between;[\s\S]*flex-direction:\s*column;[\s\S]*border-radius:\s*16px;[\s\S]*background:\s*#f5eee6;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__comparison-controls\s*\{[\s\S]*display:\s*flex;[\s\S]*width:\s*100%;[\s\S]*flex-direction:\s*column;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__landscape-start\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*48px;[\s\S]*border-radius:\s*999px;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__comparison-playback\s*\{[\s\S]*width:\s*46px;[\s\S]*min-height:\s*46px;[\s\S]*border-radius:\s*50%;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__comparison-exit\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*44px;[\s\S]*background:\s*transparent;[\s\S]*color:\s*#3d4a5c;/
+    )
+    expect(source).toMatch(
+      /\.visual-session__comparison-status-detail\s*\{[\s\S]*color:\s*#46556a;[\s\S]*font-size:\s*12px;/
+    )
+    expect(source).toMatch(
+      /\.visual-session--comparison \.visual-session__media-label\s*\{[\s\S]*font-size:\s*12px;[\s\S]*padding:\s*6px 8px;/
     )
   })
 })

@@ -192,19 +192,25 @@ export function createTrainingTtsPlayer(
       stopAudio()
       playedCueIndexes = new Set()
     },
-    resetTimeline() {
+    resetTimeline(options: { interrupt?: boolean } = {}) {
+      if (options.interrupt) {
+        clearQueuedAudio()
+        stopAudio()
+      }
       playedCueIndexes = new Set()
     },
     sync(cues: readonly ActionTtsCue[], elapsedSeconds: number) {
       if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) return
       const normalized = normalizeCues(cues)
-      const nextCueIndex = normalized.findIndex(
-        (cue, index) => cue.time <= elapsedSeconds && !playedCueIndexes.has(index)
-      )
-      if (nextCueIndex < 0) return
+      const dueCueIndexes = normalized
+        .map((cue, index) => ({ cue, index }))
+        .filter(({ cue, index }) => (
+          cue.time <= elapsedSeconds && !playedCueIndexes.has(index)
+        ))
+      if (dueCueIndexes.length === 0) return
 
-      playedCueIndexes.add(nextCueIndex)
-      enqueueAudioUrls([normalized[nextCueIndex].audio_url])
+      dueCueIndexes.forEach(({ index }) => playedCueIndexes.add(index))
+      enqueueAudioUrls(dueCueIndexes.map(({ cue }) => cue.audio_url))
     },
     playUrl(audioUrl: string) {
       clearQueuedAudio()

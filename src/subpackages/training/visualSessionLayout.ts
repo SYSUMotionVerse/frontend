@@ -1,3 +1,4 @@
+// This pure layout helper is owned exclusively by the visual-training subpackage.
 export interface VisualSessionLayoutInput {
   pageWidth: number
   pageHeight: number
@@ -14,6 +15,24 @@ export interface VisualSessionLayout {
   floatY: number
   videoHeight: number
   guideHeight: number
+}
+
+export interface VisualComparisonLayoutInput {
+  pageWidth: number
+  pageHeight: number
+  safeAreaInsets?: Partial<VisualSessionSafeAreaInsets>
+}
+
+export interface VisualComparisonLayout {
+  mediaWidth: number
+  mediaHeight: number
+}
+
+export interface VisualSessionSafeAreaInsets {
+  top: number
+  right: number
+  bottom: number
+  left: number
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -51,5 +70,44 @@ export function createVisualSessionLayout({
     floatY: clamp(Math.round(floatAreaHeight * 0.34), 32, maxY),
     videoHeight,
     guideHeight
+  }
+}
+
+export function createVisualComparisonLayout({
+  pageWidth,
+  pageHeight,
+  safeAreaInsets
+}: VisualComparisonLayoutInput): VisualComparisonLayout {
+  const pageHorizontalPadding = 32
+  const pageVerticalPadding = 28
+  const layoutGap = 12
+  const actionRailWidth = 112
+  const safeAreaLeft = clamp(safeAreaInsets?.left ?? 0, 0, pageWidth)
+  const safeAreaRight = clamp(safeAreaInsets?.right ?? 0, 0, pageWidth)
+  const safeAreaTop = clamp(safeAreaInsets?.top ?? 0, 0, pageHeight)
+  const safeAreaBottom = clamp(safeAreaInsets?.bottom ?? 0, 0, pageHeight)
+  const availableWidth = Math.max(0, pageWidth - safeAreaLeft - safeAreaRight)
+  const availableHeight = Math.max(0, pageHeight - safeAreaTop - safeAreaBottom)
+
+  const stageWidth = Math.max(
+    0,
+    availableWidth - pageHorizontalPadding - layoutGap - actionRailWidth
+  )
+  const mediaAvailableWidth = Math.max(
+    0,
+    stageWidth - layoutGap
+  )
+  const maxMediaWidthByHeight = Math.max(
+    0,
+    Math.floor((availableHeight - pageVerticalPadding) * 3 / 4)
+  )
+  const mediaWidth = Math.min(
+    Math.floor(mediaAvailableWidth / 2),
+    maxMediaWidthByHeight
+  )
+
+  return {
+    mediaWidth,
+    mediaHeight: Math.floor(mediaWidth * 4 / 3)
   }
 }
