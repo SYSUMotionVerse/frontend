@@ -81,6 +81,13 @@ export function continueRequiredQuestionnaire() {
   })
 }
 
+export function markProtectedStudentAccessComplete() {
+  accessState.value = {
+    level: 'execute',
+    questionnaireUrl: accessState.value.questionnaireUrl
+  }
+}
+
 export function resetProtectedStudentAccessForTests() {
   protectedAccessCheck = null
   accessState.value = {

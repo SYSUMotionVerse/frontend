@@ -11,6 +11,7 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { markProtectedStudentAccessComplete } from '../../composables/useNavigationGuard'
 import { useSubmissionHandoff } from '../../composables/useSubmissionHandoff'
 import { buildMiniProgramQueryString } from '../../platform/queryString'
 import {
@@ -240,6 +241,7 @@ async function finishCheckpoint(result: ConfirmedQuestionnaireSubmission['result
   try {
     if (!hasFinalizedCheckpoint) {
       store.submitLongQuestionnaire(checkpoint.value, 0, 100)
+      markProtectedStudentAccessComplete()
       hasFinalizedCheckpoint = true
     }
 

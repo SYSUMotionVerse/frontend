@@ -65,4 +65,25 @@ describe('questionnaire preview access', () => {
     expect(useProtectedAccessState().value.level).toBe('execute')
     expect(reLaunch).not.toHaveBeenCalled()
   })
+
+  it('unlocks execution immediately after the due questionnaire is completed', async () => {
+    bootstrapAccess.mockResolvedValue({
+      targetPage: 'questionnaire',
+      targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline',
+      checkpoint: 'baseline'
+    })
+    const {
+      ensureProtectedStudentAccess,
+      markProtectedStudentAccessComplete,
+      useProtectedAccessState
+    } = await import('../uni-app/composables/useNavigationGuard')
+
+    await ensureProtectedStudentAccess('browse')
+    markProtectedStudentAccessComplete()
+
+    expect(useProtectedAccessState().value.level).toBe('execute')
+    await expect(ensureProtectedStudentAccess('execute')).resolves.toBe(true)
+    expect(bootstrapAccess).toHaveBeenCalledOnce()
+    expect(reLaunch).not.toHaveBeenCalled()
+  })
 })
