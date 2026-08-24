@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createTrainingTtsPlayer } from '../uni-app/platform/trainingTts'
+import {
+  createTrainingTtsPlayer,
+  trainingTtsPlaybackRate
+} from '../uni-app/platform/trainingTts'
 
 function createAudioContext() {
   return {
     src: '',
     autoplay: false,
     obeyMuteSwitch: false,
+    playbackRate: 1,
     play: vi.fn(),
     stop: vi.fn(),
     destroy: vi.fn(),
@@ -131,6 +135,7 @@ describe('trainingTts', () => {
     expect(context.src).toBe('https://cdn.example.com/countdown.mp3')
     expect(context.play).toHaveBeenCalledOnce()
     expect(context.obeyMuteSwitch).toBe(false)
+    expect(context.playbackRate).toBe(trainingTtsPlaybackRate)
   })
 
   it('preloads remote audio and plays the local temporary file', async () => {

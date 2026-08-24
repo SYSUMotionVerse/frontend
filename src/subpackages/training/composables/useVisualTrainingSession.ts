@@ -1046,6 +1046,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     playbackState.value = 'paused'
   }
 
+  function handleVideoWaiting(event?: unknown) {
+    if (!isCurrentVideoEvent(event) || playbackState.value === 'ended') return
+    if (phaseKind.value !== 'active' && phaseKind.value !== 'demonstration') return
+    if (phaseKind.value === 'active') pausePhaseTimer()
+    ttsPlayer.pause()
+    playbackState.value = 'paused'
+  }
+
   function togglePlayback() {
     if (
       !trainingStarted.value
@@ -1332,6 +1340,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     handleVideoTimeUpdate,
     handleVideoPlay,
     handleVideoPause,
+    handleVideoWaiting,
     handleVideoEnded,
     handleVideoError,
     togglePlayback,

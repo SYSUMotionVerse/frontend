@@ -4,6 +4,7 @@ interface InnerAudioContextLike {
   src: string
   autoplay: boolean
   obeyMuteSwitch?: boolean
+  playbackRate?: number
   play?: () => void
   stop?: () => void
   destroy?: () => void
@@ -26,6 +27,7 @@ type WechatAudioFactory = typeof wx & {
 
 const audioDownloadTimeoutMs = 30_000
 const audioPreloadConcurrency = 4
+export const trainingTtsPlaybackRate = 0.88
 
 function normalizeCues(cues: readonly ActionTtsCue[]) {
   return cues
@@ -137,6 +139,7 @@ export function createTrainingTtsPlayer(
       audioContext = nextAudioContext
       nextAudioContext.autoplay = false
       nextAudioContext.obeyMuteSwitch = false
+      nextAudioContext.playbackRate = trainingTtsPlaybackRate
       nextAudioContext.src = preloadedSources.get(normalizedUrl) ?? normalizedUrl
       const dispose = (stopFirst = false) => {
         if (settled) return

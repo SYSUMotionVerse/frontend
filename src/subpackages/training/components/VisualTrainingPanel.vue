@@ -59,6 +59,7 @@ const emit = defineEmits<{
   videoTimeUpdate: [event: unknown]
   videoPlay: [event: unknown]
   videoPause: [event: unknown]
+  videoWaiting: [event: unknown]
   videoEnded: [event: unknown]
   videoError: [event: unknown]
   startRecognition: [fps: 5 | 10]
@@ -515,6 +516,7 @@ defineExpose({ startRecord, stopRecord })
           @timeupdate="emit('videoTimeUpdate', wrapVideoEvent($event))"
           @play="emit('videoPlay', wrapVideoEvent($event))"
           @pause="emit('videoPause', wrapVideoEvent($event))"
+          @waiting="emit('videoWaiting', wrapVideoEvent($event))"
           @loadedmetadata="syncVideoPlayback()"
           @ended="emit('videoEnded', wrapVideoEvent($event))"
           @error="emit('videoError', wrapVideoEvent($event))"
