@@ -94,6 +94,10 @@ export interface BackendPsychologyScaleSummary {
 
 export interface BackendQuestionnairePlan {
   checkpoint: CheckpointKey
+  scheduled_at: string | null
+  available: boolean
+  delay_days: number
+  is_late: boolean
   questionnaire_count: number
   completed_questionnaire_count: number
   estimated_total_minutes: number
@@ -115,6 +119,8 @@ export interface BackendPsychologyRecord {
   total_score: number | string | null
   percentage?: number | string | null
   analysis: string
+  scheduled_at?: string | null
+  delay_days?: number
   completed_at: string
   scale_info: BackendPsychologyScaleSummary | BackendPsychologyScale
 }
