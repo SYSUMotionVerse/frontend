@@ -266,11 +266,11 @@ describe('ui review fixes', () => {
 
   it('registers miniapp growth detail pages that the growth hub navigates to', () => {
     const uniPagesManifest = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/uni-app/pages.json'),
+      resolve('src/uni-app/pages.json'),
       'utf8'
     )
     const rootPagesManifest = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/pages.json'),
+      resolve('src/pages.json'),
       'utf8'
     )
 
@@ -285,10 +285,10 @@ describe('ui review fixes', () => {
   })
 
   it('keeps source wrapper pages for registered miniapp growth detail routes', () => {
-    const adherenceWrapper = '/Users/pi-dal/Developer/sport-snack/src/pages/growth/adherence.vue'
-    const achievementsWrapper = '/Users/pi-dal/Developer/sport-snack/src/pages/growth/achievements.vue'
-    const metricsWrapper = '/Users/pi-dal/Developer/sport-snack/src/pages/growth/metrics.vue'
-    const historyWrapper = '/Users/pi-dal/Developer/sport-snack/src/pages/growth/history.vue'
+    const adherenceWrapper = resolve('src/pages/growth/adherence.vue')
+    const achievementsWrapper = resolve('src/pages/growth/achievements.vue')
+    const metricsWrapper = resolve('src/pages/growth/metrics.vue')
+    const historyWrapper = resolve('src/pages/growth/history.vue')
 
     expect(existsSync(adherenceWrapper)).toBe(true)
     expect(existsSync(achievementsWrapper)).toBe(true)
@@ -326,31 +326,31 @@ describe('ui review fixes', () => {
 
   it('keeps miniapp-facing localized copy fully in Chinese on shared access and growth surfaces', () => {
     const growthIndexPage = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/uni-app/pages/growth/index.vue'),
+      resolve('src/uni-app/pages/growth/index.vue'),
       'utf8'
     )
     const resultCard = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/components/access/QuestionnaireResultCard.vue'),
+      resolve('src/components/access/QuestionnaireResultCard.vue'),
       'utf8'
     )
     const registrationForm = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/components/access/RegistrationForm.vue'),
+      resolve('src/components/access/RegistrationForm.vue'),
       'utf8'
     )
     const physicalMetricsPanel = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/components/growth/PhysicalMetricsPanel.vue'),
+      resolve('src/components/growth/PhysicalMetricsPanel.vue'),
       'utf8'
     )
     const questionnaireFeature = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/features/access/questionnaire.ts'),
+      resolve('src/features/access/questionnaire.ts'),
       'utf8'
     )
     const cameraPlatform = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/uni-app/platform/camera.ts'),
+      resolve('src/uni-app/platform/camera.ts'),
       'utf8'
     )
     const sensorPlatform = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/src/uni-app/platform/sensors.ts'),
+      resolve('src/uni-app/platform/sensors.ts'),
       'utf8'
     )
 
@@ -507,7 +507,7 @@ describe('ui review fixes', () => {
       'utf8'
     )
     const unoConfig = readFileSync(
-      resolve('/Users/pi-dal/Developer/sport-snack/uno.config.ts'),
+      resolve('uno.config.ts'),
       'utf8'
     )
 
