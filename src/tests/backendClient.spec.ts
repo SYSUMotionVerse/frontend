@@ -344,7 +344,8 @@ describe('backend client session handling', () => {
       training_session_id: 'visual-session-123',
       modality: 'MARTIAL_ARTS',
       video_id: 9,
-      arrangement_id: 3
+      arrangement_id: 3,
+      arrangement_fingerprint: 'a'.repeat(64)
     })
 
     expect(uniMock.request).toHaveBeenCalledWith(expect.objectContaining({
@@ -354,7 +355,8 @@ describe('backend client session handling', () => {
         training_session_id: 'visual-session-123',
         modality: 'MARTIAL_ARTS',
         video_id: 9,
-        arrangement_id: 3
+        arrangement_id: 3,
+        arrangement_fingerprint: 'a'.repeat(64)
       }
     }))
   })

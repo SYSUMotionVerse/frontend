@@ -1,6 +1,7 @@
 import type {
   StairSessionSyncInput,
-  VisualPoseAnalysisPayload
+  VisualPoseAnalysisPayload,
+  VisualSessionSyncInput
 } from '../api/studentBackendTypes'
 import type { TrainingModality } from '../../types/student'
 
@@ -15,6 +16,7 @@ export type PendingTrainingSubmission =
       scoreUnavailableReason?: string
       comment?: string
       poseAnalysis?: VisualPoseAnalysisPayload
+      actionResults?: VisualSessionSyncInput['actionResults']
       completedAt?: string
       trainingCredential?: string
       scoreAlgorithmVersion?: string
@@ -106,8 +108,11 @@ function isPendingTrainingSubmission(value: unknown): value is PendingTrainingSu
       (submission.scoreAlgorithmVersion === undefined || typeof submission.scoreAlgorithmVersion === 'string') &&
       (submission.clientVersion === undefined || typeof submission.clientVersion === 'string')
     )
+    const hasValidActionResults = submission.actionResults === undefined || (
+      Array.isArray(submission.actionResults) && submission.actionResults.length <= 100
+    )
     return hasValidVideoId && hasValidScore && hasValidComment && hasValidScoreReason &&
-      hasValidCredential && hasValidVersions && (
+      hasValidCredential && hasValidVersions && hasValidActionResults && (
       submission.modality === 'wushu' || submission.modality === 'hiit'
     )
   }

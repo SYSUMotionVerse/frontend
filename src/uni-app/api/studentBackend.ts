@@ -725,6 +725,7 @@ export function createStudentBackendSync(
           : {}),
         ...(submission.comment !== undefined ? { comment: submission.comment } : {}),
         ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {}),
+        ...(submission.actionResults ? { actionResults: submission.actionResults } : {}),
         ...(submission.trainingCredential
           ? { training_credential: submission.trainingCredential }
           : {}),
@@ -1014,6 +1015,7 @@ export function createStudentBackendSync(
       modality: VisualSessionSyncInput['modality']
       videoId: number
       arrangementId?: number
+      arrangementFingerprint?: string
     }): Promise<TrainingCredentialResponse | null> {
       if (!dependencies.isEnabled()) {
         return null
@@ -1026,7 +1028,10 @@ export function createStudentBackendSync(
         training_session_id: input.sessionId,
         modality: input.modality === 'wushu' ? 'MARTIAL_ARTS' : 'HIIT',
         video_id: input.videoId,
-        ...(input.arrangementId ? { arrangement_id: input.arrangementId } : {})
+        ...(input.arrangementId ? { arrangement_id: input.arrangementId } : {}),
+        ...(input.arrangementFingerprint
+          ? { arrangement_fingerprint: input.arrangementFingerprint }
+          : {})
       })
     },
     async syncVisualSession(input: VisualSessionSyncInput): Promise<VisualSessionSyncResult> {
@@ -1050,6 +1055,7 @@ export function createStudentBackendSync(
           : {}),
         ...(input.comment !== undefined ? { comment: input.comment } : {}),
         ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
+        ...(input.actionResults ? { actionResults: input.actionResults } : {}),
         completedAt,
         ...(input.trainingCredential
           ? { trainingCredential: input.trainingCredential }

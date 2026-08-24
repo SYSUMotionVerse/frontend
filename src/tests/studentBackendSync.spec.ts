@@ -163,6 +163,43 @@ describe('student backend sync orchestration', () => {
     })
   })
 
+  it('binds a visual training credential to the loaded arrangement fingerprint', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const createTrainingCredential = vi.fn().mockResolvedValue({
+      training_session_id: 'visual-session-credential',
+      credential: 'signed-training-credential',
+      expires_at: '2026-08-24T15:59:00.000Z',
+      arrangement_revision: {
+        id: 5,
+        version: 2,
+        fingerprint: 'b'.repeat(64)
+      }
+    })
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      createTrainingCredential
+    })
+
+    const result = await sync.prepareVisualTrainingSession({
+      sessionId: 'visual-session-credential',
+      modality: 'hiit',
+      videoId: 9,
+      arrangementId: 3,
+      arrangementFingerprint: 'a'.repeat(64)
+    })
+
+    expect(createTrainingCredential).toHaveBeenCalledWith({
+      training_session_id: 'visual-session-credential',
+      modality: 'HIIT',
+      video_id: 9,
+      arrangement_id: 3,
+      arrangement_fingerprint: 'a'.repeat(64)
+    })
+    expect(result?.arrangement_revision?.version).toBe(2)
+  })
+
   it('syncs a visual session by finding a matching backend video first', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
@@ -192,6 +229,19 @@ describe('student backend sync orchestration', () => {
       createExerciseRecord
     })
 
+    const actionResults = [{
+      itemId: 31,
+      videoId: 9,
+      actionId: 'horse-stance-punch',
+      title: '马步冲拳',
+      expectedDuration: 30,
+      score: 88.5,
+      passed: true,
+      feedback: [],
+      angleDetails: {},
+      frameCount: 300
+    }]
+
     const result = await sync.syncVisualSession({
       sessionId: 'visual-session-123',
       modality: 'wushu',
@@ -201,6 +251,7 @@ describe('student backend sync orchestration', () => {
       trainingCredential: 'signed-training-credential',
       scoreAlgorithmVersion: 'pose-score-v1',
       clientVersion: '0.1.0',
+      actionResults,
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',
@@ -239,6 +290,7 @@ describe('student backend sync orchestration', () => {
       training_credential: 'signed-training-credential',
       score_algorithm_version: 'pose-score-v1',
       client_version: '0.1.0',
+      actionResults,
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
         schema_version: '0.1',

@@ -780,13 +780,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       await submission.prepare({
         modality: options.modality.value,
         videoId,
-        arrangementId: arrangement.value.id
+        arrangementId: arrangement.value.id,
+        arrangementFingerprint: arrangement.value.configuration_fingerprint
       })
     } catch (error) {
       reportBackendSyncError('训练会话准备', error)
-      if (typeof uni.showToast === 'function') {
-        void uni.showToast({ title: '暂时无法开始训练，请检查网络', icon: 'none' })
-      }
       return
     } finally {
       preparingTraining.value = false
@@ -1248,6 +1246,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         completedAt,
         scoreAlgorithmVersion: ACTION_SCORING_VERSION,
         clientVersion: '0.1.0',
+        actionResults: actionScores.value,
         ...(poseAnalysis ? { poseAnalysis } : {})
       })
 

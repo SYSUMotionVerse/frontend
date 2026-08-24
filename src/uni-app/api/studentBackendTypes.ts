@@ -206,6 +206,7 @@ export interface VisualSessionSyncInput {
   scoreUnavailableReason?: string
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
+  actionResults?: ScoredActionResult[]
   completedAt?: string
   trainingCredential?: string
   scoreAlgorithmVersion?: string
@@ -217,12 +218,18 @@ export interface TrainingCredentialRequest {
   modality: Exclude<BackendExerciseType, 'STAIRS'>
   video_id: number
   arrangement_id?: number
+  arrangement_fingerprint?: string
 }
 
 export interface TrainingCredentialResponse {
   training_session_id: string
   credential: string
   expires_at: string
+  arrangement_revision?: {
+    id: number
+    version: number
+    fingerprint: string
+  } | null
 }
 
 export interface StairSessionSummary {
@@ -359,6 +366,7 @@ export interface ExerciseArrangementItem {
 
 export interface ExerciseArrangementDetail extends ExerciseArrangementSummary {
   items: ExerciseArrangementItem[]
+  configuration_fingerprint: string
   /** Globally configured 3/2/1 audio shared by each module countdown. */
   countdown_tts_cues?: TrainingCountdownTtsCue[]
 }
@@ -401,6 +409,15 @@ export interface BackendExerciseRecord {
     scoreDetails?: ExerciseScoreDetails
   }
   scoreDetails?: ExerciseScoreDetails | null
+  actionResults?: ScoredActionResult[]
+  arrangement_revision_info?: {
+    id: number
+    arrangement_id: number | null
+    title: string
+    version: number
+    fingerprint: string
+    published_at: string
+  } | null
   status?: string
   created_at: string
   completed_at?: string | null
@@ -476,6 +493,7 @@ export interface ExerciseRecordCreatePayload {
   score_unavailable_reason?: string
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
+  actionResults?: ScoredActionResult[]
   client_completed_at?: string
   training_credential?: string
   score_algorithm_version?: string

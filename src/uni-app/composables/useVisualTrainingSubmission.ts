@@ -14,6 +14,7 @@ export function useVisualTrainingSubmission() {
       modality: VisualSessionSyncInput['modality']
       videoId: number
       arrangementId?: number
+      arrangementFingerprint?: string
     }) {
       const issued = await studentBackendSync.prepareVisualTrainingSession({
         sessionId,
