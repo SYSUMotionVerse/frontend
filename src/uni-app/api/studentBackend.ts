@@ -636,6 +636,12 @@ export function createStudentBackendSync(
           if (!current) {
             return false
           }
+          if (
+            submissionOptions.pendingSubmissions.list()
+              .some(item => item.sessionId === current.sessionId)
+          ) {
+            return false
+          }
 
           try {
             await submitShortQuestionnaire({
@@ -726,6 +732,37 @@ export function createStudentBackendSync(
     }))
   }
 
+  async function retryPendingTrainingSubmissionsNow() {
+    const submissions = submissionOptions.pendingSubmissions.list()
+    if (!dependencies.isEnabled() || submissions.length === 0) {
+      return { attempted: 0, succeeded: 0 }
+    }
+
+    await dependencies.ensureSession()
+    let succeeded = 0
+    for (const submission of submissions) {
+      try {
+        await submitPendingTrainingJob(submission)
+        submissionOptions.pendingSubmissions.remove(submission.sessionId)
+        succeeded += 1
+      } catch {
+        // Keep ambiguous or failed submissions durable for the next refresh.
+      }
+    }
+
+    return {
+      attempted: submissions.length,
+      succeeded
+    }
+  }
+
+  function retryTrainingBeforeShortQuestionnaires() {
+    void retryPendingTrainingSubmissionsNow().then(
+      () => startPendingShortQuestionnaireRetry(),
+      () => startPendingShortQuestionnaireRetry()
+    )
+  }
+
   return {
     isEnabled: dependencies.isEnabled,
     async bootstrapAccess() {
@@ -759,7 +796,7 @@ export function createStudentBackendSync(
         })
         // After a successful authenticated bootstrap, retry any pending short
         // questionnaires non-blockingly (not only when the page mounts).
-        void startPendingShortQuestionnaireRetry()
+        retryTrainingBeforeShortQuestionnaires()
         return buildRegistrationAccessResult()
       }
 
@@ -794,7 +831,7 @@ export function createStudentBackendSync(
       // collection: the backend endpoint must make training_session_id
       // idempotent/unique and treat repeats as success before the env var
       // can be enabled. See docs/mini-program-production-release.md.
-      void startPendingShortQuestionnaireRetry()
+      retryTrainingBeforeShortQuestionnaires()
 
       return buildBootstrapAccessResult(dueCheckpoint)
     },
@@ -1012,27 +1049,7 @@ export function createStudentBackendSync(
       return { synced: true } as const
     },
     async retryPendingTrainingSubmissions() {
-      const submissions = submissionOptions.pendingSubmissions.list()
-      if (!dependencies.isEnabled() || submissions.length === 0) {
-        return { attempted: 0, succeeded: 0 }
-      }
-
-      await dependencies.ensureSession()
-      let succeeded = 0
-      for (const submission of submissions) {
-        try {
-          await submitPendingTrainingJob(submission)
-          submissionOptions.pendingSubmissions.remove(submission.sessionId)
-          succeeded += 1
-        } catch {
-          // Keep ambiguous or failed submissions durable for the next refresh.
-        }
-      }
-
-      return {
-        attempted: submissions.length,
-        succeeded
-      }
+      return retryPendingTrainingSubmissionsNow()
     },
     async retryPendingShortQuestionnaires() {
       return startPendingShortQuestionnaireRetry()

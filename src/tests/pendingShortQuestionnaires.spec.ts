@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingShortQuestionnaireSubmission } from '../uni-app/platform/pendingShortQuestionnaires'
+import type { PendingTrainingSubmission } from '../uni-app/platform/pendingTrainingSubmissions'
 
 describe('pending short questionnaire storage', () => {
   afterEach(() => {
@@ -188,6 +189,63 @@ describe('pending short questionnaire storage', () => {
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(entries.has('success')).toBe(false)
     expect(entries.has('failure')).toBe(true)
+  })
+
+  it('waits for the matching training upload before retrying its questionnaire', async () => {
+    const shortEntries = new Map<string, PendingShortQuestionnaireSubmission>([[
+      'ordered-session',
+      {
+        sessionId: 'ordered-session',
+        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        queuedAt: '2026-07-18T10:01:00.000Z'
+      }
+    ]])
+    const trainingEntries = new Map<string, PendingTrainingSubmission>([[
+      'ordered-session',
+      {
+        kind: 'visual',
+        sessionId: 'ordered-session',
+        modality: 'hiit',
+        durationSeconds: 30,
+        queuedAt: '2026-07-18T10:00:00.000Z'
+      }
+    ]])
+    const pendingShortQuestionnaires = {
+      list: vi.fn(() => [...shortEntries.values()]),
+      save: vi.fn((entry: PendingShortQuestionnaireSubmission) => shortEntries.set(entry.sessionId, entry)),
+      remove: vi.fn((sessionId: string) => shortEntries.delete(sessionId)),
+      clear: vi.fn(() => shortEntries.clear())
+    }
+    const pendingSubmissions = {
+      list: vi.fn(() => [...trainingEntries.values()]),
+      save: vi.fn((entry: PendingTrainingSubmission) => trainingEntries.set(entry.sessionId, entry)),
+      remove: vi.fn((sessionId: string) => trainingEntries.delete(sessionId)),
+      clear: vi.fn(() => trainingEntries.clear())
+    }
+    const submitShortQuestionnaire = vi.fn().mockResolvedValue({ id: 1 })
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        submitShortQuestionnaire
+      },
+      {},
+      { pendingShortQuestionnaires, pendingSubmissions }
+    )
+
+    await expect(sync.retryPendingShortQuestionnaires()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 0
+    })
+    expect(submitShortQuestionnaire).not.toHaveBeenCalled()
+
+    trainingEntries.clear()
+    await expect(sync.retryPendingShortQuestionnaires()).resolves.toEqual({
+      attempted: 1,
+      succeeded: 1
+    })
+    expect(submitShortQuestionnaire).toHaveBeenCalledTimes(1)
   })
 
   it('clears all pending responses via the clear API', async () => {
