@@ -14,6 +14,7 @@ export type PendingTrainingSubmission =
       score?: number
       comment?: string
       poseAnalysis?: VisualPoseAnalysisPayload
+      completedAt?: string
       queuedAt: string
     }
   | {
@@ -23,6 +24,7 @@ export type PendingTrainingSubmission =
       completedIntervals: number
       qualityScore: number
       summary: StairSessionSyncInput['summary']
+      completedAt?: string
       queuedAt: string
     }
 
@@ -66,6 +68,12 @@ function isPendingTrainingSubmission(value: unknown): value is PendingTrainingSu
     !Number.isFinite(Date.parse(submission.queuedAt)) ||
     !isFiniteNumber(submission.durationSeconds) ||
     submission.durationSeconds <= 0
+  ) {
+    return false
+  }
+  if (
+    submission.completedAt !== undefined &&
+    (typeof submission.completedAt !== 'string' || !Number.isFinite(Date.parse(submission.completedAt)))
   ) {
     return false
   }

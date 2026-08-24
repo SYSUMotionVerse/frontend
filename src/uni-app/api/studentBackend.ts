@@ -255,6 +255,7 @@ export function buildStairsRecordPayload(input: StairSessionSyncInput): StairsRe
   return {
     duration: input.durationSeconds,
     training_session_id: input.sessionId,
+    ...(input.completedAt ? { client_completed_at: input.completedAt } : {}),
     speed_data: omitUndefined({
       completedIntervals: input.completedIntervals,
       activeClimbSeconds: toFiniteNumberOrUndefined(summary.activeClimbSeconds),
@@ -705,6 +706,7 @@ export function createStudentBackendSync(
         video: videoId,
         duration: submission.durationSeconds,
         training_session_id: submission.sessionId,
+        client_completed_at: submission.completedAt ?? submission.queuedAt,
         ...(submission.score !== undefined ? { score: submission.score } : {}),
         ...(submission.comment !== undefined ? { comment: submission.comment } : {}),
         ...(submission.poseAnalysis ? { poseAnalysis: submission.poseAnalysis } : {})
@@ -716,7 +718,8 @@ export function createStudentBackendSync(
       durationSeconds: submission.durationSeconds,
       completedIntervals: submission.completedIntervals,
       qualityScore: submission.qualityScore,
-      summary: submission.summary
+      summary: submission.summary,
+      completedAt: submission.completedAt ?? submission.queuedAt
     }))
   }
 
@@ -959,6 +962,7 @@ export function createStudentBackendSync(
         }
       }
 
+      const completedAt = input.completedAt ?? new Date().toISOString()
       const submission: PendingTrainingSubmission = {
         kind: 'visual',
         sessionId: input.sessionId,
@@ -968,6 +972,7 @@ export function createStudentBackendSync(
         ...(input.score !== undefined ? { score: input.score } : {}),
         ...(input.comment !== undefined ? { comment: input.comment } : {}),
         ...(input.poseAnalysis ? { poseAnalysis: input.poseAnalysis } : {}),
+        completedAt,
         queuedAt: new Date().toISOString()
       }
       submissionOptions.pendingSubmissions.save(submission)
@@ -984,6 +989,7 @@ export function createStudentBackendSync(
         return { synced: false, reason: 'disabled' } as const
       }
 
+      const completedAt = input.completedAt ?? new Date().toISOString()
       const submission: PendingTrainingSubmission = {
         kind: 'stairs',
         sessionId: input.sessionId,
@@ -991,6 +997,7 @@ export function createStudentBackendSync(
         completedIntervals: input.completedIntervals,
         qualityScore: input.qualityScore,
         summary: input.summary,
+        completedAt,
         queuedAt: new Date().toISOString()
       }
       submissionOptions.pendingSubmissions.save(submission)

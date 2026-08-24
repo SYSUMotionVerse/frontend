@@ -180,6 +180,7 @@ describe('student backend API payload mapping', () => {
         durationSeconds: 28,
         completedIntervals: 1,
         qualityScore: 83,
+        completedAt: '2026-08-24T10:02:00.000Z',
         summary: {
           summaryText: '传感器采集很稳定。',
           estimatedStepCount: 64,
@@ -197,6 +198,7 @@ describe('student backend API payload mapping', () => {
     ).toEqual({
       duration: 28,
       training_session_id: 'stairs-summary-session',
+      client_completed_at: '2026-08-24T10:02:00.000Z',
       speed_data: {
         completedIntervals: 1,
         activeClimbSeconds: 24.8,

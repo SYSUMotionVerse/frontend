@@ -199,6 +199,7 @@ export interface VisualSessionSyncInput {
   score?: number
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
+  completedAt?: string
 }
 
 export interface StairSessionSummary {
@@ -221,6 +222,7 @@ export interface StairSessionSyncInput {
   completedIntervals: number
   qualityScore: number
   summary: string | StairSessionSummary
+  completedAt?: string
 }
 
 export interface ExerciseVideoSummary {
@@ -376,6 +378,9 @@ export interface BackendExerciseRecord {
   scoreDetails?: ExerciseScoreDetails | null
   status?: string
   created_at: string
+  completed_at?: string | null
+  received_at?: string | null
+  completion_time_source?: 'CLIENT' | 'SERVER' | null
   video_info?: {
     id: number
     title: string
@@ -390,6 +395,9 @@ export interface BackendStairRecord {
   speed_data: Record<string, unknown> | null
   acceleration_data: Record<string, unknown> | null
   created_at: string
+  completed_at?: string | null
+  received_at?: string | null
+  completion_time_source?: 'CLIENT' | 'SERVER' | null
 }
 
 export interface BackendPhysicalTrendEntry {
@@ -442,6 +450,7 @@ export interface ExerciseRecordCreatePayload {
   score?: number
   comment?: string
   poseAnalysis?: VisualPoseAnalysisPayload
+  client_completed_at?: string
 }
 
 export interface StairsRecordCreatePayload {
@@ -451,6 +460,7 @@ export interface StairsRecordCreatePayload {
   acceleration_data: Record<string, unknown> | null
   steps_count: number | null
   calories: number | null
+  client_completed_at?: string
 }
 
 export interface BackendSyncResult {

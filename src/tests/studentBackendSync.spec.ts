@@ -196,6 +196,7 @@ describe('student backend sync orchestration', () => {
       sessionId: 'visual-session-123',
       modality: 'wushu',
       durationSeconds: 30,
+      completedAt: '2026-08-24T10:00:00.000Z',
       score: 88.5,
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
@@ -230,6 +231,7 @@ describe('student backend sync orchestration', () => {
       video: 9,
       duration: 30,
       training_session_id: 'visual-session-123',
+      client_completed_at: '2026-08-24T10:00:00.000Z',
       score: 88.5,
       comment: '动作基本标准，注意细节。',
       poseAnalysis: {
@@ -356,14 +358,16 @@ describe('student backend sync orchestration', () => {
       durationSeconds: 26,
       completedIntervals: 1,
       qualityScore: 81,
-      summary: '节奏稳定。'
+      summary: '节奏稳定。',
+      completedAt: '2026-08-24T10:01:00.000Z'
     })
 
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(createStairsRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         duration: 26,
-        training_session_id: 'stairs-session-123'
+        training_session_id: 'stairs-session-123',
+        client_completed_at: '2026-08-24T10:01:00.000Z'
       })
     )
   })

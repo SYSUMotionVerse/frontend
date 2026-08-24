@@ -147,6 +147,7 @@ async function finishSession() {
   syncLiveMetrics(analysis, captureResult?.samples.length ?? 0)
   sensorStatus.value = captureResult ? 'stopped' : 'unavailable'
   const summaryPayload = resolveSummaryPayload(analysis)
+  const completedAt = new Date().toISOString()
 
   await notifyTrainingComplete()
 
@@ -156,7 +157,8 @@ async function finishSession() {
       durationSeconds,
       completedIntervals,
       qualityScore: analysis.qualityScore,
-      summary: summaryPayload
+      summary: summaryPayload,
+      completedAt
     })
   } catch (error) {
     reportBackendSyncError('楼梯训练同步', error)

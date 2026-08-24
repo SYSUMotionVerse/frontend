@@ -1182,6 +1182,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     completing.value = true
     completionError.value = ''
     await stopRecording()
+    const completedAt = new Date().toISOString()
 
     const durationSeconds = Math.max(
       1,
@@ -1216,6 +1217,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           : {}),
         ...(scoring.score !== undefined ? { score: scoring.score } : {}),
         comment: scoring.summary,
+        completedAt,
         ...(poseAnalysis ? { poseAnalysis } : {})
       })
 
