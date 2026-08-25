@@ -25,9 +25,8 @@ export interface LongQuestionnaireState {
 
 export interface ShortQuestionnaireState {
   submitted: boolean
-  energyLevel: number
-  confidence: number
-  enjoyment: number
+  feelingScale: number
+  feltArousalScale: number
 }
 
 export interface SessionAnalysis {

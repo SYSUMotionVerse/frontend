@@ -1210,7 +1210,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 4, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -1221,14 +1221,12 @@ describe('page-level backend sync wiring', () => {
 
     expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
       sessionId: 'session-short-1',
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
     expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-short-1', {
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
     expect(wrapper.text()).toContain('反馈已安全保存在本机')
     expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
@@ -1280,7 +1278,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 4, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -1294,14 +1292,12 @@ describe('page-level backend sync wiring', () => {
 
     expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
       sessionId: 'session-routed',
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
     expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-routed', {
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
     expect(store.submitShortQuestionnaireForLatestSession).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('反馈已保存，正在打开训练反馈')
@@ -1345,7 +1341,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 4, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -1394,7 +1390,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 4, confidence: 5, enjoyment: 3 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 4, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -1438,7 +1434,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 5, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }
@@ -1489,7 +1485,7 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           ShortQuestionnaireForm: {
             props: ['statusMessage'],
-            template: '<div><button class="submit-short" @click="$emit(\'submit\', { energyLevel: 5, confidence: 5, enjoyment: 4 })">submit</button><button class="open-feedback" @click="$emit(\'openFeedback\')">open</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 5, feltArousalScale: 5})">submit</button><button class="open-feedback" @click="$emit(\'openFeedback\')">open</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
           }
         }
       }

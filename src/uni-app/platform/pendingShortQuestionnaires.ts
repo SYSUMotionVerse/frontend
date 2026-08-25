@@ -1,7 +1,6 @@
 export type ShortQuestionnaireResponse = {
-  energyLevel: number
-  confidence: number
-  enjoyment: number
+  feelingScale: number
+  feltArousalScale: number
 }
 
 export type PendingShortQuestionnaireSubmission = {
@@ -31,12 +30,21 @@ interface PendingShortQuestionnaireStoreOptions {
   maxClockSkewMs?: number
 }
 
-function isShortQuestionnaireResponseValue(value: unknown): value is number {
+function isFeelingScaleValue(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= -5 &&
+    value <= 5
+  )
+}
+
+function isFeltArousalScaleValue(value: unknown): value is number {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&
     value >= 1 &&
-    value <= 5
+    value <= 6
   )
 }
 
@@ -53,9 +61,8 @@ function isPendingSubmission(value: unknown): value is PendingShortQuestionnaire
     typeof submission.queuedAt === 'string' &&
     Number.isFinite(Date.parse(submission.queuedAt)) &&
     Boolean(response) &&
-    isShortQuestionnaireResponseValue(response?.energyLevel) &&
-    isShortQuestionnaireResponseValue(response?.confidence) &&
-    isShortQuestionnaireResponseValue(response?.enjoyment)
+    isFeelingScaleValue(response?.feelingScale) &&
+    isFeltArousalScaleValue(response?.feltArousalScale)
   )
 }
 

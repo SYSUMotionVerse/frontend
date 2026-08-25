@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 
-type RatingField = 'energyLevel' | 'confidence' | 'enjoyment'
+type RatingField = 'feelingScale' | 'feltArousalScale'
 type SubmissionStatus = 'idle' | 'error' | 'saved-locally' | 'submitted'
 type StatusAction = 'retry' | 'home' | 'feedback'
 
 const emit = defineEmits<{
-  submit: [payload: { energyLevel: number; confidence: number; enjoyment: number }]
+  submit: [payload: { feelingScale: number; feltArousalScale: number }]
   openFeedback: []
   goHome: []
 }>()
@@ -24,9 +24,8 @@ const props = withDefaults(defineProps<{
 })
 
 const form = reactive({
-  energyLevel: 0,
-  confidence: 0,
-  enjoyment: 0
+  feelingScale: null as number | null,
+  feltArousalScale: null as number | null
 })
 
 const questionSections: Array<{
@@ -34,29 +33,32 @@ const questionSections: Array<{
   index: string
   title: string
   hint: string
+  values: number[]
+  lowLabel: string
+  highLabel: string
 }> = [
   {
-    field: 'energyLevel',
+    field: 'feelingScale',
     index: '01',
-    title: '精力水平',
-    hint: '此刻的身体状态'
+    title: '总体主观感受',
+    hint: '选择最符合你此刻运动感受的一项',
+    values: Array.from({ length: 11 }, (_, index) => index - 5),
+    lowLabel: '非常糟糕',
+    highLabel: '非常好'
   },
   {
-    field: 'confidence',
+    field: 'feltArousalScale',
     index: '02',
-    title: '运动信心',
-    hint: '下次训练时的把握'
-  },
-  {
-    field: 'enjoyment',
-    index: '03',
-    title: '乐趣感受',
-    hint: '这次训练是否自在'
+    title: '激活／唤醒状态',
+    hint: '选择最符合你此刻激活程度的一项',
+    values: [1, 2, 3, 4, 5, 6],
+    lowLabel: '低唤醒',
+    highLabel: '高唤醒'
   }
 ]
 
 const completedCount = computed(() => (
-  questionSections.filter(section => form[section.field] > 0).length
+  questionSections.filter(section => form[section.field] !== null).length
 ))
 const isComplete = computed(() => completedCount.value === questionSections.length)
 const hasPersistentStatusMessage = computed(() => (
@@ -81,13 +83,13 @@ const primaryDisabled = computed(() => (
   || isTerminalStatus.value
   || isOpeningFeedback.value
 ))
-const completionLabel = computed(() => `已完成 ${completedCount.value}/3 项`)
+const completionLabel = computed(() => `已完成 ${completedCount.value}/2 项`)
 const primaryLabel = computed(() => {
   if (isOpeningFeedback.value) return '正在打开训练反馈…'
   if (isFeedbackRecovery.value) return '重新打开训练反馈'
   if (props.submitting) return '正在保存反馈…'
   if (props.status === 'error') return '重新提交反馈'
-  if (!isComplete.value) return `完成 ${completedCount.value}/3 项后提交`
+  if (!isComplete.value) return `完成 ${completedCount.value}/2 项后提交`
   return '提交并查看反馈'
 })
 const statusLabel = computed(() => (
@@ -104,13 +106,16 @@ function handleFieldChange(field: RatingField, value: number) {
 }
 
 function scoreLabel(field: RatingField) {
-  return form[field] ? `已选 ${form[field]} 分` : '未选择'
+  return form[field] !== null ? `已选 ${form[field]} 分` : '未选择'
 }
 
 function handleSubmit() {
   if (primaryDisabled.value) return
 
-  emit('submit', { ...form })
+  emit('submit', {
+    feelingScale: form.feelingScale as number,
+    feltArousalScale: form.feltArousalScale as number
+  })
 }
 </script>
 
@@ -123,7 +128,7 @@ function handleSubmit() {
     <view class="short-questionnaire-form__intro">
       <text class="short-questionnaire-form__eyebrow">训练已完成</text>
       <text class="short-questionnaire-form__title">记录这次感受</text>
-      <text class="short-questionnaire-form__copy">三个问题，约 20 秒。1 分较低，5 分较高。</text>
+      <text class="short-questionnaire-form__copy">两个问题，约 20 秒。请按此刻的真实感受选择。</text>
     </view>
 
     <view class="short-questionnaire-form__questions">
@@ -145,7 +150,7 @@ function handleSubmit() {
 
         <view class="short-questionnaire-form__scores" role="radiogroup" :aria-label="section.title">
           <button
-            v-for="value in 5"
+            v-for="value in section.values"
             :key="value"
             class="short-questionnaire-form__score"
             :class="{ 'short-questionnaire-form__score--selected': form[section.field] === value }"
@@ -159,6 +164,10 @@ function handleSubmit() {
           >
             <text>{{ value }}</text>
           </button>
+        </view>
+        <view class="short-questionnaire-form__scale-labels">
+          <text>{{ section.lowLabel }}</text>
+          <text>{{ section.highLabel }}</text>
         </view>
       </view>
     </view>
@@ -343,6 +352,7 @@ function handleSubmit() {
 
 .short-questionnaire-form__scores {
   display: flex;
+  flex-wrap: wrap;
   gap: 12rpx;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -355,7 +365,7 @@ function handleSubmit() {
   display: inline-flex;
   min-width: 0;
   min-height: 88rpx;
-  flex: 1 1 0;
+  flex: 1 1 72rpx;
   align-items: center;
   justify-content: center;
   margin: 0;
@@ -373,6 +383,14 @@ function handleSubmit() {
     border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
     color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.short-questionnaire-form__scale-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--checkin-muted);
+  font-size: 21rpx;
+  font-weight: 700;
 }
 
 .short-questionnaire-form__score::after,

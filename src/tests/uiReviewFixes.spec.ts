@@ -827,7 +827,7 @@ describe('ui review fixes', () => {
     expect(shortQuestionnaireForm).toContain('short-questionnaire-form__question')
     expect(shortQuestionnaireForm).toContain('short-questionnaire-form__status')
     expect(shortQuestionnaireForm).toContain('short-questionnaire-form__actions')
-    expect(shortQuestionnaireForm).toContain('完成 ${completedCount.value}/3 项后提交')
+    expect(shortQuestionnaireForm).toContain('完成 ${completedCount.value}/2 项后提交')
     expect(shortQuestionnaireForm).toContain('提交并查看反馈')
     expect(shortQuestionnaireForm).not.toContain('chunky-shadow')
     expect(shortQuestionnaireForm).not.toContain('🙂')

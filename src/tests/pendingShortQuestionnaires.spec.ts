@@ -22,7 +22,7 @@ describe('pending short questionnaire storage', () => {
     )
     const submission: PendingShortQuestionnaireSubmission = {
       sessionId: 'session-1',
-      response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+      response: { feelingScale: 4, feltArousalScale: 5},
       queuedAt: '2026-07-18T10:00:00.000Z'
     }
 
@@ -50,13 +50,13 @@ describe('pending short questionnaire storage', () => {
 
     store.save({
       sessionId: 'expired',
-      response: { energyLevel: 1, confidence: 1, enjoyment: 1 },
+      response: { feelingScale: 1, feltArousalScale: 1},
       queuedAt: '2026-07-17T00:00:00.000Z'
     })
     for (const sessionId of ['recent-1', 'recent-2', 'recent-3']) {
       store.save({
         sessionId,
-        response: { energyLevel: 3, confidence: 4, enjoyment: 5 },
+        response: { feelingScale: 3, feltArousalScale: 4},
         queuedAt: '2026-07-19T00:00:00.000Z'
       })
     }
@@ -81,18 +81,16 @@ describe('pending short questionnaire storage', () => {
 
     await expect(sync.syncShortQuestionnaire({
       sessionId: 'session-1',
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })).resolves.toEqual({
       synced: false,
       reason: 'pending-backend-endpoint'
     })
 
     expect(entries.get('session-1')?.response).toEqual({
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
   })
 
@@ -108,9 +106,8 @@ describe('pending short questionnaire storage', () => {
       id: 2,
       user: 1,
       training_session_id: 'session-2',
-      energy_level: 3,
-      confidence: 4,
-      enjoyment: 5,
+      feeling_scale: 3,
+      felt_arousal_scale: 4,
       created_at: '2026-07-19T10:00:00Z',
       updated_at: '2026-07-19T10:00:00Z'
     })
@@ -127,15 +124,13 @@ describe('pending short questionnaire storage', () => {
 
     await expect(sync.syncShortQuestionnaire({
       sessionId: 'session-2',
-      energyLevel: 3,
-      confidence: 4,
-      enjoyment: 5
+      feelingScale: 3,
+      feltArousalScale: 4
     })).resolves.toEqual({ synced: true })
     expect(submitShortQuestionnaire).toHaveBeenCalledWith({
       training_session_id: 'session-2',
-      energy_level: 3,
-      confidence: 4,
-      enjoyment: 5
+      feeling_scale: 3,
+      felt_arousal_scale: 4
     })
     expect(entries.has('session-2')).toBe(false)
   })
@@ -144,12 +139,12 @@ describe('pending short questionnaire storage', () => {
     const entries = new Map<string, PendingShortQuestionnaireSubmission>([
       ['success', {
         sessionId: 'success',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }],
       ['failure', {
         sessionId: 'failure',
-        response: { energyLevel: 2, confidence: 3, enjoyment: 4 },
+        response: { feelingScale: 2, feltArousalScale: 3},
         queuedAt: '2026-07-18T10:01:00.000Z'
       }]
     ])
@@ -167,9 +162,8 @@ describe('pending short questionnaire storage', () => {
         id: 3,
         user: 1,
         ...payload,
-        energy_level: 4,
-        confidence: 5,
-        enjoyment: 3,
+        feeling_scale: 4,
+        felt_arousal_scale: 5,
         created_at: '2026-07-19T10:00:00Z',
         updated_at: '2026-07-19T10:00:00Z'
       }
@@ -196,7 +190,7 @@ describe('pending short questionnaire storage', () => {
       'ordered-session',
       {
         sessionId: 'ordered-session',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T10:01:00.000Z'
       }
     ]])
@@ -263,12 +257,12 @@ describe('pending short questionnaire storage', () => {
     const store = createPendingShortQuestionnaireStore({ now: () => now })
     store.save({
       sessionId: 'session-a',
-      response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+      response: { feelingScale: 4, feltArousalScale: 5},
       queuedAt: '2026-07-18T10:00:00.000Z'
     })
     store.save({
       sessionId: 'session-b',
-      response: { energyLevel: 2, confidence: 3, enjoyment: 1 },
+      response: { feelingScale: 2, feltArousalScale: 3},
       queuedAt: '2026-07-18T11:00:00.000Z'
     })
     expect(store.list()).toHaveLength(2)
@@ -285,7 +279,7 @@ describe('pending short questionnaire storage', () => {
       // valid entry
       {
         sessionId: 'valid',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
       // malformed: missing response
@@ -293,22 +287,22 @@ describe('pending short questionnaire storage', () => {
       // malformed: invalid queuedAt
       {
         sessionId: 'bad-date',
-        response: { energyLevel: 1, confidence: 1, enjoyment: 1 },
+        response: { feelingScale: 1, feltArousalScale: 1},
         queuedAt: 'not-a-date'
       },
       // malformed: empty sessionId
       {
         sessionId: '',
-        response: { energyLevel: 1, confidence: 1, enjoyment: 1 },
+        response: { feelingScale: 1, feltArousalScale: 1},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
       // malformed: not an object
       'string-entry',
       null,
-      // legacy: non-numeric energyLevel
+      // legacy: non-numeric feelingScale
       {
         sessionId: 'legacy',
-        response: { energyLevel: 'high', confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 'high', feltArousalScale: 5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }
     ]
@@ -337,31 +331,31 @@ describe('pending short questionnaire storage', () => {
       // valid entry
       {
         sessionId: 'valid',
-        response: { energyLevel: 1, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 1, feltArousalScale: 5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
-      // out-of-range: energyLevel 0
+      // out-of-range: feelingScale -6
       {
         sessionId: 'zero-energy',
-        response: { energyLevel: 0, confidence: 3, enjoyment: 3 },
+        response: { feelingScale: -6, feltArousalScale: 3},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
-      // out-of-range: confidence 6
+      // out-of-range: feltArousalScale 7
       {
-        sessionId: 'six-confidence',
-        response: { energyLevel: 3, confidence: 6, enjoyment: 3 },
+        sessionId: 'six-feltArousalScale',
+        response: { feelingScale: 3, feltArousalScale: 7},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
-      // non-integer: enjoyment 3.5
+      // non-integer FAS value
       {
         sessionId: 'fractional-enjoyment',
-        response: { energyLevel: 3, confidence: 3, enjoyment: 3.5 },
+        response: { feelingScale: 3, feltArousalScale: 3.5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       },
-      // negative value
+      // value below the FS lower bound
       {
         sessionId: 'negative',
-        response: { energyLevel: -1, confidence: 3, enjoyment: 3 },
+        response: { feelingScale: -6, feltArousalScale: 3},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }
     ]
@@ -435,13 +429,13 @@ describe('pending short questionnaire storage', () => {
       // valid recent entry
       {
         sessionId: 'valid',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T11:59:30.000Z'
       },
       // future-dated: 2 minutes ahead (beyond 60s skew)
       {
         sessionId: 'future-far',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T12:02:00.000Z'
       }
     ]
@@ -472,7 +466,7 @@ describe('pending short questionnaire storage', () => {
       // entry 30 seconds in the future (within 60s skew)
       {
         sessionId: 'near-future',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T12:00:30.000Z'
       }
     ]
@@ -509,10 +503,9 @@ describe('pending short questionnaire storage', () => {
 
     await expect(sync.syncShortQuestionnaire({
       sessionId: 'session-x',
-      energyLevel: 0,
-      confidence: 3,
-      enjoyment: 3
-    })).rejects.toThrow('between 1 and 5')
+      feelingScale: -6,
+      feltArousalScale: 3
+    })).rejects.toThrow('FS/FAS domains')
 
     expect(pendingShortQuestionnaires.save).not.toHaveBeenCalled()
   })
@@ -533,10 +526,9 @@ describe('pending short questionnaire storage', () => {
 
     await expect(sync.syncShortQuestionnaire({
       sessionId: 'session-y',
-      energyLevel: 3.5,
-      confidence: 3,
-      enjoyment: 3
-    })).rejects.toThrow('between 1 and 5')
+      feelingScale: 3.5,
+      feltArousalScale: 3
+    })).rejects.toThrow('FS/FAS domains')
 
     expect(pendingShortQuestionnaires.save).not.toHaveBeenCalled()
   })
@@ -558,7 +550,7 @@ describe('pending short questionnaire storage', () => {
       if (callCount === 1) {
         await firstPromise
       }
-      return { id: callCount, user: 1, energy_level: 1, confidence: 1, enjoyment: 1, ...payload, created_at: '2026-07-19T10:00:00Z', updated_at: '2026-07-19T10:00:00Z' }
+      return { id: callCount, user: 1, feeling_scale: 1, felt_arousal_scale: 1, ...payload, created_at: '2026-07-19T10:00:00Z', updated_at: '2026-07-19T10:00:00Z' }
     })
 
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
@@ -571,18 +563,16 @@ describe('pending short questionnaire storage', () => {
     // First submit for session-A — saves {1,1,1}, blocks on network
     const firstSync = sync.syncShortQuestionnaire({
       sessionId: 'session-A',
-      energyLevel: 1,
-      confidence: 1,
-      enjoyment: 1
+      feelingScale: 1,
+      feltArousalScale: 1
     })
     await vi.waitFor(() => expect(submitShortQuestionnaire).toHaveBeenCalledTimes(1))
 
     // Second submit for the same session — queued behind the first
     const secondSync = sync.syncShortQuestionnaire({
       sessionId: 'session-A',
-      energyLevel: 5,
-      confidence: 5,
-      enjoyment: 5
+      feelingScale: 5,
+      feltArousalScale: 5
     })
 
     // Release the first network call — it succeeds and removes session-A
@@ -601,15 +591,15 @@ describe('pending short questionnaire storage', () => {
     const removeCalls = pendingShortQuestionnaires.remove.mock.calls
     expect(saveCalls).toHaveLength(2)
     expect(removeCalls).toHaveLength(2)
-    expect(saveCalls[0][0].response).toEqual({ energyLevel: 1, confidence: 1, enjoyment: 1 })
-    expect(saveCalls[1][0].response).toEqual({ energyLevel: 5, confidence: 5, enjoyment: 5 })
+    expect(saveCalls[0][0].response).toEqual({ feelingScale: 1, feltArousalScale: 1})
+    expect(saveCalls[1][0].response).toEqual({ feelingScale: 5, feltArousalScale: 5})
   })
 
   it('does not make a new session wait for a blocked historical retry', async () => {
     const entries = new Map<string, PendingShortQuestionnaireSubmission>([
       ['historical-session', {
         sessionId: 'historical-session',
-        response: { energyLevel: 1, confidence: 2, enjoyment: 3 },
+        response: { feelingScale: 1, feltArousalScale: 2},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }]
     ])
@@ -630,9 +620,8 @@ describe('pending short questionnaire storage', () => {
         id: 1,
         user: 1,
         ...payload,
-        energy_level: 4,
-        confidence: 5,
-        enjoyment: 3,
+        feeling_scale: 4,
+        felt_arousal_scale: 5,
         created_at: '2026-07-19T10:00:00Z',
         updated_at: '2026-07-19T10:00:00Z'
       }
@@ -647,24 +636,21 @@ describe('pending short questionnaire storage', () => {
     const retryPromise = sync.retryPendingShortQuestionnaires()
     await vi.waitFor(() => expect(submitShortQuestionnaire).toHaveBeenCalledWith({
       training_session_id: 'historical-session',
-      energy_level: 1,
-      confidence: 2,
-      enjoyment: 3
+      feeling_scale: 1,
+      felt_arousal_scale: 2
     }))
 
     const currentResult = await sync.syncShortQuestionnaire({
       sessionId: 'current-session',
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
 
     expect(currentResult).toEqual({ synced: true })
     expect(submitShortQuestionnaire).toHaveBeenCalledWith({
       training_session_id: 'current-session',
-      energy_level: 4,
-      confidence: 5,
-      enjoyment: 3
+      feeling_scale: 4,
+      felt_arousal_scale: 5
     })
 
     resolveHistoricalSubmit!()
@@ -675,7 +661,7 @@ describe('pending short questionnaire storage', () => {
     const entries = new Map<string, PendingShortQuestionnaireSubmission>([
       ['session-A', {
         sessionId: 'session-A',
-        response: { energyLevel: 1, confidence: 1, enjoyment: 1 },
+        response: { feelingScale: 1, feltArousalScale: 1},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }]
     ])
@@ -694,7 +680,7 @@ describe('pending short questionnaire storage', () => {
       callCount++
       if (callCount === 1) {
         await retrySubmitPromise // Block the retry's submit
-        return { id: 1, user: 1, energy_level: 1, confidence: 1, enjoyment: 1, ...payload, created_at: '2026-07-19T10:00:00Z', updated_at: '2026-07-19T10:00:00Z' }
+        return { id: 1, user: 1, feeling_scale: 1, felt_arousal_scale: 1, ...payload, created_at: '2026-07-19T10:00:00Z', updated_at: '2026-07-19T10:00:00Z' }
       }
       // Second call (from syncShortQuestionnaire) fails so the new response stays durable
       throw new Error('network error')
@@ -715,9 +701,8 @@ describe('pending short questionnaire storage', () => {
     // This is serialized behind the retry and will only run after the retry completes.
     const syncPromise = sync.syncShortQuestionnaire({
       sessionId: 'session-A',
-      energyLevel: 5,
-      confidence: 5,
-      enjoyment: 5
+      feelingScale: 5,
+      feltArousalScale: 5
     })
 
     // Release the retry's blocked submit — retry succeeds and removes session-A
@@ -731,7 +716,7 @@ describe('pending short questionnaire storage', () => {
 
     // The new response must still be in the store — the retry's remove(session-A)
     // ran BEFORE the sync's save(session-A) due to serialization.
-    expect(entries.get('session-A')?.response).toEqual({ energyLevel: 5, confidence: 5, enjoyment: 5 })
+    expect(entries.get('session-A')?.response).toEqual({ feelingScale: 5, feltArousalScale: 5})
   })
 
   it('returns network-error instead of throwing when the durable save succeeds but the network submit fails', async () => {
@@ -752,17 +737,15 @@ describe('pending short questionnaire storage', () => {
 
     const result = await sync.syncShortQuestionnaire({
       sessionId: 'session-net-fail',
-      energyLevel: 3,
-      confidence: 4,
-      enjoyment: 5
+      feelingScale: 3,
+      feltArousalScale: 4
     })
 
     expect(result).toEqual({ synced: false, reason: 'network-error' })
     // The durable save succeeded, so the response stays pending for a later retry
     expect(entries.get('session-net-fail')?.response).toEqual({
-      energyLevel: 3,
-      confidence: 4,
-      enjoyment: 5
+      feelingScale: 3,
+      feltArousalScale: 4
     })
   })
 })

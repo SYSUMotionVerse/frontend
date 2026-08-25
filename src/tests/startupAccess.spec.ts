@@ -557,7 +557,7 @@ describe('startup access bootstrap', () => {
     const entries = new Map<string, PSubmission>([
       ['pending-session', {
         sessionId: 'pending-session',
-        response: { energyLevel: 4, confidence: 5, enjoyment: 3 },
+        response: { feelingScale: 4, feltArousalScale: 5},
         queuedAt: '2026-07-18T10:00:00.000Z'
       }]
     ])
@@ -570,9 +570,8 @@ describe('startup access bootstrap', () => {
     const submitShortQuestionnaire = vi.fn().mockResolvedValue({
       id: 1,
       training_session_id: 'pending-session',
-      energy_level: 4,
-      confidence: 5,
-      enjoyment: 3
+      feeling_scale: 4,
+      felt_arousal_scale: 5
     })
     const sync = createStudentBackendSync(
       {
@@ -602,9 +601,8 @@ describe('startup access bootstrap', () => {
     await vi.waitFor(() => {
       expect(submitShortQuestionnaire).toHaveBeenCalledWith({
         training_session_id: 'pending-session',
-        energy_level: 4,
-        confidence: 5,
-        enjoyment: 3
+        feeling_scale: 4,
+        felt_arousal_scale: 5
       })
       expect(entries.has('pending-session')).toBe(false)
     })

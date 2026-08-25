@@ -5,24 +5,23 @@ import ShortQuestionnaireForm from '../components/training/ShortQuestionnaireFor
 async function completeCheckIn(wrapper: ReturnType<typeof mount>) {
   const scores = wrapper.findAll('.short-questionnaire-form__score')
 
-  await scores[3].trigger('click')
   await scores[9].trigger('click')
-  await scores[12].trigger('click')
+  await scores[15].trigger('click')
 }
 
 describe('ShortQuestionnaireForm', () => {
-  it('keeps all three ratings and the disabled primary action in one continuous check-in surface', async () => {
+  it('keeps both FS/FAS ratings and the disabled primary action in one continuous check-in surface', async () => {
     const wrapper = mount(ShortQuestionnaireForm)
     const primaryAction = wrapper.get('button[form-type="submit"]')
 
-    expect(wrapper.findAll('.short-questionnaire-form__question')).toHaveLength(3)
-    expect(wrapper.findAll('.short-questionnaire-form__score')).toHaveLength(15)
-    expect(wrapper.text()).toContain('完成 0/3 项后提交')
+    expect(wrapper.findAll('.short-questionnaire-form__question')).toHaveLength(2)
+    expect(wrapper.findAll('.short-questionnaire-form__score')).toHaveLength(17)
+    expect(wrapper.text()).toContain('完成 0/2 项后提交')
     expect(primaryAction.attributes('disabled')).toBeDefined()
 
     await completeCheckIn(wrapper)
 
-    expect(wrapper.text()).toContain('已完成 3/3 项')
+    expect(wrapper.text()).toContain('已完成 2/2 项')
     expect(wrapper.text()).toContain('提交并查看反馈')
     expect(primaryAction.attributes('disabled')).toBeUndefined()
   })
@@ -34,7 +33,7 @@ describe('ShortQuestionnaireForm', () => {
     await wrapper.get('form').trigger('submit')
 
     expect(wrapper.emitted('submit')).toEqual([[
-      { energyLevel: 4, confidence: 5, enjoyment: 3 }
+      { feelingScale: 4, feltArousalScale: 5}
     ]])
   })
 

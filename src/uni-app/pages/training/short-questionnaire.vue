@@ -11,9 +11,8 @@ import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 type SubmissionStatus = 'idle' | 'error' | 'saved-locally' | 'submitted'
 type StatusAction = 'retry' | 'home' | 'feedback'
 type ShortQuestionnaireResponse = {
-  energyLevel: number
-  confidence: number
-  enjoyment: number
+  feelingScale: number
+  feltArousalScale: number
 }
 
 const store = useStudentStore()

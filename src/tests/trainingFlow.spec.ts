@@ -124,17 +124,15 @@ describe('student training and adherence flow', () => {
     })
 
     store.submitShortQuestionnaireForSession('session-earlier', {
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
 
     const [earlierSession, latestSession] = store.getSnapshot().sessions
     expect(earlierSession?.shortQuestionnaire).toMatchObject({
       submitted: true,
-      energyLevel: 4,
-      confidence: 5,
-      enjoyment: 3
+      feelingScale: 4,
+      feltArousalScale: 5
     })
     expect(latestSession?.shortQuestionnaire).toBeNull()
   })

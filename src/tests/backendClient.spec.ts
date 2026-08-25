@@ -299,9 +299,8 @@ describe('backend client session handling', () => {
         id: 9,
         user: 1,
         training_session_id: 'session-9',
-        energy_level: 4,
-        confidence: 5,
-        enjoyment: 3,
+        feeling_scale: 4,
+        felt_arousal_scale: 5,
         created_at: '2026-07-19T10:00:00Z',
         updated_at: '2026-07-19T10:00:00Z'
       }
@@ -311,9 +310,8 @@ describe('backend client session handling', () => {
 
     await client.submitShortQuestionnaire?.({
       training_session_id: 'session-9',
-      energy_level: 4,
-      confidence: 5,
-      enjoyment: 3
+      feeling_scale: 4,
+      felt_arousal_scale: 5
     })
 
     expect(uniMock.request).toHaveBeenCalledWith(expect.objectContaining({
@@ -321,9 +319,8 @@ describe('backend client session handling', () => {
       method: 'POST',
       data: {
         training_session_id: 'session-9',
-        energy_level: 4,
-        confidence: 5,
-        enjoyment: 3
+        feeling_scale: 4,
+        felt_arousal_scale: 5
       }
     }))
   })

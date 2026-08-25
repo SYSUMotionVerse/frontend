@@ -97,9 +97,8 @@ export function createStudentStore(initialState: StudentAppState = createInitial
   }
 
   function submitShortQuestionnaireForLatestSession(payload: {
-    energyLevel: number
-    confidence: number
-    enjoyment: number
+    feelingScale: number
+    feltArousalScale: number
   }) {
     Object.assign(state, submitShortQuestionnaireForLatestStudentSession(getSnapshot(), payload))
   }
@@ -107,9 +106,8 @@ export function createStudentStore(initialState: StudentAppState = createInitial
   function submitShortQuestionnaireForSession(
     sessionId: string,
     payload: {
-      energyLevel: number
-      confidence: number
-      enjoyment: number
+      feelingScale: number
+      feltArousalScale: number
     }
   ) {
     Object.assign(state, submitShortQuestionnaireForStudentSession(getSnapshot(), sessionId, payload))

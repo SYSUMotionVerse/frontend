@@ -68,6 +68,7 @@ VITE_SHORT_QUESTIONNAIRE_ENDPOINT=/exercises/short-questionnaires
 
 后端已实现 `/api/exercises/short-questionnaires/` 接口，满足以下契约：
 
+- 请求使用 FS/FAS 两字段：`feeling_scale` 取 -5–5 的整数，`felt_arousal_scale` 取 1–6 的整数；旧三字段格式不再用于新提交。
 - 接口以 `(user, training_session_id)` 为幂等键，对同一用户同一 `training_session_id` 的重复提交（相同评分）返回 200 和已有记录，不创建重复记录。
 - 同一 `training_session_id` 但评分不同（冲突）的重复提交返回 409，不修改原始记录。
 - 不同用户可以独立使用相同的 `training_session_id`。

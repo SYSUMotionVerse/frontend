@@ -170,9 +170,8 @@ export function submitShortQuestionnaireForStudentSession(
   state: StudentAppState,
   sessionId: string,
   payload: {
-    energyLevel: number
-    confidence: number
-    enjoyment: number
+    feelingScale: number
+    feltArousalScale: number
   }
 ): StudentAppState {
   const nextState = cloneState(state)
@@ -193,9 +192,8 @@ export function submitShortQuestionnaireForStudentSession(
 export function submitShortQuestionnaireForLatestStudentSession(
   state: StudentAppState,
   payload: {
-    energyLevel: number
-    confidence: number
-    enjoyment: number
+    feelingScale: number
+    feltArousalScale: number
   }
 ): StudentAppState {
   const latestSession = state.sessions.at(-1)

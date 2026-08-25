@@ -48,6 +48,7 @@ import {
 } from '../platform/pendingTrainingSubmissions'
 import {
   createPendingShortQuestionnaireStore,
+  type PendingShortQuestionnaireSubmission,
   type PendingShortQuestionnaireStore
 } from '../platform/pendingShortQuestionnaires'
 import {
@@ -424,25 +425,23 @@ function buildRegistrationAccessResult(): BootstrapAccessResult {
   }
 }
 
-function isShortQuestionnaireRating(value: number) {
-  return Number.isInteger(value) && value >= 1 && value <= 5
-}
-
 function buildShortQuestionnairePayload(
   input: ShortQuestionnaireSyncInput
 ): ShortQuestionnaireCreatePayload {
   if (
-    !isShortQuestionnaireRating(input.energyLevel) ||
-    !isShortQuestionnaireRating(input.confidence) ||
-    !isShortQuestionnaireRating(input.enjoyment)
+    !Number.isInteger(input.feelingScale) ||
+    input.feelingScale < -5 ||
+    input.feelingScale > 5 ||
+    !Number.isInteger(input.feltArousalScale) ||
+    input.feltArousalScale < 1 ||
+    input.feltArousalScale > 6
   ) {
-    throw new Error('Short questionnaire responses must be integers between 1 and 5.')
+    throw new Error('Short questionnaire responses are outside the FS/FAS domains.')
   }
   return {
     training_session_id: input.sessionId,
-    energy_level: input.energyLevel,
-    confidence: input.confidence,
-    enjoyment: input.enjoyment
+    feeling_scale: input.feelingScale,
+    felt_arousal_scale: input.feltArousalScale
   }
 }
 
@@ -608,9 +607,8 @@ export function createStudentBackendSync(
           try {
             await submitShortQuestionnaire({
               training_session_id: current.sessionId,
-              energy_level: current.response.energyLevel,
-              confidence: current.response.confidence,
-              enjoyment: current.response.enjoyment
+              feeling_scale: current.response.feelingScale,
+              felt_arousal_scale: current.response.feltArousalScale
             })
             submissionOptions.pendingShortQuestionnaires.remove(current.sessionId)
             return true
@@ -857,17 +855,16 @@ export function createStudentBackendSync(
     async syncShortQuestionnaire(
       input: ShortQuestionnaireSyncInput
     ): Promise<ShortQuestionnaireSyncResult> {
-      buildShortQuestionnairePayload(input) // validates 1..5 domain early (synchronous, no storage)
+      buildShortQuestionnairePayload(input) // validates FS/FAS domains before durable storage
 
-      const submission: { sessionId: string; response: { energyLevel: number; confidence: number; enjoyment: number }; queuedAt: string } = {
+      const submission = {
         sessionId: input.sessionId,
         response: {
-          energyLevel: input.energyLevel,
-          confidence: input.confidence,
-          enjoyment: input.enjoyment
+          feelingScale: input.feelingScale,
+          feltArousalScale: input.feltArousalScale
         },
         queuedAt: new Date().toISOString()
-      }
+      } satisfies PendingShortQuestionnaireSubmission
       const submitShortQuestionnaire = dependencies.submitShortQuestionnaire
       if (!dependencies.isEnabled() || !submitShortQuestionnaire) {
         // Serialize only this session's save with its retry/remove. A slow

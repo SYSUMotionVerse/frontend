@@ -522,25 +522,23 @@ export interface LongQuestionnaireSyncResult extends BackendSyncResult {
 
 export interface ShortQuestionnaireSyncInput {
   sessionId: string
-  energyLevel: number
-  confidence: number
-  enjoyment: number
+  feelingScale: number
+  feltArousalScale: number
 }
 
 export interface ShortQuestionnaireCreatePayload {
   training_session_id: string
-  energy_level: number
-  confidence: number
-  enjoyment: number
+  feeling_scale: number
+  felt_arousal_scale: number
 }
 
 export interface BackendShortQuestionnaireRecord {
   id: number
   user: number
   training_session_id: string
-  energy_level: number
-  confidence: number
-  enjoyment: number
+  definition_code?: string | null
+  feeling_scale: number
+  felt_arousal_scale: number
   created_at: string
   updated_at: string
 }
