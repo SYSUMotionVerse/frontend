@@ -417,6 +417,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       !trainingStarted.value
       || videoEnded.value
       || !videoAutoplay.value
+      || playbackState.value === 'paused'
       || phaseTimer
     ) return
 
