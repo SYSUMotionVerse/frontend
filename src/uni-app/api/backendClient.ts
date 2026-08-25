@@ -564,8 +564,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getAchievementAwards() {
       return request<BackendAchievementAwards>(
-        '/exercises/progress/achievements/',
-        { method: 'POST' }
+        '/exercises/progress/achievements/'
       )
     },
     listNotifications() {

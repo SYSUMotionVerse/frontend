@@ -747,7 +747,7 @@ describe('backend client session handling', () => {
     expect(uniMock.request.mock.calls[0]?.[0].url).toBe(
       'http://api.example.com/exercises/progress/achievements/'
     )
-    expect(uniMock.request.mock.calls[0]?.[0].method).toBe('POST')
+    expect(uniMock.request.mock.calls[0]?.[0].method).toBe('GET')
   })
 
   it('exposes the response status code on backend request errors', async () => {
