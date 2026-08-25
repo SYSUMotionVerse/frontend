@@ -1610,9 +1610,8 @@ describe('page-level backend sync wiring', () => {
       await flushPromises()
 
       expect(createInnerAudioContext).not.toHaveBeenCalled()
-      await wrapper.get('.play-video').trigger('click')
-      await flushPromises()
-      expect(createInnerAudioContext).not.toHaveBeenCalled()
+      // Some WeChat runtimes omit the native play event after context.play();
+      // positive video progress must still start guidance playback.
       await wrapper.get('.demo-guidance').trigger('click')
       await flushPromises()
 

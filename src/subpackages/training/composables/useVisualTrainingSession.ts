@@ -412,6 +412,28 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     )
   }
 
+  function startMediaPhaseClock() {
+    if (
+      !trainingStarted.value
+      || videoEnded.value
+      || !videoAutoplay.value
+      || phaseTimer
+    ) return
+
+    if (
+      phaseKind.value === 'demonstration'
+      && phaseSlot.value === 'pretraining'
+      && resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'FULL'
+    ) {
+      startPhaseTimer(beginFormalCountdownOrTraining)
+      return
+    }
+
+    if (phaseKind.value === 'active' && phaseSlot.value === 'formal-training') {
+      startPhaseTimer(beginNextItem)
+    }
+  }
+
   function syncDemonstrationGuidance(currentTime: number) {
     if (phaseKind.value !== 'demonstration' || phaseSlot.value !== 'pretraining') return
     ttsPlayer.sync(
@@ -998,6 +1020,18 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
       videoDurationSeconds.value = duration
     }
+    // Some WeChat runtimes omit the native `play` event after a programmatic
+    // context.play(). A positive progress update still proves that playback
+    // has started, so use it to start the authoritative phase clock and the
+    // matching TTS without waiting for an event that may never arrive.
+    if (
+      typeof currentTime === 'number'
+      && Number.isFinite(currentTime)
+      && currentTime > 0
+    ) {
+      startMediaGuidanceAfterNativePlay()
+      startMediaPhaseClock()
+    }
     if (phaseKind.value === 'demonstration') {
       // The configured pretraining clock is authoritative. This lets a FULL
       // video be intentionally truncated and lets FIRST_FRAME run without
@@ -1022,15 +1056,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // speech may begin. It prevents a slow video load from causing TTS to
     // speak before the matching media is actually visible.
     startMediaGuidanceAfterNativePlay()
-    if (phaseKind.value === 'demonstration' && phaseSlot.value === 'pretraining' && !phaseTimer) {
-      startPhaseTimer(beginFormalCountdownOrTraining)
-    }
-    if (phaseKind.value === 'active' && !phaseTimer) {
-      // The action clock starts at the native play event, not when the Vue
-      // state flips to autoplay. Network/seek latency therefore cannot eat
-      // into the configured expected duration.
-      startPhaseTimer(beginNextItem)
-    }
+    // The timeupdate path above covers runtimes that omit this event.
+    startMediaPhaseClock()
   }
 
   function handleVideoPause(event?: unknown) {
