@@ -20,8 +20,6 @@ const items: ExerciseArrangementItem[] = [
     pretraining_countdown_duration: 0,
     expected_duration: 15,
     formal_countdown_duration: 0,
-    rest_duration: 0,
-    rest_countdown_duration: 0,
     countdown_duration: 99,
     standard_data_url: 'https://cdn.example.com/warmup.json',
     order: 1
@@ -40,8 +38,6 @@ const items: ExerciseArrangementItem[] = [
     pretraining_countdown_duration: 2,
     expected_duration: 30,
     formal_countdown_duration: 3,
-    rest_duration: 20,
-    rest_countdown_duration: 3,
     countdown_duration: 99,
     standard_data_url: 'https://cdn.example.com/action-1.json',
     order: 2
@@ -60,8 +56,6 @@ const items: ExerciseArrangementItem[] = [
     pretraining_countdown_duration: 0,
     expected_duration: 30,
     formal_countdown_duration: 3,
-    rest_duration: 0,
-    rest_countdown_duration: 0,
     countdown_duration: 99,
     standard_data_url: 'https://cdn.example.com/action-2.json',
     order: 3
@@ -79,7 +73,6 @@ describe('visual workout timeline', () => {
       ['pretraining', 1],
       ['formal-countdown', 1],
       ['formal-training', 1],
-      ['rest', 2],
       ['formal-countdown', 2],
       ['formal-training', 2]
     ])
@@ -90,12 +83,10 @@ describe('visual workout timeline', () => {
       [32, 62],
       [62, 65],
       [65, 95],
-      [95, 115],
-      [115, 118],
-      [118, 148]
+      [95, 98],
+      [98, 128]
     ])
-    expect(timeline.find(phase => phase.slot === 'rest')?.countdownDuration).toBe(3)
-    expect(timeline.at(-1)?.endSeconds).toBe(148)
+    expect(timeline.at(-1)?.endSeconds).toBe(128)
   })
 
   it('uses the full action video only when pretraining mode is FULL', () => {
@@ -106,13 +97,31 @@ describe('visual workout timeline', () => {
       .toBeUndefined()
   })
 
+  it('supports a first-frame pretraining background with its own duration', () => {
+    const timeline = buildVisualWorkoutTimeline([{
+      ...items[1],
+      pretraining_mode: 'FIRST_FRAME',
+      pretraining_duration: 7,
+      pretraining_countdown_duration: 2,
+      formal_countdown_duration: 3
+    }])
+    const pretraining = timeline.find(phase => phase.slot === 'pretraining')
+
+    expect(pretraining).toMatchObject({
+      kind: 'demonstration',
+      startSeconds: 2,
+      endSeconds: 9,
+      coachCue: '保持动作首帧，随后进入正式训练倒计时'
+    })
+    expect(timeline.at(-1)?.endSeconds).toBe(42)
+  })
+
   it('skips the pretraining countdown together with a disabled pretraining module', () => {
     const timeline = buildVisualWorkoutTimeline([
       {
         ...items[2],
         pretraining_countdown_duration: 3,
-        formal_countdown_duration: 3,
-        rest_duration: 0
+        formal_countdown_duration: 3
       }
     ])
 
@@ -124,7 +133,7 @@ describe('visual workout timeline', () => {
   })
 
   it('never uses a countdown value, including the legacy field, as formal-training duration', () => {
-    const timeline = buildVisualWorkoutTimeline([{ ...items[1], rest_duration: 0 }])
+    const timeline = buildVisualWorkoutTimeline([items[1]])
     const formalTraining = timeline.find(phase => phase.slot === 'formal-training')
 
     expect(formalTraining).toBeDefined()
@@ -132,9 +141,9 @@ describe('visual workout timeline', () => {
     expect(timeline.find(phase => phase.slot === 'formal-countdown')?.endSeconds).toBe(35)
   })
 
-  it('keeps the rest countdown inside the configured rest duration', () => {
+  it('does not insert a rest phase between actions', () => {
     const timeline = buildVisualWorkoutTimeline([
-      { ...items[0], rest_duration: 20, rest_countdown_duration: 3 },
+      items[0],
       {
         ...items[2],
         id: 14,
@@ -144,10 +153,13 @@ describe('visual workout timeline', () => {
         order: 2
       }
     ])
-    const rest = timeline.find(phase => phase.slot === 'rest')
 
-    expect(rest).toMatchObject({ startSeconds: 30, endSeconds: 50, countdownDuration: 3 })
-    expect(timeline.at(-1)?.endSeconds).toBe(80)
+    expect(timeline.map(phase => phase.slot)).toEqual([
+      'pretraining',
+      'formal-training',
+      'formal-training'
+    ])
+    expect(timeline.at(-1)?.endSeconds).toBe(60)
   })
 
   it('switches precisely between module slots and clamps progress', () => {
@@ -171,8 +183,7 @@ describe('visual workout timeline', () => {
         ...items[0],
         pretraining_mode: 'NONE',
         pretraining_countdown_duration: 0,
-        formal_countdown_duration: 0,
-        rest_duration: 0
+        formal_countdown_duration: 0
       }
     ])
 

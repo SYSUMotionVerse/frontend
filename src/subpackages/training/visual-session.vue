@@ -242,7 +242,6 @@ function setCapture(instance: unknown) {
         @video-waiting="session.handleVideoWaiting"
         @video-ended="session.handleVideoEnded"
         @video-error="session.handleVideoError"
-        @toggle-playback="session.togglePlayback"
         @start-recognition="session.startRecognition"
         @start-training="session.startTraining"
         @next-tutorial="session.nextTutorial"

@@ -155,7 +155,7 @@ describe('VisualTrainingPanel media switch', () => {
       phaseRemainingSeconds: 8
     })
 
-    expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('完整预训练示范')
+    expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
   })
@@ -199,33 +199,6 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.find('.visual-session__demonstration-stage').classes())
       .toContain('visual-session__media-stage--primary')
     expect(wrapper.emitted('startRecognition')).toEqual([[5]])
-  })
-
-  it('keeps the rest screen visible after the camera becomes the primary view', async () => {
-    const wrapper = mountPanel(true)
-
-    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
-    await wrapper.setProps({
-      trainingStarted: true,
-      phaseKind: 'rest',
-      phaseSlot: 'rest',
-      phaseRemainingSeconds: 20,
-      workoutState: {
-        ...workoutState,
-        current: {
-          ...workoutState.current,
-          id: 'rest-2',
-          kind: 'rest',
-          slot: 'rest',
-          title: '休息，准备：标准俯卧撑',
-          countdownDuration: 0
-        }
-      }
-    })
-
-    expect(wrapper.find('.visual-session__rest-overlay').exists()).toBe(true)
-    expect(wrapper.get('.visual-session__rest-overlay').text()).toContain('休息 20 秒')
-    expect(wrapper.get('.visual-session__rest-overlay').text()).toContain('标准俯卧撑')
   })
 
   it('keeps the mounted pose camera alive while switching views', async () => {
@@ -325,7 +298,7 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.find('.visual-session__start-countdown').exists()).toBe(false)
   })
 
-  it('keeps active landscape status and playback in their rails without overlaying either view', async () => {
+  it('keeps active landscape status in its rail without non-formal video controls', async () => {
     const wrapper = mountPanel(true, true)
 
     await wrapper.setProps({
@@ -341,13 +314,14 @@ describe('VisualTrainingPanel media switch', () => {
     expect(actionRail.find('.visual-session__comparison-status').text()).toContain('14s')
     expect(stage.find('.visual-session__lesson-label').exists()).toBe(false)
     expect(stage.find('.visual-session__active-timer').exists()).toBe(false)
-
-    const playback = wrapper.get('.visual-session__comparison-playback')
-    await playback.trigger('click')
-    expect(wrapper.emitted('togglePlayback')).toHaveLength(1)
+    expect(stage.get('#follow-along-video').attributes('controls')).toBeUndefined()
+    expect(stage.get('#follow-along-video').attributes('show-center-play-btn')).toBe('false')
+    expect(stage.get('#follow-along-video').attributes('enable-progress-gesture')).toBe('false')
+    expect(stage.find('.demonstration-video-controls').exists()).toBe(false)
+    expect(actionRail.find('.visual-session__comparison-playback').exists()).toBe(false)
   })
 
-  it('keeps landscape training controls available during the second-stage demonstration', async () => {
+  it('keeps the second-stage pretraining demonstration automatic without tutorial controls', async () => {
     const wrapper = mountPanel(true, true)
 
     await wrapper.setProps({
@@ -361,7 +335,10 @@ describe('VisualTrainingPanel media switch', () => {
     const actionRail = wrapper.get('.visual-session__comparison-actions')
     expect(actionRail.find('.visual-session__comparison-status').exists()).toBe(true)
     expect(actionRail.find('.visual-session__comparison-exit').exists()).toBe(true)
-    expect(actionRail.find('.visual-session__comparison-playback').exists()).toBe(true)
+    expect(stage.get('#follow-along-video').attributes('controls')).toBeUndefined()
+    expect(stage.get('#follow-along-video').attributes('show-center-play-btn')).toBe('false')
+    expect(stage.get('#follow-along-video').attributes('enable-progress-gesture')).toBe('false')
+    expect(stage.find('.demonstration-video-controls').exists()).toBe(false)
     expect(stage.find('.visual-session__demonstration-label').exists()).toBe(false)
   })
 

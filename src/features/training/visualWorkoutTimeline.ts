@@ -5,12 +5,11 @@ export type VisualTrainingPlaybackState = 'idle' | 'playing' | 'paused' | 'ended
 /**
  * `preview` is the pre-start screen. The standalone action tutorial remains
  * outside this timeline. The actual follow-along session is backend-driven:
- * optional pretraining → mandatory formal training → optional rest.
+ * optional pretraining → mandatory formal training.
  */
 export type VisualWorkoutPhaseKind =
   | 'preview'
   | 'active'
-  | 'rest'
   | 'demonstration'
   | 'countdown'
 
@@ -21,7 +20,6 @@ export type VisualWorkoutPhaseSlot =
   | 'pretraining'
   | 'formal-countdown'
   | 'formal-training'
-  | 'rest'
 
 export const initialPreviewDurationSeconds = 15
 export const initialStartCountdownSeconds = 3
@@ -37,8 +35,6 @@ export interface VisualWorkoutPhase {
   coachCue: string
   startSeconds: number
   endSeconds: number
-  /** Countdown displayed within this phase (used by the rest window). */
-  countdownDuration?: number
 }
 
 export interface VisualWorkoutState {
@@ -68,13 +64,17 @@ export function resolveCountdownDuration(value: number | null | undefined) {
 }
 
 export function resolvePretrainingMode(value: ExerciseArrangementItem['pretraining_mode']) {
-  return value === 'NONE' ? 'NONE' : 'FULL'
+  if (value === 'NONE') return 'NONE'
+  if (value === 'FIRST_FRAME') return 'FIRST_FRAME'
+  return 'FULL'
 }
 
-function resolvePretrainingDuration(item: ExerciseArrangementItem) {
+export function resolvePretrainingDuration(item: ExerciseArrangementItem | null | undefined) {
   return Math.max(
     1,
-    normalizeDuration(item.video.duration) || normalizeDuration(item.expected_duration)
+    normalizeDuration(item?.pretraining_duration)
+      || normalizeDuration(item?.video.duration)
+      || normalizeDuration(item?.expected_duration)
   )
 }
 
@@ -90,8 +90,7 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
     slot: VisualWorkoutPhaseSlot,
     duration: number,
     title: string,
-    coachCue: string,
-    countdownDuration = 0
+    coachCue: string
   ) {
     const normalizedDuration = normalizeDuration(duration)
     if (normalizedDuration <= 0) return
@@ -106,11 +105,7 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
       title,
       coachCue,
       startSeconds: cursor,
-      endSeconds: cursor + normalizedDuration,
-      countdownDuration: Math.min(
-        normalizedDuration,
-        resolveCountdownDuration(countdownDuration)
-      )
+      endSeconds: cursor + normalizedDuration
     })
     cursor += normalizedDuration
   }
@@ -121,7 +116,7 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
     const pretrainingCountdownDuration = resolveCountdownDuration(
       item.pretraining_countdown_duration
     )
-    if (pretrainingMode === 'FULL' && pretrainingCountdownDuration > 0) {
+    if (pretrainingMode !== 'NONE' && pretrainingCountdownDuration > 0) {
       appendPhase(
         item,
         itemIndex,
@@ -129,12 +124,13 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
         'pretraining-countdown',
         pretrainingCountdownDuration,
         `预训练倒计时：${actionTitle}`,
-        '倒计时结束后播放完整预训练示范',
-        pretrainingCountdownDuration
+        pretrainingMode === 'FIRST_FRAME'
+          ? '倒计时结束后保持动作首帧'
+          : '倒计时结束后播放动作示范'
       )
     }
 
-    if (pretrainingMode === 'FULL') {
+    if (pretrainingMode !== 'NONE') {
       appendPhase(
         item,
         itemIndex,
@@ -142,7 +138,9 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
         'pretraining',
         resolvePretrainingDuration(item),
         `预训练示范：${actionTitle}`,
-        '先完整观看动作示范，随后进入正式训练倒计时'
+        pretrainingMode === 'FIRST_FRAME'
+          ? '保持动作首帧，随后进入正式训练倒计时'
+          : '先播放动作示范，随后进入正式训练倒计时'
       )
     }
 
@@ -155,8 +153,7 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
         'formal-countdown',
         formalCountdownDuration,
         `正式训练倒计时：${actionTitle}`,
-        '倒计时结束后开始正式训练',
-        formalCountdownDuration
+        '倒计时结束后开始正式训练'
       )
     }
 
@@ -170,20 +167,6 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
       item.video.description?.trim() || '跟随示范，优先保证动作完整'
     )
 
-    const nextItem = orderedItems[itemIndex + 1]
-    const restDuration = normalizeDuration(item.rest_duration)
-    if (nextItem && restDuration > 0) {
-      appendPhase(
-        nextItem,
-        itemIndex + 1,
-        'rest',
-        'rest',
-        restDuration,
-        `休息，准备：${nextItem.video.title}`,
-        '休息结束后按后台配置进入下一动作模块',
-        item.rest_countdown_duration
-      )
-    }
   })
 
   return phases

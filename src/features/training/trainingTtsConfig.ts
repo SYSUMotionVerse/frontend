@@ -128,25 +128,6 @@ export function resolveTrainingCountdownTtsCues(
     }))
 }
 
-/**
- * A rest countdown is embedded in a longer rest module. Offset the global
- * 3/2/1 sequence so it lands at the module's actual final seconds.
- */
-export function resolveTrainingRestCountdownTtsCues(
-  cues: readonly TrainingCountdownTtsCue[] | null | undefined,
-  restDurationSeconds: number,
-  restCountdownDurationSeconds: number
-): ActionTtsCue[] {
-  const restDuration = toNonNegativeSeconds(restDurationSeconds)
-  const countdownDuration = Math.min(
-    restDuration,
-    toNonNegativeSeconds(restCountdownDurationSeconds)
-  )
-  const countdownStart = restDuration - countdownDuration
-  return resolveTrainingCountdownTtsCues(cues, countdownDuration)
-    .map(cue => ({ ...cue, time: countdownStart + cue.time }))
-}
-
 /** All database-owned audio for preloading; action-standard audio is excluded. */
 export function resolveArrangementTtsAudioUrls(items: readonly ExerciseArrangementItem[]) {
   return items.flatMap(item => (

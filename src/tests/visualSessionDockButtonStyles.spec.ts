@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('visual session dock button styles', () => {
-  it('clears the native mini-program button after border on dock actions', () => {
+  it('clears the native mini-program button after border on remaining dock actions', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -11,7 +11,7 @@ describe('visual session dock button styles', () => {
 
     expect(source).toMatch(/\.visual-session__secondary::after[\s\S]*border:\s*none;/)
     expect(source).not.toContain('.visual-session__record')
-    expect(source).toMatch(/\.visual-session__playback-control::after[\s\S]*border:\s*none;/)
+    expect(source).not.toContain('.visual-session__playback-control')
     expect(source).toMatch(/\.visual-session__completion-retry::after[\s\S]*border:\s*none;/)
   })
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+import DemonstrationVideoControls from './DemonstrationVideoControls.vue'
 import PoseDetectionView from './pose/PoseDetectionView.vue'
 import WorkoutTimeline from './WorkoutTimeline.vue'
 import type { DetectResult } from './pose/PoseDetectModel'
@@ -64,7 +65,6 @@ const emit = defineEmits<{
   videoError: [event: unknown]
   startRecognition: [fps: 5 | 10]
   startTraining: []
-  togglePlayback: []
   poseResult: [result: DetectResult]
   poseStats: [stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }]
   complete: []
@@ -79,6 +79,7 @@ const emit = defineEmits<{
 const poseCamera = shallowRef<InstanceType<typeof PoseDetectionView> | null>(null)
 type ActiveMedia = 'demonstration' | 'camera'
 const activeMedia = shallowRef<ActiveMedia>('demonstration')
+const demonstrationPlaybackRate = shallowRef(1)
 const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
@@ -101,6 +102,11 @@ const showStartAction = computed(() =>
   && !props.trainingStarted
   && props.startCountdown === 0
 )
+const showTutorialDemonstrationControls = computed(() => (
+  props.tutorialMode
+  && !props.tutorialLoading
+  && Boolean(props.tutorialVideoUrl)
+))
 const poseStatusLabel = computed(() => {
   if (props.poseFallbackSampling) {
     return props.livePoseFps > 0 ? `${props.livePoseFps} FPS 采样识别` : '采样识别中'
@@ -110,32 +116,18 @@ const poseStatusLabel = computed(() => {
 const phaseCueCount = computed(() => {
   if (props.phaseRemainingSeconds <= 0) return null
   if (props.phaseKind === 'countdown') return props.phaseRemainingSeconds
-  if (props.phaseKind !== 'rest') return null
-  const countdownDuration = props.workoutState.current.countdownDuration ?? 0
-  return countdownDuration > 0 && props.phaseRemainingSeconds <= countdownDuration
-    ? props.phaseRemainingSeconds
-    : null
+  return null
 })
 const phaseCueLabel = computed(() => {
   if (props.phaseSlot === 'pretraining-countdown') return '预训练开始'
   if (props.phaseSlot === 'formal-countdown') return '正式训练开始'
-  if (props.phaseSlot === 'rest') return '休息结束'
   return '开始'
 })
 const phaseKicker = computed(() => {
-  if (props.phaseSlot === 'pretraining') return '完整预训练示范'
+  if (props.phaseSlot === 'pretraining') return '预训练示范'
   if (props.phaseSlot === 'formal-training') return '正式训练'
   if (props.phaseKind === 'countdown') return phaseCueLabel.value
-  return props.phaseKind === 'preview' ? '准备第一个动作' : '休息，准备下一个动作'
-})
-const restNextTitle = computed(() =>
-  props.workoutState.current.title.replace(/^休息，准备：/, '')
-)
-const restNextCopy = computed(() => {
-  const nextSlot = props.workoutState.next?.slot
-  return nextSlot === 'pretraining-countdown' || nextSlot === 'pretraining'
-    ? '休息结束后按配置进入预训练示范'
-    : '休息结束后按配置进入正式训练'
+  return props.phaseKind === 'preview' ? '准备第一个动作' : '准备下一个动作'
 })
 const comparisonStatus = computed(() => {
   if (showStartAction.value && props.recognitionStatus === 'failed') {
@@ -168,9 +160,7 @@ const comparisonStatus = computed(() => {
       value: String(phaseCueCount.value),
       detail: props.phaseSlot === 'pretraining-countdown'
         ? '准备观看示范'
-        : props.phaseSlot === 'rest'
-          ? '准备下一动作'
-          : '准备正式跟练'
+        : '准备正式跟练'
     }
   }
 
@@ -182,19 +172,11 @@ const comparisonStatus = computed(() => {
     }
   }
 
-  if (props.phaseKind === 'rest') {
-    return {
-      label: '休息',
-      value: `${props.phaseRemainingSeconds}s`,
-      detail: restNextTitle.value || '准备下一动作'
-    }
-  }
-
   if (props.phaseKind === 'demonstration') {
     return {
       label: '预训练示范',
       value: `${props.phaseRemainingSeconds}s`,
-      detail: props.videoTitle || '完整观看示范'
+      detail: props.videoTitle || '按配置展示动作示范'
     }
   }
 
@@ -204,15 +186,6 @@ const comparisonStatus = computed(() => {
     detail: props.videoTitle || '跟随动作示范'
   }
 })
-const showPlaybackControl = computed(() =>
-  props.trainingStarted
-  && props.startCountdown === 0
-  && !props.videoEnded
-  && !props.videoLoading
-  && !props.videoError
-  && props.phaseKind !== 'rest'
-  && props.phaseKind !== 'countdown'
-)
 const comparisonMediaStyle = computed(() => {
   if (!props.comparisonMode || !props.comparisonMediaSize) return undefined
   return {
@@ -297,6 +270,46 @@ function syncVideoPlayback(resetToStart = false) {
   }
 }
 
+function getDemonstrationVideoContext() {
+  if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return null
+  return uni.createVideoContext(
+    props.tutorialMode ? 'tutorial-video' : 'follow-along-video',
+    componentInstance?.proxy as never
+  )
+}
+
+function applyDemonstrationPlaybackRate() {
+  const context = getDemonstrationVideoContext()
+  if (!context) return
+  context.playbackRate(demonstrationPlaybackRate.value)
+}
+
+function handleTrainingVideoLoadedMetadata() {
+  syncVideoPlayback()
+}
+
+function handleTutorialVideoLoadedMetadata() {
+  applyDemonstrationPlaybackRate()
+}
+
+function changeDemonstrationPlaybackRate(rate: number) {
+  demonstrationPlaybackRate.value = rate
+  applyDemonstrationPlaybackRate()
+}
+
+async function replayDemonstration() {
+  if (!props.tutorialMode) return
+
+  await nextTick()
+  const context = getDemonstrationVideoContext()
+  if (!context) return
+
+  context.pause()
+  context.seek(0)
+  context.playbackRate(demonstrationPlaybackRate.value)
+  context.play()
+}
+
 watch(
   () => [props.videoAutoplay, props.videoUrl, props.phaseKind] as const,
   async ([, , phaseKind], previous) => {
@@ -305,6 +318,13 @@ watch(
       (phaseKind === 'active' || phaseKind === 'demonstration')
       && previous?.[2] !== phaseKind
     )
+  }
+)
+
+watch(
+  () => [props.tutorialMode, props.tutorialVideoUrl, props.videoEventToken] as const,
+  () => {
+    demonstrationPlaybackRate.value = 1
   }
 )
 
@@ -392,6 +412,7 @@ defineExpose({ startRecord, stopRecord })
 
           <video
             v-else-if="tutorialVideoUrl"
+            id="tutorial-video"
             :key="tutorialVideoUrl"
             class="visual-session__tutorial-video"
             :style="tutorialMediaStyle"
@@ -403,6 +424,7 @@ defineExpose({ startRecord, stopRecord })
             :autoplay="false"
             :loop="false"
             object-fit="contain"
+            @loadedmetadata="handleTutorialVideoLoadedMetadata"
           />
           <view
             v-else
@@ -411,6 +433,13 @@ defineExpose({ startRecord, stopRecord })
           >
             <text>暂无讲解视频</text>
           </view>
+          <DemonstrationVideoControls
+            v-if="showTutorialDemonstrationControls"
+            :playback-rate="demonstrationPlaybackRate"
+            :compact="comparisonMode"
+            @replay="replayDemonstration"
+            @change-playback-rate="changeDemonstrationPlaybackRate"
+          />
         </view>
 
         <view class="visual-session__tutorial-content">
@@ -517,7 +546,7 @@ defineExpose({ startRecord, stopRecord })
           @play="emit('videoPlay', wrapVideoEvent($event))"
           @pause="emit('videoPause', wrapVideoEvent($event))"
           @waiting="emit('videoWaiting', wrapVideoEvent($event))"
-          @loadedmetadata="syncVideoPlayback()"
+          @loadedmetadata="handleTrainingVideoLoadedMetadata"
           @ended="emit('videoEnded', wrapVideoEvent($event))"
           @error="emit('videoError', wrapVideoEvent($event))"
         />
@@ -558,7 +587,7 @@ defineExpose({ startRecord, stopRecord })
           {{ poseStatusLabel }}
         </cover-view>
         <cover-view
-          v-if="recognitionEnabled && poseMountReady && (phaseKind === 'preview' || phaseKind === 'rest' || phaseKind === 'countdown')"
+          v-if="recognitionEnabled && poseMountReady && (phaseKind === 'preview' || phaseKind === 'countdown')"
           class="visual-session__position-guide"
         >
           <cover-view class="visual-session__guide-head"></cover-view>
@@ -585,18 +614,10 @@ defineExpose({ startRecord, stopRecord })
         <cover-view class="visual-session__phase-remaining">{{ phaseRemainingSeconds }} 秒</cover-view>
       </cover-view>
       <cover-view
-        v-if="!comparisonMode && !videoLoading && !videoError && videoUrl && phaseKind === 'rest' && !phaseCueCount"
-        class="visual-session__rest-overlay"
-      >
-        <cover-view class="visual-session__rest-kicker">休息 {{ phaseRemainingSeconds }} 秒</cover-view>
-        <cover-view class="visual-session__rest-title">下一训练步骤：{{ restNextTitle }}</cover-view>
-        <cover-view class="visual-session__rest-copy">{{ restNextCopy }}</cover-view>
-      </cover-view>
-      <cover-view
         v-if="phaseKind === 'demonstration' && !comparisonMode && demonstrationPrimary && !videoLoading && !videoError && videoUrl"
         class="visual-session__demonstration-label"
       >
-        <cover-view class="visual-session__demonstration-kicker">完整预训练示范</cover-view>
+        <cover-view class="visual-session__demonstration-kicker">预训练示范</cover-view>
         <cover-view>语音讲解与示范视频同步播放</cover-view>
       </cover-view>
       <cover-view
@@ -640,15 +661,6 @@ defineExpose({ startRecord, stopRecord })
       <cover-view v-if="demonstrationPrimary && phaseKind === 'active' && !comparisonMode" class="visual-session__lesson-label">
         正式训练：{{ videoTitle || '动作跟练' }}
       </cover-view>
-      <cover-view
-        v-if="showPlaybackControl && !comparisonMode"
-        class="visual-session__playback-control"
-        :aria-label="videoAutoplay ? '暂停训练' : '继续训练'"
-        @tap="emit('togglePlayback')"
-      >
-        {{ videoAutoplay ? 'Ⅱ' : '▶' }}
-      </cover-view>
-
       <cover-view v-if="videoEnded" class="visual-session__completion-overlay">
         <cover-view class="visual-session__completion-title">
           {{ completionError ? '结果提交失败' : '训练完成，正在生成结果' }}
@@ -683,15 +695,6 @@ defineExpose({ startRecord, stopRecord })
           >
             <uni-icons type="play-filled" size="18" color="#fffaf4" />
             <text>{{ recognitionStatus === 'failed' ? '相机未就绪' : '开始训练' }}</text>
-          </button>
-          <button
-            v-if="showPlaybackControl"
-            class="visual-session__comparison-playback"
-            :aria-label="videoAutoplay ? '暂停训练' : '继续训练'"
-            hover-class="visual-session__comparison-playback--pressed"
-            @click="emit('togglePlayback')"
-          >
-            <text class="visual-session__comparison-playback-symbol">{{ videoAutoplay ? 'Ⅱ' : '▶' }}</text>
           </button>
           <button
             class="visual-session__comparison-exit"
@@ -753,9 +756,12 @@ defineExpose({ startRecord, stopRecord })
 }
 
 .visual-session__tutorial-media {
+  position: relative;
   width: 100%;
   min-height: 0;
   flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 16rpx;
 }
 
 .visual-session__tutorial-content {
@@ -1134,14 +1140,6 @@ defineExpose({ startRecord, stopRecord })
   max-width: calc(50% - 40rpx);
 }
 
-.visual-session__stage--comparison .visual-session__rest-overlay {
-  right: calc(50% + 2rpx);
-}
-
-.visual-session__stage--comparison .visual-session__playback-control {
-  right: calc(50% + 20rpx);
-}
-
 .visual-session__media-label {
   position: absolute;
   top: 12rpx;
@@ -1197,48 +1195,10 @@ defineExpose({ startRecord, stopRecord })
   color: #8c4138;
 }
 
-.visual-session__rest-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  box-sizing: border-box;
-  background: #17263b;
-  color: #fffaf4;
-  padding: 40rpx;
-  text-align: center;
-}
-
-.visual-session__rest-kicker {
-  color: rgba(255, 250, 244, 0.76);
-  font-size: 21rpx;
-  font-weight: 800;
-}
-
-.visual-session__rest-title {
-  max-width: 100%;
-  margin-top: 6rpx;
-  overflow: hidden;
-  font-size: 28rpx;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  line-height: 1.35;
-}
-
-.visual-session__rest-copy {
-  margin-top: 14rpx;
-  color: rgba(255, 250, 244, 0.72);
-  font-size: 18rpx;
-  font-weight: 700;
-}
-
 .visual-session__demonstration-label {
   position: absolute;
   left: 20rpx;
-  bottom: 20rpx;
+  bottom: 100rpx;
   z-index: 6;
   display: flex;
   align-items: flex-start;
@@ -1425,7 +1385,6 @@ defineExpose({ startRecord, stopRecord })
 
 .visual-session__retry::after,
 .visual-session__secondary::after,
-.visual-session__playback-control::after,
 .visual-session__completion-retry::after {
   border: none;
 }
@@ -1442,32 +1401,6 @@ defineExpose({ startRecord, stopRecord })
   padding: 7rpx 12rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.visual-session__playback-control {
-  position: absolute;
-  right: 20rpx;
-  top: 20rpx;
-  z-index: 7;
-  display: inline-flex;
-  height: 64rpx;
-  width: 64rpx;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 250, 244, 0.94);
-  color: #20344f;
-  font-weight: 900;
-  line-height: 64rpx;
-  padding: 0;
-}
-
-.visual-session__playback-symbol {
-  width: 24rpx;
-  font-size: 21rpx;
-  line-height: 1;
-  text-align: center;
 }
 
 .visual-session__lower-grid {
@@ -1858,36 +1791,6 @@ defineExpose({ startRecord, stopRecord })
   box-shadow: 0 3px 0 #23665c;
   font-size: 12px;
   padding: 0 8px;
-}
-
-.visual-session--comparison .visual-session__comparison-playback {
-  display: inline-flex;
-  width: 46px;
-  min-height: 46px;
-  align-self: center;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: #fffaf4;
-  color: #20344f;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.visual-session--comparison .visual-session__comparison-playback::after {
-  border: none;
-}
-
-.visual-session--comparison .visual-session__comparison-playback--pressed {
-  background: #e9e1d7;
-}
-
-.visual-session--comparison .visual-session__comparison-playback-symbol {
-  width: 18px;
-  font-size: 18px;
-  line-height: 1;
-  text-align: center;
 }
 
 .visual-session--comparison .visual-session__comparison-exit {

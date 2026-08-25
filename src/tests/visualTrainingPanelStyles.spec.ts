@@ -63,21 +63,24 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('visual-session__media-switch')
     expect(source).not.toContain('visual-session__recording-badge')
     expect(source).toContain('defineExpose({ startRecord, stopRecord })')
-    expect(source).toContain('phaseKind === \'rest\'')
-    expect(source).toContain('visual-session__rest-overlay')
-    expect(source).toContain('下一训练步骤：{{ restNextTitle }}')
-    expect(source).toContain("phaseKind === 'rest' && !phaseCueCount")
+    expect(source).not.toContain("phaseKind === 'rest'")
+    expect(source).not.toContain('visual-session__rest-overlay')
+    expect(source).not.toContain('下一训练步骤：{{ restNextTitle }}')
     expect(source).toContain('动作剩余')
     expect(source).toContain('visual-session__start-overlay')
     expect(source).toContain('startCountdown > 0')
     expect(source).toContain(':controls="false"')
-    expect(source).toContain('visual-session__playback-control')
+    expect(source).toContain(':show-center-play-btn="false"')
+    expect(source).toContain(':enable-progress-gesture="false"')
+    expect(source).toContain("import DemonstrationVideoControls from './DemonstrationVideoControls.vue'")
+    expect(source).toContain('const showTutorialDemonstrationControls = computed(() =>')
+    expect(source).not.toContain('visual-session__playback-control')
     expect(source).toContain('visual-session__position-guide')
     expect(source).toContain('站在框内')
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__media-label"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__start-overlay"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__position-guide"/)
-    expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__playback-control"/)
+    expect(source).toContain('class="visual-session__tutorial-skip"')
   })
 
   it('uses a stable portrait 4:3 media stage followed by the training information', () => {
@@ -127,7 +130,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(shellSource).toContain('overflow-y: auto;')
   })
 
-  it('keeps landscape status and controls together in the right-side rail', () => {
+  it('keeps landscape status in the right-side rail without adding tutorial controls to training', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -154,7 +157,9 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('先观看完整动作，倒计时后开始跟练')
     expect(source).toContain('v-if="!comparisonMode && !tutorialMode" class="visual-session__actions"')
     expect(source).toContain('class="visual-session__landscape-start"')
-    expect(source).toContain('class="visual-session__comparison-playback"')
+    expect(source).toContain('<DemonstrationVideoControls')
+    expect(source).not.toContain('showTrainingDemonstrationControls')
+    expect(source).not.toContain('visual-session__comparison-playback')
     expect(source).toContain('class="visual-session__comparison-exit"')
     expect(source).toMatch(
       /\.visual-session--comparison \.visual-session__comparison-layout--active\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*flex:\s*1;[\s\S]*gap:\s*12px;/
@@ -179,9 +184,6 @@ describe('VisualTrainingPanel mini-program styles', () => {
     )
     expect(source).toMatch(
       /\.visual-session--comparison \.visual-session__landscape-start\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*48px;[\s\S]*border-radius:\s*999px;/
-    )
-    expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__comparison-playback\s*\{[\s\S]*width:\s*46px;[\s\S]*min-height:\s*46px;[\s\S]*border-radius:\s*50%;/
     )
     expect(source).toMatch(
       /\.visual-session--comparison \.visual-session__comparison-exit\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*44px;[\s\S]*background:\s*transparent;[\s\S]*color:\s*#3d4a5c;/

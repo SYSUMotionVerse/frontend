@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 import VisualTrainingPanel from '../subpackages/training/components/VisualTrainingPanel.vue'
 import { createVisualComparisonLayout } from '../subpackages/training/visualSessionLayout'
 import type { VisualWorkoutState } from '../features/training/visualWorkoutTimeline'
@@ -28,6 +29,13 @@ const workoutState: VisualWorkoutState = {
   phaseProgressPercent: 0,
   sessionProgressPercent: 0
 }
+
+const CoverViewStub = defineComponent({
+  inheritAttrs: false,
+  setup(_, { attrs, slots }) {
+    return () => h('cover-view', attrs, slots.default?.())
+  }
+})
 
 function mountTutorial(overrides: Record<string, unknown> = {}) {
   return mount(VisualTrainingPanel, {
@@ -73,11 +81,16 @@ function mountTutorial(overrides: Record<string, unknown> = {}) {
       stubs: {
         PoseDetectionView: true,
         WorkoutTimeline: true,
+        'cover-view': CoverViewStub,
         'scroll-view': true
       }
     }
   })
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('VisualTrainingPanel tutorial layout', () => {
   it('keeps the portrait tutorial reading order intact', () => {
@@ -112,6 +125,31 @@ describe('VisualTrainingPanel tutorial layout', () => {
     expect(wrapper.find('#follow-along-video').exists()).toBe(true)
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
+  })
+
+  it('uses native tutorial controls while keeping replay and speed on that video only', async () => {
+    const seek = vi.fn()
+    const play = vi.fn()
+    const pause = vi.fn()
+    const playbackRate = vi.fn()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn(() => ({ seek, play, pause, playbackRate }))
+    })
+    const wrapper = mountTutorial()
+    const controls = wrapper.get('.demonstration-video-controls')
+
+    await controls.get('.demonstration-video-controls__button--speed').trigger('tap')
+    await controls.get('.demonstration-video-controls__button').trigger('tap')
+    await wrapper.get('.visual-session__tutorial-skip').trigger('click')
+
+    expect(wrapper.get('#tutorial-video').attributes('controls')).toBeDefined()
+    expect(wrapper.get('#tutorial-video').attributes('show-center-play-btn')).toBeDefined()
+    expect(wrapper.get('#tutorial-video').attributes('enable-progress-gesture')).toBeDefined()
+    expect(playbackRate).toHaveBeenCalledWith(1.25)
+    expect(seek).toHaveBeenCalledWith(0)
+    expect(play).toHaveBeenCalled()
+    expect(pause).toHaveBeenCalled()
+    expect(wrapper.emitted('skipTutorial')).toHaveLength(1)
   })
 
   it('keeps the compact 568×320 tutorial controls reachable beside an explicitly sized video', async () => {
@@ -170,8 +208,10 @@ describe('VisualTrainingPanel tutorial layout', () => {
     expect(source).toMatch(
       /\.visual-session__tutorial--comparison \.visual-session__tutorial-btn\s*\{[\s\S]*min-height:\s*44px;/
     )
-    expect(source).toMatch(
-      /\.visual-session__tutorial--comparison \.visual-session__tutorial-skip\s*\{[\s\S]*min-height:\s*36px;/
-    )
+    expect(source).toContain("import DemonstrationVideoControls from './DemonstrationVideoControls.vue'")
+    expect(source).toContain('id="tutorial-video"')
+    expect(source).toContain(':controls="true"')
+    expect(source).toContain(':show-center-play-btn="true"')
+    expect(source).toContain(':enable-progress-gesture="true"')
   })
 })

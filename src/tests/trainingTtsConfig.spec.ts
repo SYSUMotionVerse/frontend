@@ -3,7 +3,6 @@ import type { ExerciseArrangementItem } from '../uni-app/api/studentBackendTypes
 import {
   resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
-  resolveTrainingRestCountdownTtsCues,
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
   resolveTrainingPhaseStartAudioUrls,
@@ -24,8 +23,6 @@ const item: ExerciseArrangementItem = {
   pretraining_countdown_duration: 0,
   expected_duration: 30,
   formal_countdown_duration: 3,
-  rest_duration: 20,
-  rest_countdown_duration: 3,
   order: 1,
   training_tts_cues: [
     {
@@ -64,15 +61,6 @@ const item: ExerciseArrangementItem = {
       audio_url: 'https://cdn.example.com/formal-complete.mp3',
       order: 1
     },
-    {
-      id: 5,
-      phase: 'REST',
-      timing: 'BEFORE_COUNTDOWN',
-      offset_seconds: 0,
-      text: '准备下一动作，go！',
-      audio_url: 'https://cdn.example.com/rest-go.mp3',
-      order: 0
-    }
   ]
 }
 
@@ -87,17 +75,6 @@ describe('trainingTtsConfig', () => {
     ])
     expect(resolveTrainingPhaseDelayedTtsCues(cues)).toEqual([
       expect.objectContaining({ time: 5, audio_url: 'https://cdn.example.com/pre-5.mp3' })
-    ])
-  })
-
-  it('places the next-action go cue inside rest at the configured countdown boundary', () => {
-    const cues = resolveTrainingPhaseTtsCues(item, 'REST', {
-      phaseDurationSeconds: 20,
-      countdownDurationSeconds: 3
-    })
-
-    expect(cues).toEqual([
-      expect.objectContaining({ time: 17, audio_url: 'https://cdn.example.com/rest-go.mp3' })
     ])
   })
 
@@ -129,11 +106,6 @@ describe('trainingTtsConfig', () => {
       expect.objectContaining({ time: 2, audio_url: 'https://cdn.example.com/3.mp3' }),
       expect.objectContaining({ time: 3, audio_url: 'https://cdn.example.com/2.mp3' }),
       expect.objectContaining({ time: 4, audio_url: 'https://cdn.example.com/1.mp3' })
-    ])
-    expect(resolveTrainingRestCountdownTtsCues(countdownCues, 20, 5)).toEqual([
-      expect.objectContaining({ time: 17, audio_url: 'https://cdn.example.com/3.mp3' }),
-      expect.objectContaining({ time: 18, audio_url: 'https://cdn.example.com/2.mp3' }),
-      expect.objectContaining({ time: 19, audio_url: 'https://cdn.example.com/1.mp3' })
     ])
   })
 })

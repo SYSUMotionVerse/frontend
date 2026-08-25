@@ -110,8 +110,6 @@ const studentBackendSync = {
       pretraining_countdown_duration: 0,
       expected_duration: 42,
       formal_countdown_duration: 0,
-      rest_duration: 0,
-      rest_countdown_duration: 0,
       countdown_duration: 0,
       order: 1
     }]
@@ -382,8 +380,6 @@ describe('page-level backend sync wiring', () => {
         pretraining_countdown_duration: 0,
         expected_duration: 42,
         formal_countdown_duration: 0,
-        rest_duration: 0,
-        rest_countdown_duration: 0,
         countdown_duration: 0,
         order: 1
       }]
@@ -1535,8 +1531,6 @@ describe('page-level backend sync wiring', () => {
         pretraining_countdown_duration: 0,
         expected_duration: 8,
         formal_countdown_duration: 0,
-        rest_duration: 0,
-        rest_countdown_duration: 0,
         countdown_duration: 0,
         training_tts_cues: [{
           id: 901,
@@ -1640,7 +1634,7 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
-  it('plays database-configured next-action and countdown audio during rest, not the demonstration', async () => {
+  it('starts the next action without inserting a rest module', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 4,
@@ -1671,20 +1665,8 @@ describe('page-level backend sync wiring', () => {
           pretraining_countdown_duration: 0,
           expected_duration: 4,
           formal_countdown_duration: 0,
-          rest_duration: 10,
-          rest_countdown_duration: 3,
           countdown_duration: 0,
-          training_tts_cues: [
-            {
-              id: 911,
-              phase: 'REST',
-              timing: 'BEFORE_COUNTDOWN',
-              offset_seconds: 0,
-              text: '准备下一动作，go！',
-              audio_url: 'https://cdn.example.com/database-rest-go.mp3',
-              order: 0
-            }
-          ],
+          training_tts_cues: [],
           order: 1
         },
         {
@@ -1702,8 +1684,6 @@ describe('page-level backend sync wiring', () => {
           pretraining_countdown_duration: 0,
           expected_duration: 4,
           formal_countdown_duration: 5,
-          rest_duration: 0,
-          rest_countdown_duration: 0,
           countdown_duration: 3,
           training_tts_cues: [
             {
@@ -1828,30 +1808,8 @@ describe('page-level backend sync wiring', () => {
       await vi.advanceTimersByTimeAsync(4000)
       await flushPromises()
 
-      // The REST cue is deliberately scheduled at the start of the final
-      // three-second countdown, not at the beginning of the rest module.
-      await vi.advanceTimersByTimeAsync(7_000)
-      await flushPromises()
-      expect(playedUrls).toContain('https://cdn.example.com/database-rest-go.mp3')
+      expect(playedUrls).not.toContain('https://cdn.example.com/database-rest-go.mp3')
       expect(playedUrls).not.toContain('https://cdn.example.com/action-2-next.mp3')
-
-      const restGuidanceStart = playedUrls.length
-      await wrapper.get('.demo-guidance').trigger('click')
-      await vi.advanceTimersByTimeAsync(60)
-      expect(playedUrls.slice(restGuidanceStart)).not.toContain(
-        'https://cdn.example.com/database-action-2-guidance.mp3'
-      )
-      expect(playedUrls.slice(restGuidanceStart)).toEqual([
-        'https://cdn.example.com/database-countdown-3.mp3'
-      ])
-
-      await vi.advanceTimersByTimeAsync(2_940)
-      await flushPromises()
-      expect(playedUrls.slice(restGuidanceStart, restGuidanceStart + 3)).toEqual([
-        'https://cdn.example.com/database-countdown-3.mp3',
-        'https://cdn.example.com/database-countdown-2.mp3',
-        'https://cdn.example.com/database-countdown-1.mp3'
-      ])
 
       const secondDemoAudioStart = playedUrls.length
       const secondDemoCompletedStart = completedUrls.length
@@ -1940,8 +1898,6 @@ describe('page-level backend sync wiring', () => {
         pretraining_countdown_duration: 0,
         expected_duration: 42,
         formal_countdown_duration: 0,
-        rest_duration: 0,
-        rest_countdown_duration: 0,
         countdown_duration: 0,
         order: 1
       }]
