@@ -437,7 +437,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
       return request<BackendCurrentUser>('/users/me/')
     },
     updateProfile(payload: UserUpdatePayload) {
-      return request('/users/update_profile/', {
+      return request('/users/me/', {
         method: 'PATCH',
         data: payload
       })

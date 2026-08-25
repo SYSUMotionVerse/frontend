@@ -508,6 +508,20 @@ describe('backend client session handling', () => {
     })
   })
 
+  it('updates the current profile through the unified /users/me/ endpoint', async () => {
+    const uniMock = createUniMock([{ statusCode: 200, data: { name: 'Lin' } }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await client.updateProfile({ name: 'Lin' })
+
+    expect(uniMock.request.mock.calls[0]?.[0]).toMatchObject({
+      url: 'http://api.example.com/users/me/',
+      method: 'PATCH',
+      data: { name: 'Lin' }
+    })
+  })
+
   it('loads visual score trend from the exercise records trend endpoint', async () => {
     const uniMock = createUniMock([
       {
