@@ -115,14 +115,20 @@ function buildActionMotion(angleFrames: PoseAngleFrame[]): ActionMotion | null {
 
 function buildSessionScoringResult(
   actionScores: ScoredActionResult[],
-  scoringWarnings: string[]
+  scoringWarnings: string[],
+  expectedItemIds: number[]
 ) {
-  const aggregate = aggregateActionScores(actionScores, scoringWarnings)
+  const aggregate = aggregateActionScores(
+    actionScores,
+    scoringWarnings,
+    expectedItemIds
+  )
   if (aggregate.score === undefined) {
     return {
       score: undefined,
       summary: aggregate.summary,
-      scoreDetails: undefined
+      scoreDetails: undefined,
+      scoreUnavailableReason: aggregate.warnings.join('; ') || 'no_valid_action_score'
     }
   }
   const scoreDetails: ExerciseScoreDetails = {
@@ -136,7 +142,12 @@ function buildSessionScoringResult(
     }
   }
 
-  return { score: aggregate.score, summary: aggregate.summary, scoreDetails }
+  return {
+    score: aggregate.score,
+    summary: aggregate.summary,
+    scoreDetails,
+    scoreUnavailableReason: undefined
+  }
 }
 
 export function useVisualTrainingSession(options: UseVisualTrainingSessionOptions) {
@@ -1215,7 +1226,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           ?? 0
       )
     )
-    const scoring = buildSessionScoringResult(actionScores.value, scoringWarnings.value)
+    const scoring = buildSessionScoringResult(
+      actionScores.value,
+      scoringWarnings.value,
+      arrangement.value?.items.map(item => item.id) ?? []
+    )
     const basePoseAnalysis = buildVisualPoseAnalysisPayload(poseAngleFrames.value)
     const poseAnalysis = basePoseAnalysis
       ? {
@@ -1229,9 +1244,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       : undefined
     let qualityScore = scoring.score === undefined ? null : Math.round(scoring.score)
     let summary = scoring.summary
-    const scoreUnavailableReason = scoring.score === undefined
-      ? (scoringWarnings.value.join('; ') || 'no_valid_action_score')
-      : undefined
+    const scoreUnavailableReason = scoring.scoreUnavailableReason
 
     try {
       const result = await submission.sync({

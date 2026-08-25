@@ -186,4 +186,25 @@ describe('aggregateActionScores', () => {
     expect(result.score).toBeUndefined()
     expect(result.warnings).toEqual(['标准文件不可用'])
   })
+
+  it('does not aggregate a partially scored arrangement', () => {
+    const result = aggregateActionScores([
+      {
+        itemId: 1,
+        videoId: 11,
+        actionId: 'only-action',
+        title: '已评分动作',
+        expectedDuration: 30,
+        score: 95,
+        passed: true,
+        feedback: [],
+        angleDetails: {},
+        frameCount: 100
+      }
+    ], [], [1, 2])
+
+    expect(result.score).toBeUndefined()
+    expect(result.dimensions).toEqual([])
+    expect(result.warnings.join('')).toContain('部分动作未获得有效评分')
+  })
 })

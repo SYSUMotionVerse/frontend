@@ -416,15 +416,25 @@ export function scoreAction(
 
 export function aggregateActionScores(
   actionScores: ScoredActionResult[],
-  scoringWarnings: string[] = []
+  scoringWarnings: string[] = [],
+  expectedItemIds?: number[]
 ): AggregatedActionScoreResult {
-  if (actionScores.length === 0) {
+  const expectedIds = new Set(expectedItemIds ?? [])
+  const scoredIds = new Set(actionScores.map(action => action.itemId))
+  const hasIncompleteArrangement = expectedItemIds !== undefined && (
+    scoredIds.size !== expectedIds.size
+    || [...expectedIds].some(itemId => !scoredIds.has(itemId))
+  )
+  if (actionScores.length === 0 || hasIncompleteArrangement) {
+    const warnings = hasIncompleteArrangement
+      ? [...scoringWarnings, '部分动作未获得有效评分，本次不生成总分。']
+      : scoringWarnings
     return {
       score: undefined,
       summary: '教学视频已完成，但未获得可用于动作评分的标准数据或姿态数据。',
       dimensions: [],
       highlights: [],
-      warnings: [...new Set(scoringWarnings)]
+      warnings: [...new Set(warnings)]
     }
   }
 
