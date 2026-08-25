@@ -41,13 +41,10 @@ describe('student backend sync orchestration', () => {
 
     const ensureSession = vi.fn().mockResolvedValue(undefined)
     const updateProfile = vi.fn().mockResolvedValue(undefined)
-    const createSurveyRecord = vi.fn().mockResolvedValue(undefined)
-
     const sync = createStudentBackendSync({
       isEnabled: () => true,
       ensureSession,
-      updateProfile,
-      createSurveyRecord
+      updateProfile
     })
 
     await sync.syncRegistration(createProfile())
@@ -59,31 +56,9 @@ describe('student backend sync orchestration', () => {
         student_id: '20260001'
       })
     )
-    expect(createSurveyRecord).not.toHaveBeenCalled()
   })
 
-  it('does not depend on the legacy survey-record fallback during registration', async () => {
-    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
-
-    const ensureSession = vi.fn().mockResolvedValue(undefined)
-    const updateProfile = vi.fn().mockResolvedValue(undefined)
-    const createSurveyRecord = vi.fn().mockRejectedValue(new Error('Request failed with 400'))
-
-    const sync = createStudentBackendSync({
-      isEnabled: () => true,
-      ensureSession,
-      updateProfile,
-      createSurveyRecord
-    })
-
-    await expect(sync.syncRegistration(createProfile())).resolves.toEqual({ synced: true })
-
-    expect(ensureSession).toHaveBeenCalledTimes(1)
-    expect(updateProfile).toHaveBeenCalledTimes(1)
-    expect(createSurveyRecord).not.toHaveBeenCalled()
-  })
-
-  it('syncs a long questionnaire as a survey record', async () => {
+  it('syncs a long questionnaire through the psychology scale API', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const ensureSession = vi.fn().mockResolvedValue(undefined)

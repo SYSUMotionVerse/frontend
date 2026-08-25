@@ -268,7 +268,7 @@ The backend route layout is not the same as the old API examples in every markdo
 
 - `POST /api/users/users/wechat_login/`
 - `PATCH /api/users/users/update_profile/`
-- `POST /api/users/survey-records/`
+- `POST /api/psychology/records/submit/`
 
 Do not assume older docs are accurate. Check backend code or the integration doc when in doubt.
 

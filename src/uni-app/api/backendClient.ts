@@ -16,7 +16,6 @@ import type {
   TutorialResponse,
   ExerciseArrangementSummary,
   StairsRecordCreatePayload,
-  SurveyRecordCreatePayload,
   UserUpdatePayload,
   BackendComplianceSummary,
   BackendComplianceCalendar,
@@ -456,12 +455,6 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
           data: { status }
         }
       )
-    },
-    createSurveyRecord(payload: SurveyRecordCreatePayload) {
-      return request('/users/survey-records/', {
-        method: 'POST',
-        data: payload
-      })
     },
     ...(shortQuestionnaireEndpoint
       ? {

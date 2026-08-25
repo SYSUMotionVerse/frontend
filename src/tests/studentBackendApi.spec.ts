@@ -36,52 +36,6 @@ describe('student backend API payload mapping', () => {
     })
   })
 
-  it('builds a registration survey record for research profile fields', async () => {
-    const { buildRegistrationSurveyRecordPayload } = await import('../uni-app/api/studentBackend')
-
-    const payload = buildRegistrationSurveyRecordPayload(createProfile())
-    const analysis = JSON.parse(payload.analysis)
-
-    expect(payload.survey_type).toBe(1)
-    expect(payload.score).toBeUndefined()
-    expect(analysis).toEqual(
-      expect.objectContaining({
-        source: 'registration',
-        grade: '一年级',
-        age: 12,
-        restingHeartRate: 72
-      })
-    )
-  })
-
-  it('builds a long questionnaire survey record payload', async () => {
-    const { buildLongQuestionnaireSurveyRecordPayload } = await import('../uni-app/api/studentBackend')
-
-    const payload = buildLongQuestionnaireSurveyRecordPayload({
-      checkpoint: 'baseline',
-      responses: {
-        focus: 4,
-        confidence: 5
-      },
-      score: 9,
-      percentage: 90,
-      submittedAt: '2026-04-09T15:30:00.000Z'
-    })
-
-    expect(payload.survey_type).toBe(2)
-    expect(payload.score).toBe(9)
-    expect(JSON.parse(payload.analysis)).toEqual({
-      source: 'long-questionnaire',
-      checkpoint: 'baseline',
-      percentage: 90,
-      submittedAt: '2026-04-09T15:30:00.000Z',
-      responses: {
-        focus: 4,
-        confidence: 5
-      }
-    })
-  })
-
   it('maps a backend psychology scale to a questionnaire form model', async () => {
     const { mapBackendScaleToQuestionnaire } = await import('../uni-app/api/psychologyModels')
 

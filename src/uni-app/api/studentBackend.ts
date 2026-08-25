@@ -35,7 +35,6 @@ import type {
   StairsRecordCreatePayload,
   TrainingCredentialResponse,
   StudentBackendSyncDependencies,
-  SurveyRecordCreatePayload,
   UserUpdatePayload,
   VisualSessionSyncResult,
   VisualSessionSyncInput,
@@ -82,10 +81,6 @@ export type BootstrapAccessResult = {
   targetPage: StartupTargetPage
   targetPageUrl: StartupTargetPageUrl
   checkpoint?: CheckpointKey
-}
-
-function toJsonString(value: Record<string, unknown>) {
-  return JSON.stringify(value)
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T) {
@@ -142,40 +137,6 @@ export function mapStudentProfileToUserUpdatePayload(profile: RegistrationSyncIn
     grade: profile.grade.trim() || undefined,
     resting_heart_rate: profile.restingHeartRate > 0 ? profile.restingHeartRate : undefined
   })
-}
-
-export function buildRegistrationSurveyRecordPayload(profile: RegistrationSyncInput): SurveyRecordCreatePayload {
-  return {
-    survey_type: 1,
-    analysis: toJsonString({
-      source: 'registration',
-      age: profile.age,
-      grade: profile.grade,
-      restingHeartRate: profile.restingHeartRate
-    })
-  }
-}
-
-export function buildLongQuestionnaireSurveyRecordPayload(
-  input: {
-    checkpoint: CheckpointKey
-    responses: Record<string, number>
-    score: number
-    percentage: number
-    submittedAt: string
-  }
-): SurveyRecordCreatePayload {
-  return {
-    survey_type: 2,
-    score: input.score,
-    analysis: toJsonString({
-      source: 'long-questionnaire',
-      checkpoint: input.checkpoint,
-      percentage: input.percentage,
-      submittedAt: input.submittedAt,
-      responses: input.responses
-    })
-  }
 }
 
 export function resolveBackendExerciseType(

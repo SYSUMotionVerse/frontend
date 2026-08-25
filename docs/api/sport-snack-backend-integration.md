@@ -14,8 +14,7 @@ This document records the backend contract currently used by the student mini-pr
 | --- | --- | --- | --- |
 | WeChat session bootstrap | `POST` | `/users/wechat_login/` | Required before authenticated calls. |
 | Registration profile sync | `PATCH` | `/users/update_profile/` | The backend has no separate profile `POST`. |
-| Registration extra metadata fallback | `POST` | `/users/survey-records/` | Stores frontend-only registration fields in `analysis`. |
-| Long questionnaire sync | `POST` | `/users/survey-records/` | Stores checkpoint, responses, and percentage in `analysis`. |
+| Long questionnaire sync | `POST` | `/psychology/records/submit/` | Stores scale version, raw per-question answers, and score snapshot. |
 | Visual session video lookup | `GET` | `/exercises/videos/?exercise_type=...` | Picks the first backend video for the current modality. |
 | Visual session record sync | `POST` | `/exercises/records/` | Sends `video` and `duration`. |
 | Stair session record sync | `POST` | `/exercises/stairs/` | Sends duration plus lightweight sensor summary JSON. |
@@ -32,20 +31,21 @@ This document records the backend contract currently used by the student mini-pr
 | `major` | `major` | Direct mapping |
 | `heightCm` | `height` | Direct mapping |
 | `weightKg` | `weight` | Direct mapping |
+| `age` | `age` | Direct mapping |
+| `grade` | `grade` | Direct mapping |
+| `restingHeartRate` | `resting_heart_rate` | Direct mapping |
 
-### Stored via `survey-records` fallback
+### Structured registration fields
 
-The current frontend collects fields that the backend user model does not expose as writable profile fields. The frontend preserves them in a registration survey record:
+Research registration fields are stored directly on the backend user profile:
 
 - `age`
 - `grade`
 - `restingHeartRate`
 
-The frontend writes them as JSON in `analysis` with `survey_type = 1`.
-Registration is not considered complete unless this write succeeds. The mini-program also keeps
-the completed registration profile in durable local storage so these fields survive app restarts.
-The backend does not currently expose a confirmed read endpoint for restoring this metadata on a
-different device, so a new device fails closed and asks the student to complete registration again.
+Registration is not considered synchronized unless the profile update succeeds. The mini-program
+also keeps the completed profile in durable local storage, while `/users/me/` restores the
+authoritative structured fields on another device.
 
 ## Long questionnaire mapping
 
@@ -56,15 +56,10 @@ silently routing to training. When the backend reports all configured scales com
 sequential record set beginning at baseline is accepted; the frontend does not assume that four
 scales are configured.
 
-The current long questionnaire is still frontend-defined and does not yet use the backend psychology scale question IDs. Because of that, the frontend does not call `POST /psychology/records/submit/` yet.
-
-Instead, the frontend writes a summary record to `POST /users/survey-records/` with:
-
-- `survey_type = 2`
-- `score = score`
-- `analysis = JSON.stringify({ source, checkpoint, percentage, submittedAt, responses })`
-
-This keeps questionnaire results synchronized without pretending that the frontend already speaks the backend psychology-scale schema.
+The long questionnaire is loaded from the backend psychology scale definition and submitted to
+`POST /psychology/records/submit/` with the scale ID, completion time, and answers keyed by backend
+question ID. The backend stores an immutable scale/question snapshot and the raw selected answers
+alongside the optional calculated score.
 
 ## Training session mapping
 

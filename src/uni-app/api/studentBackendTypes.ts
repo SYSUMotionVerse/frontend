@@ -42,12 +42,6 @@ export interface BackendCurrentUser {
   [key: string]: unknown
 }
 
-export interface SurveyRecordCreatePayload {
-  survey_type: 1 | 2
-  score?: number
-  analysis: string
-}
-
 export interface BackendQuestionOption {
   id: number
   option_text: string
@@ -583,7 +577,6 @@ export interface StudentBackendSyncDependencies {
   ensureSession: () => Promise<void>
   getCurrentUser: () => Promise<BackendCurrentUser>
   updateProfile: (payload: UserUpdatePayload) => Promise<unknown>
-  createSurveyRecord: (payload: SurveyRecordCreatePayload) => Promise<unknown>
   listExerciseVideos: (exerciseType: BackendExerciseType) => Promise<ExerciseVideoSummary[]>
   listExerciseArrangements: (
     exerciseType: BackendExerciseType
