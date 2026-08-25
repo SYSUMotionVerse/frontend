@@ -63,6 +63,8 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain('activeItem.value?.pretraining_countdown_duration')
     expect(sessionSource).toContain('activeItem.value?.pretraining_mode')
     expect(sessionSource).toContain('resolvePretrainingDuration(activeItem.value)')
+    expect(sessionSource).toContain('hasReachedConfiguredDuration')
+    expect(sessionSource).toContain('never let an early media event skip the remaining pretraining time')
     expect(sessionSource).toContain("pretrainingMode === 'FIRST_FRAME'")
     expect(sessionSource).toContain('startPhaseTimer(beginFormalCountdownOrTraining)')
     expect(sessionSource).toContain('activeItem.value?.formal_countdown_duration')

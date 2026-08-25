@@ -1101,6 +1101,28 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       && phaseSlot.value === 'pretraining'
       && resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'FULL'
     ) {
+      const configuredDuration = resolvePretrainingDuration(activeItem.value)
+      const hasReachedConfiguredDuration = (
+        typeof finalTime === 'number'
+        && Number.isFinite(finalTime)
+        && finalTime + 0.05 >= configuredDuration
+      )
+
+      // A demonstration video may be longer than the configured pretraining
+      // window, or a native `ended` event may arrive before the phase clock
+      // has started. The configured phase duration remains authoritative;
+      // never let an early media event skip the remaining pretraining time.
+      if (phaseTimer && !hasReachedConfiguredDuration) return
+      if (!hasReachedConfiguredDuration && videoAutoplay.value) {
+        const elapsed = typeof finalTime === 'number' && Number.isFinite(finalTime)
+          ? Math.min(configuredDuration, Math.max(0, finalTime))
+          : 0
+        setPhaseRemaining(Math.max(0, configuredDuration - elapsed))
+        playbackState.value = 'playing'
+        startMediaGuidanceAfterNativePlay()
+        startMediaPhaseClock()
+        return
+      }
       beginFormalCountdownOrTraining()
       return
     }

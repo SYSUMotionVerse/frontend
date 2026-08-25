@@ -1512,7 +1512,7 @@ describe('page-level backend sync wiring', () => {
       title: '武术基本功入门',
       exercise_type: 'MARTIAL_ARTS',
       item_count: 1,
-      total_duration: 8,
+      total_duration: 13,
       is_active: true,
       order: 1,
       countdown_tts_cues: [],
@@ -1528,6 +1528,7 @@ describe('page-level backend sync wiring', () => {
           duration: 8
         },
         pretraining_mode: 'FULL',
+        pretraining_duration: 5,
         pretraining_countdown_duration: 0,
         expected_duration: 8,
         formal_countdown_duration: 0,
@@ -1587,15 +1588,16 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           VisualTrainingPanel: {
-            props: ['videoEventToken', 'videoUrl'],
+            props: ['videoEventToken', 'videoUrl', 'phaseKind'],
             emits: ['startRecognition', 'poseStats', 'startTraining', 'videoTimeUpdate', 'videoPlay', 'videoEnded'],
             template: `
               <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
                 <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
                 <button class="demo-guidance" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 1, duration: 8 } })">demo guidance</button>
                 <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
-                <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 8 } })">end</button>
+                <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 2 } })">end</button>
               </div>
             `
           }
@@ -1621,6 +1623,12 @@ describe('page-level backend sync wiring', () => {
 
       await wrapper.get('.end-video').trigger('click')
       await flushPromises()
+      // The native media ended early, but the configured five-second
+      // pretraining window remains authoritative.
+      expect(wrapper.get('.phase-kind').text()).toBe('demonstration')
+      await vi.advanceTimersByTimeAsync(5_000)
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
       await wrapper.get('.play-video').trigger('click')
       await vi.advanceTimersByTimeAsync(2_000)
       await flushPromises()
