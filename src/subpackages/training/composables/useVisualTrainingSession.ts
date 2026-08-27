@@ -7,6 +7,7 @@ import type {
   ExerciseRecordBrief,
   ExerciseScoreDetails,
   ExerciseVideoSummary,
+  TrainingTtsPhase,
   TutorialResponse
 } from '../../../uni-app/api/studentBackendTypes'
 import { buildVisualPoseAnalysisPayload, studentBackendSync } from '../../../uni-app/api/studentBackend'
@@ -45,9 +46,8 @@ import {
 } from '../../../features/training/visualWorkoutTimeline'
 import {
   resolveArrangementTtsAudioUrls,
-  resolveEmbeddedPretrainingCountdownDuration,
-  resolveTrainingCountdownAudioUrls,
-  resolveTrainingCountdownTtsCues,
+  resolveArrangementCountdownTtsAudioUrls,
+  resolveTrainingCountdownPhaseAudio,
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
   resolveTrainingPhaseStartAudioUrls,
@@ -166,6 +166,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const phaseKind = shallowRef<VisualWorkoutPhaseKind>('preview')
   const phaseSlot = shallowRef<VisualWorkoutPhaseSlot>('preview')
   const phaseRemainingSeconds = shallowRef(0)
+  const countdownAudioPending = shallowRef(false)
   const trainingStarted = shallowRef(false)
   const preparingTraining = shallowRef(false)
   const startCountdown = shallowRef(0)
@@ -203,7 +204,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const actionScores = shallowRef<ScoredActionResult[]>([])
   const scoringWarnings = shallowRef<string[]>([])
   const ttsPlayer = createTrainingTtsPlayer()
-  let pendingEndCue: Promise<void> | undefined
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setInterval> | null = null
   let mediaStartWatchdogTimer: ReturnType<typeof setTimeout> | null = null
@@ -220,6 +220,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   let practiceStartPending = false
   let preserveStartCountdownAudio = false
   let startedMediaGuidanceToken = ''
+  let moduleTransitionGeneration = 0
+  let moduleTransitionInFlight = false
 
   function clockNowMs() {
     return typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -252,19 +254,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const tutorialVideoUrl = computed(() => cachedVideoPaths.value[tutorialSourceUrl.value] ?? tutorialSourceUrl.value)
   const tutorialTotalActions = computed(() => arrangement.value?.items.length ?? 0)
   const tutorialIsLast = computed(() => tutorialIndex.value >= tutorialTotalActions.value - 1)
-  const pretrainingEmbeddedCountdownDuration = computed(() => (
-    resolveEmbeddedPretrainingCountdownDuration(
-      activeItem.value,
-      resolvePretrainingDuration(activeItem.value)
-    )
-  ))
-  // The embedded “3，2，1，go” overlay must use the same media clock as the
-  // cue scheduler. Expose the configured phase length so the panel can derive
-  // the remaining seconds from video currentTime instead of the wall clock.
-  const pretrainingDurationSeconds = computed(() => (
-    resolvePretrainingDuration(activeItem.value)
-  ))
-
   // In tutorial mode, show the tutorial item's video instead of the active item's
   const displayVideoUrl = computed(() => tutorialMode.value ? tutorialVideoUrl.value : videoUrl.value)
   const displayVideoAutoplay = computed(() => tutorialMode.value ? false : videoAutoplay.value)
@@ -389,6 +378,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     }
   }
 
+  function invalidateModuleTransition() {
+    moduleTransitionGeneration += 1
+    moduleTransitionInFlight = false
+  }
+
   function syncSessionProgress() {
     const phase = workoutTimeline.value.find(item => (
       item.itemIndex === activeItemIndex.value && item.slot === phaseSlot.value
@@ -417,35 +411,72 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function playCountdownSequence(
-    duration: number,
-    preserveIntoFormalTraining = false
+    preserveIntoFollowingModule: boolean,
+    phase: TrainingTtsPhase
   ) {
-    const cues = resolveTrainingCountdownTtsCues(
-      arrangement.value?.countdown_tts_cues,
-      duration
+    const { phaseStartAudioUrls, globalCues } = resolveTrainingCountdownPhaseAudio(
+      activeItem.value,
+      phase,
+      arrangement.value?.countdown_tts_cues
     )
-    preserveStartCountdownAudio = preserveIntoFormalTraining && cues.length > 0
+    preserveStartCountdownAudio = preserveIntoFollowingModule && (
+      phaseStartAudioUrls.length > 0 || globalCues.length > 0
+    )
     // The clock synchronizes the 3/2/1 speech at its actual remaining-second
     // boundary. Clearing here prevents a prompt from a previous module from
     // leaking into a newly displayed countdown.
     ttsPlayer.reset()
+    if (phaseStartAudioUrls.length > 0) ttsPlayer.enqueue(phaseStartAudioUrls)
+  }
+
+  function countdownGuidanceCues() {
+    const phase = phaseSlot.value === 'pretraining-countdown' ? 'PRETRAINING' : 'FORMAL'
+    return resolveTrainingCountdownPhaseAudio(
+      activeItem.value,
+      phase,
+      arrangement.value?.countdown_tts_cues
+    ).globalCues
+  }
+
+  function continueAfterModuleAudio(audioUrls: readonly string[], onComplete: () => void) {
+    if (moduleTransitionInFlight) return
+    moduleTransitionInFlight = true
+    const generation = ++moduleTransitionGeneration
+    const completionAudio = ttsPlayer.enqueue(audioUrls)
+    void (async () => {
+      await completionAudio
+      await ttsPlayer.waitForIdle()
+      if (generation !== moduleTransitionGeneration) return
+      moduleTransitionInFlight = false
+      onComplete()
+    })()
+  }
+
+  function finishCountdown(onComplete: () => void) {
+    if (!preserveStartCountdownAudio) {
+      onComplete()
+      return
+    }
+
+    // Do not move the white countdown into the next module while its final
+    // configured prompt is still audible. The panel keeps the last numeral
+    // visible through this short hand-off.
+    countdownAudioPending.value = true
+    continueAfterModuleAudio([], () => {
+      countdownAudioPending.value = false
+      onComplete()
+    })
   }
 
   function pretrainingGuidanceCues() {
     return resolveTrainingPhaseTtsCues(activeItem.value, 'PRETRAINING', {
-      phaseDurationSeconds: resolvePretrainingDuration(activeItem.value),
-      countdownDurationSeconds: resolveCountdownDuration(
-        activeItem.value?.pretraining_countdown_duration
-      )
+      phaseDurationSeconds: resolvePretrainingDuration(activeItem.value)
     })
   }
 
   function formalGuidanceCues() {
     return resolveTrainingPhaseTtsCues(activeItem.value, 'FORMAL', {
-      phaseDurationSeconds: Math.max(1, activeItem.value?.expected_duration ?? 1),
-      countdownDurationSeconds: resolveCountdownDuration(
-        activeItem.value?.formal_countdown_duration
-      )
+      phaseDurationSeconds: Math.max(1, activeItem.value?.expected_duration ?? 1)
     })
   }
 
@@ -487,7 +518,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       && resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'FULL'
     ) {
       clearMediaStartWatchdog()
-      startPhaseTimer(beginFormalCountdownOrTraining)
+      startPhaseTimer(finishPretraining)
       return
     }
 
@@ -511,7 +542,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         ? resolveCountdownDuration(activeItem.value?.pretraining_countdown_duration)
         : resolveCountdownDuration(activeItem.value?.formal_countdown_duration)
       ttsPlayer.sync(
-        resolveTrainingCountdownTtsCues(arrangement.value?.countdown_tts_cues, duration),
+        countdownGuidanceCues(),
         Math.max(0, duration - phaseRemainingExactSeconds)
       )
       return
@@ -536,7 +567,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       const duration = Math.max(1, activeItem.value?.expected_duration ?? 1)
       ttsPlayer.sync(
         resolveTrainingPhaseDelayedTtsCues(formalGuidanceCues()),
-        Math.min(duration, Math.max(0, videoProgressSeconds.value))
+        // Formal training can deliberately outlast a looping demonstration
+        // video. Its TTS belongs to the formal module clock, not to a single
+        // iteration of that video.
+        Math.max(0, duration - phaseRemainingExactSeconds)
       )
       return
     }
@@ -679,18 +713,16 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function preloadTrainingTts(nextArrangement: ExerciseArrangementDetail) {
-    // Do not preload cues that can play immediately after the user taps
-    // "开始训练". If the user starts before a download finishes, using the
-    // remote URL would otherwise duplicate the COS transfer. Only future
-    // actions have enough lead time to benefit from local warmup.
-    const laterAudioUrls = resolveArrangementTtsAudioUrls(nextArrangement.items.slice(1))
-    // The app-wide 3/2/1 prompt can run before the first video module. It is
-    // small and shared by every action, so warm it alongside later actions.
-    const countdownAudioUrls = resolveTrainingCountdownAudioUrls(
-      nextArrangement.countdown_tts_cues,
-      3
+    // Start every reachable prompt while the tutorial is visible. This gives
+    // the first action the same local-audio guarantee as later actions.
+    const moduleAudioUrls = resolveArrangementTtsAudioUrls(nextArrangement.items)
+    // The app-wide 3/2/1 prompt can run before any video module. It is small
+    // and shared by every action, so warm it alongside module guidance.
+    const countdownAudioUrls = resolveArrangementCountdownTtsAudioUrls(
+      nextArrangement.items,
+      nextArrangement.countdown_tts_cues
     )
-    void ttsPlayer.preload([...laterAudioUrls, ...countdownAudioUrls])
+    void ttsPlayer.preload([...moduleAudioUrls, ...countdownAudioUrls])
   }
 
   function finalizeActiveAction() {
@@ -737,6 +769,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
   function beginFormalTraining() {
     clearPhaseTimer()
+    countdownAudioPending.value = false
     videoPhaseGeneration += 1
     startedMediaGuidanceToken = ''
     currentActionFrames.value = []
@@ -752,11 +785,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // boundary. All other transitions still clear their stale prompts.
     if (preserveStartCountdownAudio) {
       preserveStartCountdownAudio = false
+      ttsPlayer.cancelPendingPlayback()
       ttsPlayer.resetTimeline()
     } else {
       ttsPlayer.reset()
     }
-    pendingEndCue = undefined
     syncSessionProgress()
   }
 
@@ -764,16 +797,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearPhaseTimer()
     clearMediaStartWatchdog()
     videoPhaseGeneration += 1
-    const hasEmbeddedPretrainingCountdown = (
-      resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') !== 'NONE'
-      && resolveEmbeddedPretrainingCountdownDuration(
-        activeItem.value,
-        resolvePretrainingDuration(activeItem.value)
-      ) > 0
+    const countdownDuration = resolveCountdownDuration(
+      activeItem.value?.formal_countdown_duration
     )
-    const countdownDuration = hasEmbeddedPretrainingCountdown
-      ? 0
-      : resolveCountdownDuration(activeItem.value?.formal_countdown_duration)
     if (countdownDuration <= 0) {
       beginFormalTraining()
       return
@@ -784,15 +810,34 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     setPhaseRemaining(countdownDuration)
     playbackState.value = 'idle'
     videoAutoplay.value = false
-    playCountdownSequence(countdownDuration, true)
-    startPhaseTimer(beginFormalTraining)
+    playCountdownSequence(true, 'FORMAL')
+    startPhaseTimer(() => finishCountdown(beginFormalTraining))
+  }
+
+  function finishPretraining() {
+    if (
+      phaseKind.value !== 'demonstration'
+      || phaseSlot.value !== 'pretraining'
+      || moduleTransitionInFlight
+    ) return
+
+    clearPhaseTimer()
+    clearMediaStartWatchdog()
+    videoAutoplay.value = false
+    playbackState.value = 'idle'
+    continueAfterModuleAudio(
+      resolveTrainingPhaseCompletionAudioUrls(activeItem.value, 'PRETRAINING'),
+      beginFormalCountdownOrTraining
+    )
   }
 
   function beginPretraining() {
     clearPhaseTimer()
     clearStartCountdownTimer()
+    countdownAudioPending.value = false
     videoPhaseGeneration += 1
     startedMediaGuidanceToken = ''
+    const keepCountdownAudio = preserveStartCountdownAudio
     preserveStartCountdownAudio = false
 
     if (resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'NONE') {
@@ -810,10 +855,15 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     const pretrainingMode = resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL')
     videoAutoplay.value = pretrainingMode === 'FULL'
     if (videoAutoplay.value) scheduleMediaStartWatchdog()
-    ttsPlayer.reset()
+    if (keepCountdownAudio) {
+      ttsPlayer.cancelPendingPlayback()
+      ttsPlayer.resetTimeline()
+    } else {
+      ttsPlayer.reset()
+    }
     if (pretrainingMode === 'FIRST_FRAME') {
       queuePhaseStartGuidance(pretrainingGuidanceCues())
-      startPhaseTimer(beginFormalCountdownOrTraining)
+      startPhaseTimer(finishPretraining)
     }
   }
 
@@ -838,8 +888,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     setPhaseRemaining(countdownDuration)
     playbackState.value = 'idle'
     videoAutoplay.value = false
-    playCountdownSequence(countdownDuration)
-    startPhaseTimer(beginPretraining)
+    playCountdownSequence(true, 'PRETRAINING')
+    startPhaseTimer(() => finishCountdown(beginPretraining))
   }
 
   async function startTraining() {
@@ -897,6 +947,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function beginFirstAction() {
+    invalidateModuleTransition()
     clearStartCountdownTimer()
     clearPhaseTimer()
     clearMediaStartWatchdog()
@@ -905,6 +956,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   function beginNextItem() {
+    if (phaseKind.value !== 'active' || moduleTransitionInFlight) return
     finalizeActiveAction()
     const completedItem = activeItem.value
     const formalCompletionAudioUrls = resolveTrainingPhaseCompletionAudioUrls(
@@ -912,26 +964,29 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       'FORMAL'
     )
     const isLastItem = activeItemIndex.value >= (arrangement.value?.items?.length ?? 0) - 1
-    if (isLastItem) {
-      videoAutoplay.value = false
-      videoEnded.value = true
-      playbackState.value = 'ended'
-      sessionProgressSeconds.value = workoutTimeline.value.at(-1)?.endSeconds ?? 0
-      ttsPlayer.reset()
-      pendingEndCue = ttsPlayer.enqueue(formalCompletionAudioUrls)
-      void finishSessionAfterPlayback(pendingEndCue)
-      return
-    }
-
-    activeItemIndex.value += 1
-    videoPhaseGeneration += 1
-    startedMediaGuidanceToken = ''
-    playbackState.value = 'idle'
+    clearPhaseTimer()
+    clearMediaStartWatchdog()
     videoAutoplay.value = false
-    void prefetchVideoWindow(activeItemIndex.value)
-    syncSessionProgress()
-    ttsPlayer.reset()
-    beginPretrainingCountdownOrPretraining()
+    playbackState.value = 'idle'
+    continueAfterModuleAudio(formalCompletionAudioUrls, () => {
+      if (isLastItem) {
+        videoEnded.value = true
+        playbackState.value = 'ended'
+        sessionProgressSeconds.value = workoutTimeline.value.at(-1)?.endSeconds ?? 0
+        void finishSessionAfterPlayback()
+        return
+      }
+
+      activeItemIndex.value += 1
+      videoPhaseGeneration += 1
+      startedMediaGuidanceToken = ''
+      playbackState.value = 'idle'
+      videoAutoplay.value = false
+      void prefetchVideoWindow(activeItemIndex.value)
+      syncSessionProgress()
+      ttsPlayer.reset()
+      beginPretrainingCountdownOrPretraining()
+    })
   }
 
   async function stopRecording() {
@@ -958,6 +1013,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     cachedVideoPaths.value = {}
     phaseKind.value = 'preview'
     phaseSlot.value = 'preview'
+    countdownAudioPending.value = false
     phaseRemainingExactSeconds = initialPreviewDurationSeconds
     phaseRemainingSeconds.value = initialPreviewDurationSeconds
     trainingStarted.value = false
@@ -1187,6 +1243,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
   function handleVideoPause(event?: unknown) {
     if (!isCurrentVideoEvent(event) || playbackState.value === 'ended') return
+    // A module hand-off deliberately pauses the demonstration video before
+    // its COMPLETE prompt. That programmatic pause must not cancel the prompt
+    // which is responsible for deciding when the next module may begin.
+    if (moduleTransitionInFlight) return
     const isPlayablePretraining = (
       phaseKind.value === 'demonstration'
       && phaseSlot.value === 'pretraining'
@@ -1252,7 +1312,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         startMediaPhaseClock()
         return
       }
-      beginFormalCountdownOrTraining()
+      finishPretraining()
       return
     }
     if (phaseKind.value !== 'active') return
@@ -1453,11 +1513,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   async function interruptSession() {
+    invalidateModuleTransition()
+    ttsPlayer.reset()
     await stopRecording()
     void uni.redirectTo({ url: '/pages/training/select' })
   }
 
   watch(options.modality, () => {
+    invalidateModuleTransition()
     void stopRecording()
     recognitionEnabled.value = false
     recognitionStatus.value = 'idle'
@@ -1473,6 +1536,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
   onBeforeUnmount(() => {
     videoRequestId += 1
+    invalidateModuleTransition()
     clearRecordTimer()
     clearPhaseTimer()
     clearMediaStartWatchdog()
@@ -1493,8 +1557,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     videoError,
     videoEnded,
     videoProgressSeconds,
-    pretrainingDurationSeconds,
-    pretrainingEmbeddedCountdownDuration,
     videoUrl,
     videoEventToken,
     recording,
@@ -1519,6 +1581,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     phaseKind,
     phaseSlot,
     phaseRemainingSeconds,
+    countdownAudioPending,
     // Tutorial exports
     tutorialMode,
     tutorialIndex,

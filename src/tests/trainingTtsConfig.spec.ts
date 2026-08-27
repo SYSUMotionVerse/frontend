@@ -3,11 +3,12 @@ import type { ExerciseArrangementItem } from '../uni-app/api/studentBackendTypes
 import {
   resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
-  resolveEmbeddedPretrainingCountdownDuration,
   resolveTrainingPhaseCompletionAudioUrls,
+  resolveTrainingPhaseCountdownStartAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
   resolveTrainingPhaseStartAudioUrls,
   resolveTrainingPhaseTtsCues,
+  resolveArrangementCountdownTtsAudioUrls,
   resolveArrangementTtsAudioUrls
 } from '../features/training/trainingTtsConfig'
 
@@ -91,6 +92,36 @@ describe('trainingTtsConfig', () => {
     ])
   })
 
+  it('schedules a configured module countdown prompt only at countdown start', () => {
+    const countdownItem = {
+      ...item,
+      training_tts_cues: [
+        ...(item.training_tts_cues ?? []),
+        {
+          id: 5,
+          phase: 'FORMAL' as const,
+          timing: 'BEFORE_COUNTDOWN' as const,
+          offset_seconds: 0,
+          text: '准备开始正式训练。',
+          audio_url: 'https://cdn.example.com/formal-countdown-start.mp3',
+          order: 2
+        }
+      ]
+    }
+
+    expect(resolveTrainingPhaseTtsCues(countdownItem, 'FORMAL', {
+      phaseDurationSeconds: 30
+    })).not.toContainEqual(expect.objectContaining({
+      audio_url: 'https://cdn.example.com/formal-countdown-start.mp3'
+    }))
+    expect(resolveTrainingPhaseCountdownStartAudioUrls(countdownItem, 'FORMAL')).toEqual([
+      'https://cdn.example.com/formal-countdown-start.mp3'
+    ])
+    expect(resolveArrangementTtsAudioUrls([countdownItem])).toContain(
+      'https://cdn.example.com/formal-countdown-start.mp3'
+    )
+  })
+
   it('preloads only cues from training modules that will actually run', () => {
     const disabledPretraining = {
       ...item,
@@ -142,39 +173,53 @@ describe('trainingTtsConfig', () => {
     ])
   })
 
-  it('detects a 3/2/1/Go hand-off embedded at the end of pretraining', () => {
-    const embeddedItem = {
+  it('warms every available global countdown prompt for arbitrary module durations', () => {
+    const longerCountdownItem = {
       ...item,
-      pretraining_duration: 20,
-      training_tts_cues: [{
-        id: 20,
-        phase: 'PRETRAINING' as const,
-        timing: 'AFTER_OFFSET' as const,
-        offset_seconds: 17,
-        text: '正式训练，3，2，1，go！',
-        audio_url: 'https://cdn.example.com/embedded-countdown.mp3',
-        order: 2
-      }]
+      formal_countdown_duration: 5
     }
+    const countdownCues = [
+      { seconds_remaining: 3, text: '三', audio_url: 'https://cdn.example.com/3.mp3' },
+      { seconds_remaining: 2, text: '二', audio_url: 'https://cdn.example.com/2.mp3' },
+      { seconds_remaining: 1, text: '一', audio_url: 'https://cdn.example.com/1.mp3' }
+    ] as const
 
-    expect(resolveEmbeddedPretrainingCountdownDuration(embeddedItem, 20)).toBe(3)
-    expect(resolveEmbeddedPretrainingCountdownDuration(item, 20)).toBe(0)
+    expect(resolveArrangementCountdownTtsAudioUrls(
+      [longerCountdownItem],
+      countdownCues
+    )).toEqual([
+      'https://cdn.example.com/3.mp3',
+      'https://cdn.example.com/2.mp3',
+      'https://cdn.example.com/1.mp3'
+    ])
   })
 
-  it('recognizes full-width countdown digits in embedded hand-off cues', () => {
-    const embeddedItem = {
+  it('does not preload global countdown audio overridden by a module prompt', () => {
+    const moduleOwnedCountdownItem = {
       ...item,
-      training_tts_cues: [{
-        id: 21,
-        phase: 'PRETRAINING' as const,
-        timing: 'AFTER_OFFSET' as const,
-        offset_seconds: 17,
-        text: '３，２，１，go！',
-        audio_url: 'https://cdn.example.com/embedded-countdown-full-width.mp3',
-        order: 0
-      }]
+      training_tts_cues: [
+        ...(item.training_tts_cues ?? []),
+        {
+          id: 12,
+          phase: 'FORMAL' as const,
+          timing: 'BEFORE_COUNTDOWN' as const,
+          offset_seconds: 0,
+          text: '准备开始正式训练。',
+          audio_url: 'https://cdn.example.com/module-countdown.mp3',
+          order: 2
+        }
+      ]
     }
+    const countdownCues = [
+      { seconds_remaining: 3, text: '三', audio_url: 'https://cdn.example.com/3.mp3' },
+      { seconds_remaining: 2, text: '二', audio_url: 'https://cdn.example.com/2.mp3' },
+      { seconds_remaining: 1, text: '一', audio_url: 'https://cdn.example.com/1.mp3' }
+    ] as const
 
-    expect(resolveEmbeddedPretrainingCountdownDuration(embeddedItem, 20)).toBe(3)
+    expect(resolveArrangementCountdownTtsAudioUrls(
+      [moduleOwnedCountdownItem],
+      countdownCues
+    )).toEqual([])
   })
+
 })

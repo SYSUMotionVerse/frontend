@@ -80,6 +80,7 @@ describe('visual workout timeline', () => {
       ['formal-training', 0],
       ['pretraining-countdown', 1],
       ['pretraining', 1],
+      ['formal-countdown', 1],
       ['formal-training', 1],
       ['formal-countdown', 2],
       ['formal-training', 2]
@@ -89,11 +90,12 @@ describe('visual workout timeline', () => {
       [15, 30],
       [30, 32],
       [32, 62],
-      [62, 92],
-      [92, 95],
-      [95, 125]
+      [62, 65],
+      [65, 95],
+      [95, 98],
+      [98, 128]
     ])
-    expect(timeline.at(-1)?.endSeconds).toBe(125)
+    expect(timeline.at(-1)?.endSeconds).toBe(128)
   })
 
   it('uses the full action video only when pretraining mode is FULL', () => {
@@ -145,8 +147,8 @@ describe('visual workout timeline', () => {
 
     expect(formalTraining).toBeDefined()
     expect(formalTraining!.endSeconds - formalTraining!.startSeconds).toBe(30)
-    expect(timeline.find(phase => phase.slot === 'formal-countdown')).toBeUndefined()
-    expect(formalTraining!.startSeconds).toBe(32)
+    expect(timeline.find(phase => phase.slot === 'formal-countdown')).toBeDefined()
+    expect(formalTraining!.startSeconds).toBe(35)
   })
 
   it('does not insert a rest phase between actions', () => {

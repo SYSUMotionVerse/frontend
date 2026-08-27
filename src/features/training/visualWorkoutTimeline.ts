@@ -1,5 +1,4 @@
 import type { ExerciseArrangementItem } from '../../uni-app/api/studentBackendTypes'
-import { resolveEmbeddedPretrainingCountdownDuration } from './trainingTtsConfig'
 
 export type VisualTrainingPlaybackState = 'idle' | 'playing' | 'paused' | 'ended'
 
@@ -117,7 +116,6 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
     const pretrainingCountdownDuration = resolveCountdownDuration(
       item.pretraining_countdown_duration
     )
-    let hasEmbeddedPretrainingCountdown = false
     if (pretrainingMode !== 'NONE' && pretrainingCountdownDuration > 0) {
       appendPhase(
         item,
@@ -134,12 +132,6 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
 
     if (pretrainingMode !== 'NONE') {
       const pretrainingDuration = resolvePretrainingDuration(item)
-      // Some document tracks already speak 3/2/1/Go at the end of the
-      // demonstration. Do not append a second formal-countdown phase.
-      hasEmbeddedPretrainingCountdown = resolveEmbeddedPretrainingCountdownDuration(
-        item,
-        pretrainingDuration
-      ) > 0
       appendPhase(
         item,
         itemIndex,
@@ -147,27 +139,23 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
         'pretraining',
         pretrainingDuration,
         `预训练示范：${actionTitle}`,
-        hasEmbeddedPretrainingCountdown
-          ? '示范末尾倒计时结束后开始正式训练'
-          : pretrainingMode === 'FIRST_FRAME'
-            ? '保持动作首帧，随后进入正式训练倒计时'
-            : '先播放动作示范，随后进入正式训练倒计时'
+        pretrainingMode === 'FIRST_FRAME'
+          ? '保持动作首帧，随后进入正式训练倒计时'
+          : '先播放动作示范，随后进入正式训练倒计时'
       )
     }
 
-    if (!hasEmbeddedPretrainingCountdown) {
-      const formalCountdownDuration = resolveCountdownDuration(item.formal_countdown_duration)
-      if (formalCountdownDuration > 0) {
-        appendPhase(
-          item,
-          itemIndex,
-          'countdown',
-          'formal-countdown',
-          formalCountdownDuration,
-          `正式训练倒计时：${actionTitle}`,
-          '倒计时结束后开始正式训练'
-        )
-      }
+    const formalCountdownDuration = resolveCountdownDuration(item.formal_countdown_duration)
+    if (formalCountdownDuration > 0) {
+      appendPhase(
+        item,
+        itemIndex,
+        'countdown',
+        'formal-countdown',
+        formalCountdownDuration,
+        `正式训练倒计时：${actionTitle}`,
+        '倒计时结束后开始正式训练'
+      )
     }
 
     appendPhase(

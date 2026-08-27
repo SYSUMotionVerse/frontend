@@ -8,10 +8,7 @@ import type {
 
 export interface TrainingTtsPhaseTiming {
   phaseDurationSeconds: number
-  countdownDurationSeconds?: number
 }
-
-const embeddedCountdownPattern = /[3３]\s*[，,、]\s*[2２]\s*[，,、]\s*[1１]\s*[，,、]?\s*go[！!]?/i
 
 function toNonNegativeSeconds(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -36,10 +33,11 @@ function resolveCueTime(cue: TrainingTtsCue, timing: TrainingTtsPhaseTiming) {
       // A zero-offset "before end" cue should still have a chance to start;
       // an exact-at-end cue belongs to the explicit COMPLETE option instead.
       return duration > 0 ? Math.max(0, duration - Math.max(0.1, offset)) : null
-    case 'BEFORE_COUNTDOWN': {
-      const countdown = toNonNegativeSeconds(timing.countdownDurationSeconds)
-      return countdown > 0 && countdown < duration ? duration - countdown : null
-    }
+    case 'BEFORE_COUNTDOWN':
+      // A module countdown is its own phase. Its configured prompt is
+      // scheduled when that countdown starts, not inferred from the end of
+      // the preceding video module.
+      return null
     case 'COMPLETE':
       return null
     default:
@@ -88,6 +86,55 @@ export function resolveTrainingPhaseCompletionAudioUrls(
     .map(cue => cue.audio_url)
 }
 
+/** Prompts configured for the explicit countdown phase before one module. */
+export function resolveTrainingPhaseCountdownStartAudioUrls(
+  item: ExerciseArrangementItem | null | undefined,
+  phase: TrainingTtsPhase
+) {
+  if (!item) return []
+  return (item.training_tts_cues ?? [])
+    .filter(cue => (
+      cue.phase === phase
+      && cue.timing === 'BEFORE_COUNTDOWN'
+      && isUsableCue(cue)
+    ))
+    .slice()
+    .sort((left, right) => left.order - right.order || left.id - right.id)
+    .map(cue => cue.audio_url)
+}
+
+/**
+ * Resolve the audio that can run during a module's explicit countdown phase.
+ * A module-owned prompt deliberately replaces the shared 3/2/1 sequence, so
+ * playback and preload callers must both use this selection rule.
+ */
+export function resolveTrainingCountdownPhaseAudio(
+  item: ExerciseArrangementItem | null | undefined,
+  phase: TrainingTtsPhase,
+  globalCountdownCues: readonly TrainingCountdownTtsCue[] | null | undefined
+) {
+  if (!item) {
+    return {
+      phaseStartAudioUrls: [],
+      globalCues: [] as ActionTtsCue[]
+    }
+  }
+
+  const phaseStartAudioUrls = resolveTrainingPhaseCountdownStartAudioUrls(item, phase)
+  const duration = phase === 'PRETRAINING'
+    ? item.pretraining_mode === 'NONE'
+      ? 0
+      : toNonNegativeSeconds(item.pretraining_countdown_duration)
+    : toNonNegativeSeconds(item.formal_countdown_duration)
+
+  return {
+    phaseStartAudioUrls,
+    globalCues: phaseStartAudioUrls.length > 0
+      ? []
+      : resolveTrainingCountdownTtsCues(globalCountdownCues, duration)
+  }
+}
+
 export function resolveTrainingPhaseStartAudioUrls(cues: readonly ActionTtsCue[]) {
   return cues
     .filter(cue => cue.time <= 0)
@@ -98,38 +145,29 @@ export function resolveTrainingPhaseDelayedTtsCues(cues: readonly ActionTtsCue[]
   return cues.filter(cue => cue.time > 0)
 }
 
-/**
- * Resolve a countdown that is already embedded at the end of the pretraining
- * guidance. These cues are the hand-off into formal training, so a second
- * formal-countdown module would only repeat the same 3/2/1/Go prompt.
- */
-export function resolveEmbeddedPretrainingCountdownDuration(
-  item: ExerciseArrangementItem | null | undefined,
-  phaseDurationSeconds: number
-) {
-  const duration = toNonNegativeSeconds(phaseDurationSeconds)
-  if (duration <= 0 || !item) return 0
-
-  const cue = (item.training_tts_cues ?? [])
-    .filter(entry => (
-      entry.phase === 'PRETRAINING'
-      && entry.timing === 'AFTER_OFFSET'
-      && isUsableCue(entry)
-      && embeddedCountdownPattern.test(entry.text)
-    ))
-    .sort((left, right) => right.offset_seconds - left.offset_seconds || right.order - left.order)[0]
-  if (!cue) return 0
-
-  const remaining = duration - toNonNegativeSeconds(cue.offset_seconds)
-  return remaining > 0 && remaining <= 10 ? Math.round(remaining) : 0
-}
-
 export function resolveTrainingCountdownAudioUrls(
   cues: readonly TrainingCountdownTtsCue[] | null | undefined,
   countdownDurationSeconds: number
 ) {
   return resolveTrainingCountdownTtsCues(cues, countdownDurationSeconds)
     .map(cue => cue.audio_url)
+}
+
+/**
+ * Global countdown prompts are shared by every action. Warm every prompt
+ * that the published modules can reach, rather than assuming a fixed
+ * three-second countdown.
+ */
+export function resolveArrangementCountdownTtsAudioUrls(
+  items: readonly ExerciseArrangementItem[],
+  cues: readonly TrainingCountdownTtsCue[] | null | undefined
+) {
+  const audioUrls = items.flatMap(item => [
+    ...resolveTrainingCountdownPhaseAudio(item, 'PRETRAINING', cues).globalCues,
+    ...resolveTrainingCountdownPhaseAudio(item, 'FORMAL', cues).globalCues
+  ].map(cue => cue.audio_url))
+
+  return [...new Set(audioUrls)]
 }
 
 /**
@@ -172,6 +210,7 @@ function resolveRunnablePhaseAudioUrls(
 ) {
   return [
     ...resolveTrainingPhaseTtsCues(item, phase, timing),
+    ...resolveTrainingPhaseCountdownStartAudioUrls(item, phase).map(audio_url => ({ audio_url })),
     ...resolveTrainingPhaseCompletionAudioUrls(item, phase).map(audio_url => ({ audio_url }))
   ].map(cue => cue.audio_url)
 }
@@ -183,16 +222,14 @@ function resolveRunnablePhaseAudioUrls(
 export function resolveArrangementTtsAudioUrls(items: readonly ExerciseArrangementItem[]) {
   return items.flatMap(item => {
     const formalAudioUrls = resolveRunnablePhaseAudioUrls(item, 'FORMAL', {
-      phaseDurationSeconds: Math.max(1, toNonNegativeSeconds(item.expected_duration)),
-      countdownDurationSeconds: toNonNegativeSeconds(item.formal_countdown_duration)
+      phaseDurationSeconds: Math.max(1, toNonNegativeSeconds(item.expected_duration))
     })
 
     if (item.pretraining_mode === 'NONE') return formalAudioUrls
 
     return [
       ...resolveRunnablePhaseAudioUrls(item, 'PRETRAINING', {
-        phaseDurationSeconds: resolvePretrainingDurationForTts(item),
-        countdownDurationSeconds: toNonNegativeSeconds(item.pretraining_countdown_duration)
+        phaseDurationSeconds: resolvePretrainingDurationForTts(item)
       }),
       ...formalAudioUrls
     ]

@@ -75,8 +75,24 @@ export function createTrainingTtsPlayer(
     url: string
     resolve: () => void
   }> = []
+  let idleWaiters: Array<() => void> = []
+  let playbackGeneration = 0
   const preloadedSources = new Map<string, string>()
   const pendingPreloads = new Map<string, Promise<void>>()
+
+  function resolveIdleWaiters() {
+    if (audioContext || queuedAudioUrls.length > 0 || suspended) return
+    const waiters = idleWaiters
+    idleWaiters = []
+    waiters.forEach(resolve => resolve())
+  }
+
+  function waitForIdle() {
+    if (!audioContext && queuedAudioUrls.length === 0 && !suspended) {
+      return Promise.resolve()
+    }
+    return new Promise<void>(resolve => idleWaiters.push(resolve))
+  }
 
   function preloadAudioUrl(audioUrl: string) {
     const normalizedUrl = audioUrl.trim()
@@ -148,12 +164,31 @@ export function createTrainingTtsPlayer(
   function playAudioUrl(
     audioUrl: string,
     onComplete?: () => void,
-    allowPreloadedSource = true
-  ) {
+    allowPreloadedSource = true,
+    expectedGeneration = playbackGeneration
+  ): Promise<void> {
     const normalizedUrl = audioUrl.trim()
     if (!normalizedUrl) {
       onComplete?.()
       return Promise.resolve()
+    }
+
+    const pendingPreload = allowPreloadedSource
+      ? pendingPreloads.get(normalizedUrl)
+      : undefined
+    if (pendingPreload) {
+      return pendingPreload.then(() => {
+        if (expectedGeneration !== playbackGeneration) {
+          onComplete?.()
+          return Promise.resolve()
+        }
+        return playAudioUrl(
+          normalizedUrl,
+          onComplete,
+          allowPreloadedSource,
+          expectedGeneration
+        )
+      })
     }
 
     return new Promise<void>(resolve => {
@@ -197,7 +232,7 @@ export function createTrainingTtsPlayer(
           preloadedSources.delete(normalizedUrl)
         }
         dispose(true, false)
-        void playAudioUrl(normalizedUrl, onComplete, false).then(resolve)
+        void playAudioUrl(normalizedUrl, onComplete, false, expectedGeneration).then(resolve)
         return true
       }
 
@@ -233,7 +268,10 @@ export function createTrainingTtsPlayer(
   function playNextQueuedAudio() {
     if (audioContext || suspended) return
     const nextAudio = queuedAudioUrls.shift()
-    if (!nextAudio) return
+    if (!nextAudio) {
+      resolveIdleWaiters()
+      return
+    }
     void playAudioUrl(nextAudio.url, () => {
       nextAudio.resolve()
       playNextQueuedAudio()
@@ -244,10 +282,12 @@ export function createTrainingTtsPlayer(
     const queued = queuedAudioUrls
     queuedAudioUrls = []
     queued.forEach(item => item.resolve())
+    resolveIdleWaiters()
   }
 
   return {
     reset() {
+      playbackGeneration += 1
       suspended = false
       clearQueuedAudio()
       stopAudio()
@@ -255,11 +295,20 @@ export function createTrainingTtsPlayer(
     },
     resetTimeline(options: { interrupt?: boolean } = {}) {
       if (options.interrupt) {
+        playbackGeneration += 1
         suspended = false
         clearQueuedAudio()
         stopAudio()
       }
       playedCueIndexes = new Set()
+    },
+    // Keep a cue that has already reached the native audio player, but cancel
+    // anything still waiting for a COS preload (or queued behind it). This is
+    // used at a countdown boundary so a slow download cannot speak after the
+    // visible 3/2/1 overlay has gone away.
+    cancelPendingPlayback() {
+      playbackGeneration += 1
+      clearQueuedAudio()
     },
     sync(cues: readonly ActionTtsCue[], elapsedSeconds: number) {
       if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) return
@@ -275,13 +324,15 @@ export function createTrainingTtsPlayer(
       enqueueAudioUrls(dueCueIndexes.map(({ cue }) => cue.audio_url))
     },
     playUrl(audioUrl: string) {
+      playbackGeneration += 1
       clearQueuedAudio()
-      return playAudioUrl(audioUrl, playNextQueuedAudio)
+      return playAudioUrl(audioUrl, playNextQueuedAudio, true, playbackGeneration)
     },
     enqueue(audioUrls: readonly string[]) {
       return enqueueAudioUrls(audioUrls)
     },
     replace(audioUrls: readonly string[]) {
+      playbackGeneration += 1
       clearQueuedAudio()
       stopAudio()
       return enqueueAudioUrls(audioUrls)
@@ -289,7 +340,9 @@ export function createTrainingTtsPlayer(
     preload(audioUrls: readonly string[]) {
       return preloadAudioUrls(audioUrls)
     },
+    waitForIdle,
     pause() {
+      playbackGeneration += 1
       suspended = false
       clearQueuedAudio()
       stopAudio()
@@ -316,6 +369,7 @@ export function createTrainingTtsPlayer(
       }
     },
     destroy() {
+      playbackGeneration += 1
       suspended = false
       clearQueuedAudio()
       stopAudio()

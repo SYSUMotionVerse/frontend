@@ -39,8 +39,7 @@ const props = defineProps<{
   phaseKind: VisualWorkoutPhaseKind
   phaseSlot: VisualWorkoutPhaseSlot
   phaseRemainingSeconds: number
-  pretrainingDurationSeconds: number
-  pretrainingEmbeddedCountdownDuration: number
+  countdownAudioPending?: boolean
   comparisonMode: boolean
   comparisonMediaSize?: {
     mediaWidth: number
@@ -118,40 +117,12 @@ const poseStatusLabel = computed(() => {
 })
 const phaseCueCount = computed(() => {
   if (props.phaseKind === 'countdown') {
-    return props.phaseRemainingSeconds > 0 ? props.phaseRemainingSeconds : null
-  }
-  if (
-    props.phaseKind === 'demonstration'
-    && props.phaseSlot === 'pretraining'
-    && props.pretrainingEmbeddedCountdownDuration > 0
-  ) {
-    // TTS cues are scheduled from the native video's currentTime. Deriving
-    // the white countdown from the same clock prevents drift when the media
-    // starts late, buffers, or emits timeupdate less frequently than the
-    // wall-clock phase timer.
-    const mediaProgress = Number.isFinite(props.videoProgressSeconds)
-      ? Math.max(0, props.videoProgressSeconds)
-      : 0
-    const hasMediaProgress = mediaProgress > 0
-      && props.pretrainingDurationSeconds > 0
-    const remaining = hasMediaProgress
-      ? props.pretrainingDurationSeconds - Math.min(
-        props.pretrainingDurationSeconds,
-        mediaProgress
-      )
-      : props.phaseRemainingSeconds
-    if (remaining > 0 && remaining <= props.pretrainingEmbeddedCountdownDuration) {
-      return Math.ceil(remaining)
-    }
+    if (props.phaseRemainingSeconds > 0) return props.phaseRemainingSeconds
+    return props.countdownAudioPending ? 1 : null
   }
   return null
 })
 const phaseCueLabel = computed(() => {
-  if (
-    props.phaseKind === 'demonstration'
-    && props.phaseSlot === 'pretraining'
-    && phaseCueCount.value
-  ) return '正式训练开始'
   if (props.phaseSlot === 'pretraining-countdown') return '预训练开始'
   if (props.phaseSlot === 'formal-countdown') return '正式训练开始'
   return '开始'

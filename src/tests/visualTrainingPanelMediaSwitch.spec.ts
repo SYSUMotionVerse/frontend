@@ -68,8 +68,6 @@ function mountPanel(
       phaseKind: 'preview',
       phaseSlot: 'preview',
       phaseRemainingSeconds: 15,
-      pretrainingDurationSeconds: 30,
-      pretrainingEmbeddedCountdownDuration: 0,
       comparisonMode,
       tutorialMode: false,
       tutorialIndex: 0,
@@ -189,6 +187,13 @@ describe('VisualTrainingPanel media switch', () => {
 
     expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('开始')
     expect(wrapper.find('.visual-session__active-timer').exists()).toBe(false)
+
+    await wrapper.setProps({
+      phaseRemainingSeconds: 0,
+      countdownAudioPending: true
+    })
+
+    expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('1')
   })
 
   it('labels the configured pretraining demonstration while retaining training controls', async () => {
@@ -204,44 +209,6 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
-  })
-
-  it('moves an embedded hand-off countdown onto the end of pretraining', async () => {
-    const wrapper = mountPanel()
-
-    await wrapper.setProps({
-      trainingStarted: true,
-      phaseKind: 'demonstration',
-      phaseSlot: 'pretraining',
-      phaseRemainingSeconds: 3,
-      pretrainingEmbeddedCountdownDuration: 3,
-      videoAutoplay: true
-    })
-
-    expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('3')
-    expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('正式训练开始')
-  })
-
-  it('uses the video clock so the white digits follow the spoken hand-off cue', async () => {
-    const wrapper = mountPanel()
-
-    await wrapper.setProps({
-      trainingStarted: true,
-      phaseKind: 'demonstration',
-      phaseSlot: 'pretraining',
-      // The wall clock is intentionally behind the media clock. The cue
-      // scheduler uses currentTime, so the overlay must show the same value.
-      phaseRemainingSeconds: 1,
-      videoProgressSeconds: 9,
-      pretrainingDurationSeconds: 12,
-      pretrainingEmbeddedCountdownDuration: 3,
-      videoAutoplay: true
-    })
-
-    expect(wrapper.get('.visual-session__cue-count').text()).toBe('3')
-
-    await wrapper.setProps({ videoProgressSeconds: 10 })
-    expect(wrapper.get('.visual-session__cue-count').text()).toBe('2')
   })
 
   it('uses a mini-program cover view for portrait media controls and keeps the start action tappable', async () => {

@@ -1541,6 +1541,14 @@ describe('page-level backend sync wiring', () => {
           text: '保持膝盖稳定',
           audio_url: 'https://cdn.example.com/database-guidance-01.mp3',
           order: 0
+        }, {
+          id: 902,
+          phase: 'PRETRAINING',
+          timing: 'COMPLETE',
+          offset_seconds: 0,
+          text: '示范结束，准备开始。',
+          audio_url: 'https://cdn.example.com/pretraining-complete.mp3',
+          order: 1
         }],
         order: 1
       }]
@@ -1589,7 +1597,7 @@ describe('page-level backend sync wiring', () => {
           },
           VisualTrainingPanel: {
             props: ['videoEventToken', 'videoUrl', 'phaseKind'],
-            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoTimeUpdate', 'videoPlay', 'videoEnded'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoTimeUpdate', 'videoPlay', 'videoPause', 'videoEnded'],
             template: `
               <div>
                 <span class="phase-kind">{{ phaseKind }}</span>
@@ -1597,6 +1605,7 @@ describe('page-level backend sync wiring', () => {
                 <button class="start-training" @click="$emit('startTraining')">start</button>
                 <button class="demo-guidance" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 1, duration: 8 } })">demo guidance</button>
                 <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+                <button class="pause-video" @click="$emit('videoPause', { token: videoEventToken })">pause</button>
                 <button class="end-video" @click="$emit('videoEnded', { token: videoEventToken, detail: { currentTime: 2 } })">end</button>
               </div>
             `
@@ -1621,6 +1630,10 @@ describe('page-level backend sync wiring', () => {
       expect(audioContext.src).toBe('https://cdn.example.com/database-guidance-01.mp3')
       expect(audioContext.play).toHaveBeenCalledOnce()
 
+      // The module hand-off must wait for the phase speech to finish rather
+      // than cutting it off at the configured video boundary.
+      audioContext.onEnded.mock.calls[0][0]()
+
       await wrapper.get('.end-video').trigger('click')
       await flushPromises()
       // The native media ended early, but the configured five-second
@@ -1628,15 +1641,219 @@ describe('page-level backend sync wiring', () => {
       expect(wrapper.get('.phase-kind').text()).toBe('demonstration')
       await vi.advanceTimersByTimeAsync(5_000)
       await flushPromises()
+      expect(audioContext.src).toBe('https://cdn.example.com/pretraining-complete.mp3')
+      expect(audioContext.play).toHaveBeenCalledTimes(2)
+
+      // The panel pauses the old video during the hand-off. That pause must
+      // not stop the COMPLETE prompt that is deliberately holding the next
+      // phase until its speech has finished.
+      await wrapper.get('.pause-video').trigger('click')
+      expect(audioContext.stop).not.toHaveBeenCalled()
+      audioContext.onEnded.mock.calls[1][0]()
+      await flushPromises()
       expect(wrapper.get('.phase-kind').text()).toBe('active')
       await wrapper.get('.play-video').trigger('click')
       await vi.advanceTimersByTimeAsync(2_000)
       await flushPromises()
 
-      expect(createInnerAudioContext).toHaveBeenCalledOnce()
+      expect(createInnerAudioContext).toHaveBeenCalledTimes(2)
+      expect(audioContext.play).toHaveBeenCalledTimes(2)
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('plays a formal delayed cue from the formal phase clock after the video loops', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 4,
+      title: '正式训练长于视频',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 60,
+      is_active: true,
+      order: 1,
+      countdown_tts_cues: [],
+      items: [{
+        id: 41,
+        video_id: 10,
+        video: {
+          id: 10,
+          title: '长时正式训练',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/looped-formal.mp4',
+          duration: 30
+        },
+        pretraining_mode: 'NONE',
+        pretraining_countdown_duration: 0,
+        expected_duration: 60,
+        formal_countdown_duration: 0,
+        countdown_duration: 0,
+        training_tts_cues: [{
+          id: 1001,
+          phase: 'FORMAL',
+          timing: 'AFTER_OFFSET',
+          offset_seconds: 45,
+          text: '保持呼吸稳定。',
+          audio_url: 'https://cdn.example.com/formal-45.mp3',
+          order: 0
+        }],
+        order: 1
+      }]
+    })
+
+    const audioContext = {
+      src: '',
+      autoplay: false,
+      obeyMuteSwitch: false,
+      play: vi.fn(),
+      stop: vi.fn(),
+      destroy: vi.fn(),
+      onEnded: vi.fn(),
+      onError: vi.fn()
+    }
+    const createInnerAudioContext = vi.fn(() => audioContext)
+    vi.stubGlobal('wx', { createInnerAudioContext })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          VisualTrainingPanel: {
+            props: ['videoEventToken', 'phaseKind'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoPlay', 'videoTimeUpdate'],
+            template: `
+              <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+                <button class="looped-video-progress" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 30, duration: 30 } })">looped</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
+
+      await wrapper.get('.play-video').trigger('click')
+      await wrapper.get('.looped-video-progress').trigger('click')
+      await vi.advanceTimersByTimeAsync(45_200)
+      await flushPromises()
+
+      expect(audioContext.src).toBe('https://cdn.example.com/formal-45.mp3')
       expect(audioContext.play).toHaveBeenCalledOnce()
     } finally {
       wrapper.unmount()
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps a countdown visible until its configured prompt has finished', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 5,
+      title: '倒计时语音交接',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 33,
+      is_active: true,
+      order: 1,
+      countdown_tts_cues: [],
+      items: [{
+        id: 51,
+        video_id: 11,
+        video: {
+          id: 11,
+          title: '倒计时动作',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/countdown-action.mp4',
+          duration: 30
+        },
+        pretraining_mode: 'NONE',
+        pretraining_countdown_duration: 0,
+        expected_duration: 30,
+        formal_countdown_duration: 3,
+        countdown_duration: 3,
+        training_tts_cues: [{
+          id: 1101,
+          phase: 'FORMAL',
+          timing: 'BEFORE_COUNTDOWN',
+          offset_seconds: 0,
+          text: '准备开始正式训练。',
+          audio_url: 'https://cdn.example.com/formal-countdown-prompt.mp3',
+          order: 0
+        }],
+        order: 1
+      }]
+    })
+
+    const audioContext = {
+      src: '',
+      autoplay: false,
+      obeyMuteSwitch: false,
+      play: vi.fn(),
+      stop: vi.fn(),
+      destroy: vi.fn(),
+      onEnded: vi.fn(),
+      onError: vi.fn()
+    }
+    vi.stubGlobal('wx', {
+      createInnerAudioContext: vi.fn(() => audioContext)
+    })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          VisualTrainingPanel: {
+            props: ['phaseKind'],
+            emits: ['startRecognition', 'poseStats', 'startTraining'],
+            template: `
+              <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('countdown')
+      expect(audioContext.play).toHaveBeenCalledOnce()
+
+      await vi.advanceTimersByTimeAsync(3_200)
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('countdown')
+
+      audioContext.onEnded.mock.calls[0][0]()
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
       vi.unstubAllGlobals()
     }
   })

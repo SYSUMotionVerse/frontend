@@ -203,6 +203,55 @@ describe('trainingTts', () => {
     expect(context.play).toHaveBeenCalledOnce()
   })
 
+  it('waits for an in-flight preload instead of downloading the same cue again', async () => {
+    const context = createAudioContext()
+    let completeDownload: ((result: { statusCode: number; tempFilePath: string }) => void) | undefined
+    const downloadFile = vi.fn(({ success }) => {
+      completeDownload = success
+    })
+    const player = createTrainingTtsPlayer(() => context, { downloadFile })
+    const remoteUrl = 'https://cdn.example.com/first-action.mp3'
+
+    const preloading = player.preload([remoteUrl])
+    player.enqueue([remoteUrl])
+
+    expect(downloadFile).toHaveBeenCalledOnce()
+    expect(context.play).not.toHaveBeenCalled()
+
+    completeDownload?.({
+      statusCode: 200,
+      tempFilePath: 'wxfile://tmp/first-action.mp3'
+    })
+    await preloading
+    await Promise.resolve()
+
+    expect(context.src).toBe('wxfile://tmp/first-action.mp3')
+    expect(context.play).toHaveBeenCalledOnce()
+  })
+
+  it('does not start a countdown cue after its visible countdown has ended', async () => {
+    const context = createAudioContext()
+    let completeDownload: ((result: { statusCode: number; tempFilePath: string }) => void) | undefined
+    const downloadFile = vi.fn(({ success }) => {
+      completeDownload = success
+    })
+    const player = createTrainingTtsPlayer(() => context, { downloadFile })
+    const remoteUrl = 'https://cdn.example.com/countdown-1.mp3'
+
+    const preloading = player.preload([remoteUrl])
+    player.enqueue([remoteUrl])
+    player.cancelPendingPlayback()
+
+    completeDownload?.({
+      statusCode: 200,
+      tempFilePath: 'wxfile://tmp/countdown-1.mp3'
+    })
+    await preloading
+    await Promise.resolve()
+
+    expect(context.play).not.toHaveBeenCalled()
+  })
+
   it('retries the remote URL when a preloaded temporary file cannot play', async () => {
     const temporary = createAudioContext()
     const remote = createAudioContext()
@@ -324,6 +373,31 @@ describe('trainingTts', () => {
     expect(second.src).toBe('https://cdn.example.com/rest-next.mp3')
     expect(first.play).toHaveBeenCalledOnce()
     expect(second.play).toHaveBeenCalledOnce()
+  })
+
+  it('waits for every queued cue before reporting an idle player', async () => {
+    const first = createAudioContext()
+    const second = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+    const player = createTrainingTtsPlayer(createContext)
+
+    player.enqueue([
+      'https://cdn.example.com/end.mp3',
+      'https://cdn.example.com/complete.mp3'
+    ])
+    const idle = player.waitForIdle()
+    const observed = vi.fn()
+    void idle.then(observed)
+
+    first.onEnded.mock.calls[0][0]()
+    await Promise.resolve()
+    expect(observed).not.toHaveBeenCalled()
+
+    second.onEnded.mock.calls[0][0]()
+    await expect(idle).resolves.toBeUndefined()
+    expect(observed).toHaveBeenCalledOnce()
   })
 
   it('continues from an immediate countdown into end and rest prompts', async () => {

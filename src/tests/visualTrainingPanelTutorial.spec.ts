@@ -66,8 +66,6 @@ function mountTutorial(overrides: Record<string, unknown> = {}) {
       phaseKind: 'preview',
       phaseSlot: 'preview',
       phaseRemainingSeconds: 15,
-      pretrainingDurationSeconds: 30,
-      pretrainingEmbeddedCountdownDuration: 0,
       comparisonMode: false,
       tutorialMode: true,
       tutorialIndex: 0,
