@@ -17,6 +17,7 @@ const props = defineProps<{
   videoLoading: boolean
   videoError: string
   videoEnded: boolean
+  videoProgressSeconds: number
   completionHint: string
   recognitionEnabled: boolean
   recognitionReady: boolean
@@ -38,6 +39,8 @@ const props = defineProps<{
   phaseKind: VisualWorkoutPhaseKind
   phaseSlot: VisualWorkoutPhaseSlot
   phaseRemainingSeconds: number
+  pretrainingDurationSeconds: number
+  pretrainingEmbeddedCountdownDuration: number
   comparisonMode: boolean
   comparisonMediaSize?: {
     mediaWidth: number
@@ -114,11 +117,42 @@ const poseStatusLabel = computed(() => {
   return props.livePoseFps > 0 ? `${props.livePoseFps} FPS 实时识别` : '实时识别启动中'
 })
 const phaseCueCount = computed(() => {
+  if (props.phaseKind === 'countdown') {
+    return props.phaseRemainingSeconds > 0 ? props.phaseRemainingSeconds : null
+  }
+  if (
+    props.phaseKind === 'demonstration'
+    && props.phaseSlot === 'pretraining'
+    && props.pretrainingEmbeddedCountdownDuration > 0
+  ) {
+    // TTS cues are scheduled from the native video's currentTime. Deriving
+    // the white countdown from the same clock prevents drift when the media
+    // starts late, buffers, or emits timeupdate less frequently than the
+    // wall-clock phase timer.
+    const mediaProgress = Number.isFinite(props.videoProgressSeconds)
+      ? Math.max(0, props.videoProgressSeconds)
+      : 0
+    const hasMediaProgress = mediaProgress > 0
+      && props.pretrainingDurationSeconds > 0
+    const remaining = hasMediaProgress
+      ? props.pretrainingDurationSeconds - Math.min(
+        props.pretrainingDurationSeconds,
+        mediaProgress
+      )
+      : props.phaseRemainingSeconds
+    if (remaining > 0 && remaining <= props.pretrainingEmbeddedCountdownDuration) {
+      return Math.ceil(remaining)
+    }
+  }
   if (props.phaseRemainingSeconds <= 0) return null
-  if (props.phaseKind === 'countdown') return props.phaseRemainingSeconds
   return null
 })
 const phaseCueLabel = computed(() => {
+  if (
+    props.phaseKind === 'demonstration'
+    && props.phaseSlot === 'pretraining'
+    && phaseCueCount.value
+  ) return '正式训练开始'
   if (props.phaseSlot === 'pretraining-countdown') return '预训练开始'
   if (props.phaseSlot === 'formal-countdown') return '正式训练开始'
   return '开始'
@@ -262,7 +296,16 @@ function syncVideoPlayback(resetToStart = false) {
     'follow-along-video',
     componentInstance?.proxy as never
   )
-  if (resetToStart) context.seek(0)
+  if (resetToStart) {
+    context.seek(0)
+  } else if (
+    (props.phaseKind === 'active' || props.phaseKind === 'demonstration')
+    && props.videoProgressSeconds > 0
+  ) {
+    // Preserve the current media position when a cached source is evicted and
+    // the same phase falls back to its remote URL.
+    context.seek(props.videoProgressSeconds)
+  }
   if (props.videoAutoplay) {
     context.play()
   } else {
@@ -329,11 +372,24 @@ watch(
 )
 
 function wrapVideoEvent(event: unknown) {
+  let token = props.videoEventToken
   const detail = event && typeof event === 'object'
     ? (event as { detail?: unknown }).detail
     : undefined
+  if (event && typeof event === 'object') {
+    const currentTarget = (event as { currentTarget?: unknown }).currentTarget
+    if (currentTarget && typeof currentTarget === 'object') {
+      const dataset = (currentTarget as { dataset?: unknown }).dataset
+      if (dataset && typeof dataset === 'object') {
+        const targetToken = (dataset as { videoToken?: unknown }).videoToken
+        if (typeof targetToken === 'string' && targetToken.length > 0) {
+          token = targetToken
+        }
+      }
+    }
+  }
   return {
-    token: props.videoEventToken,
+    token,
     detail: detail && typeof detail === 'object' ? detail : undefined
   }
 }
@@ -533,6 +589,7 @@ defineExpose({ startRecord, stopRecord })
           id="follow-along-video"
           :key="videoEventToken || videoUrl"
           class="visual-session__video"
+          :data-video-token="videoEventToken"
           :style="comparisonMediaStyle"
           :src="videoUrl"
           :title="videoTitle"

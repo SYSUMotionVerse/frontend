@@ -6,6 +6,7 @@ interface InnerAudioContextLike {
   obeyMuteSwitch?: boolean
   playbackRate?: number
   play?: () => void
+  pause?: () => void
   stop?: () => void
   destroy?: () => void
   onEnded?: (callback: () => void) => void
@@ -17,8 +18,12 @@ interface AudioDownloadPlatform {
     url: string
     timeout?: number
     success?: (result: { tempFilePath: string; statusCode: number }) => void
-    fail?: () => void
+    fail?: (error?: unknown) => void
   }) => unknown
+}
+
+interface AudioRuntime extends AudioDownloadPlatform {
+  createInnerAudioContext?: () => InnerAudioContextLike
 }
 
 type WechatAudioFactory = typeof wx & {
@@ -27,7 +32,11 @@ type WechatAudioFactory = typeof wx & {
 
 const audioDownloadTimeoutMs = 30_000
 const audioPreloadConcurrency = 4
-export const trainingTtsPlaybackRate = 0.88
+// The server-generated assets already use the configured natural speech rate
+// (`zh-CN-XiaoxiaoNeural`, -5%). Keep native playback at 1x so the database
+// timing plan can be checked against the actual MP3 duration without an
+// invisible 12% slowdown that truncates cues at phase boundaries.
+export const trainingTtsPlaybackRate = 1
 
 function normalizeCues(cues: readonly ActionTtsCue[]) {
   return cues
@@ -43,7 +52,14 @@ function normalizeCues(cues: readonly ActionTtsCue[]) {
 export function createTrainingTtsPlayer(
   createAudioContext = () => {
     const wechatApi = typeof wx === 'undefined' ? null : wx as WechatAudioFactory
-    return wechatApi?.createInnerAudioContext?.()
+    const wechatContext = wechatApi?.createInnerAudioContext?.()
+    if (wechatContext) return wechatContext
+
+    // The uni-app mp-weixin bundle exposes some wx APIs through its runtime
+    // proxy rather than the enumerable wx snapshot. Use that proxy as a
+    // fallback so TTS still works in DevTools and on older base libraries.
+    const uniApi = typeof uni === 'undefined' ? null : uni as unknown as AudioRuntime
+    return uniApi?.createInnerAudioContext?.()
   },
   downloadPlatform = (
     typeof uni === 'undefined'
@@ -54,6 +70,7 @@ export function createTrainingTtsPlayer(
   let audioContext: InnerAudioContextLike | undefined
   let stopCurrentPlayback: (() => void) | undefined
   let playedCueIndexes = new Set<number>()
+  let suspended = false
   let queuedAudioUrls: Array<{
     url: string
     resolve: () => void
@@ -85,10 +102,19 @@ export function createTrainingTtsPlayer(
             && result.tempFilePath.trim().length > 0
           ) {
             preloadedSources.set(normalizedUrl, result.tempFilePath)
+          } else {
+            console.warn(
+              '[TrainingTts] preload rejected:',
+              normalizedUrl,
+              result.statusCode
+            )
           }
           resolve()
         },
-        fail: resolve
+        fail(error) {
+          console.warn('[TrainingTts] preload failed:', normalizedUrl, error)
+          resolve()
+        }
       })
     }).finally(() => {
       pendingPreloads.delete(normalizedUrl)
@@ -119,7 +145,11 @@ export function createTrainingTtsPlayer(
     stopCurrentPlayback?.()
   }
 
-  function playAudioUrl(audioUrl: string, onComplete?: () => void) {
+  function playAudioUrl(
+    audioUrl: string,
+    onComplete?: () => void,
+    allowPreloadedSource = true
+  ) {
     const normalizedUrl = audioUrl.trim()
     if (!normalizedUrl) {
       onComplete?.()
@@ -128,8 +158,15 @@ export function createTrainingTtsPlayer(
 
     return new Promise<void>(resolve => {
       stopAudio()
-      const nextAudioContext = createAudioContext()
+      suspended = false
+      let nextAudioContext: InnerAudioContextLike | undefined
+      try {
+        nextAudioContext = createAudioContext()
+      } catch (error) {
+        console.warn('[TrainingTts] audio context unavailable:', error)
+      }
       if (!nextAudioContext) {
+        console.warn('[TrainingTts] unable to create an audio context')
         onComplete?.()
         resolve()
         return
@@ -137,28 +174,48 @@ export function createTrainingTtsPlayer(
 
       let settled = false
       audioContext = nextAudioContext
-      nextAudioContext.autoplay = false
-      nextAudioContext.obeyMuteSwitch = false
-      nextAudioContext.playbackRate = trainingTtsPlaybackRate
-      nextAudioContext.src = preloadedSources.get(normalizedUrl) ?? normalizedUrl
-      const dispose = (stopFirst = false) => {
+      const sourceUrl = allowPreloadedSource
+        ? preloadedSources.get(normalizedUrl) ?? normalizedUrl
+        : normalizedUrl
+      const dispose = (stopFirst = false, complete = true) => {
         if (settled) return
         settled = true
         if (audioContext === nextAudioContext) audioContext = undefined
         if (stopCurrentPlayback === stopPlayback) stopCurrentPlayback = undefined
         if (stopFirst) nextAudioContext.stop?.()
         nextAudioContext.destroy?.()
-        onComplete?.()
-        resolve()
+        if (complete) {
+          onComplete?.()
+          resolve()
+        }
       }
       const stopPlayback = () => dispose(true)
       stopCurrentPlayback = stopPlayback
-      nextAudioContext.onEnded?.(() => dispose())
-      nextAudioContext.onError?.(error => {
-        console.warn('[TrainingTts] playback failed:', error)
-        dispose()
-      })
-      nextAudioContext.play?.()
+      const retryWithRemoteSource = () => {
+        if (sourceUrl === normalizedUrl || !allowPreloadedSource) return false
+        if (preloadedSources.get(normalizedUrl) === sourceUrl) {
+          preloadedSources.delete(normalizedUrl)
+        }
+        dispose(true, false)
+        void playAudioUrl(normalizedUrl, onComplete, false).then(resolve)
+        return true
+      }
+
+      try {
+        nextAudioContext.autoplay = false
+        nextAudioContext.obeyMuteSwitch = false
+        nextAudioContext.playbackRate = trainingTtsPlaybackRate
+        nextAudioContext.src = sourceUrl
+        nextAudioContext.onEnded?.(() => dispose())
+        nextAudioContext.onError?.(error => {
+          console.warn('[TrainingTts] playback failed:', error)
+          if (!retryWithRemoteSource()) dispose()
+        })
+        nextAudioContext.play?.()
+      } catch (error) {
+        console.warn('[TrainingTts] playback setup failed:', error)
+        if (!retryWithRemoteSource()) dispose()
+      }
     })
   }
 
@@ -174,7 +231,7 @@ export function createTrainingTtsPlayer(
   }
 
   function playNextQueuedAudio() {
-    if (audioContext) return
+    if (audioContext || suspended) return
     const nextAudio = queuedAudioUrls.shift()
     if (!nextAudio) return
     void playAudioUrl(nextAudio.url, () => {
@@ -191,12 +248,14 @@ export function createTrainingTtsPlayer(
 
   return {
     reset() {
+      suspended = false
       clearQueuedAudio()
       stopAudio()
       playedCueIndexes = new Set()
     },
     resetTimeline(options: { interrupt?: boolean } = {}) {
       if (options.interrupt) {
+        suspended = false
         clearQueuedAudio()
         stopAudio()
       }
@@ -231,10 +290,33 @@ export function createTrainingTtsPlayer(
       return preloadAudioUrls(audioUrls)
     },
     pause() {
+      suspended = false
       clearQueuedAudio()
       stopAudio()
     },
+    suspend() {
+      if (audioContext) {
+        if (!audioContext.pause) return
+        suspended = true
+        audioContext.pause()
+        return
+      }
+      // Keep a not-yet-started queue suspended as well. This can happen when
+      // buffering wins a race with audio-context creation; resume() will then
+      // drain it once the video reports progress again.
+      if (queuedAudioUrls.length > 0) suspended = true
+    },
+    resume() {
+      if (!suspended) return
+      suspended = false
+      if (audioContext) {
+        audioContext.play?.()
+      } else {
+        playNextQueuedAudio()
+      }
+    },
     destroy() {
+      suspended = false
       clearQueuedAudio()
       stopAudio()
       playedCueIndexes = new Set()

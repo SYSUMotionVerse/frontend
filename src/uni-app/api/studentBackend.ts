@@ -33,7 +33,9 @@ import type {
   StairSessionSummary,
   StairSessionSyncInput,
   StairsRecordCreatePayload,
+  TrainingCountdownTtsCue,
   TrainingCredentialResponse,
+  TrainingTtsCue,
   StudentBackendSyncDependencies,
   UserUpdatePayload,
   VisualSessionSyncResult,
@@ -175,16 +177,28 @@ function resolveAbsoluteAssetUrl(value: string | null | undefined) {
   return origin ? `${origin}${source}` : source
 }
 
+function resolveTrainingTtsCueUrl(value: string) {
+  return resolveAbsoluteAssetUrl(value) ?? ''
+}
+
 function resolveExerciseArrangementUrls(
   arrangement: ExerciseArrangementDetail
 ): ExerciseArrangementDetail {
   return {
     ...arrangement,
+    countdown_tts_cues: arrangement.countdown_tts_cues?.map((cue: TrainingCountdownTtsCue) => ({
+      ...cue,
+      audio_url: resolveTrainingTtsCueUrl(cue.audio_url)
+    })),
     items: [...arrangement.items]
       .sort((left, right) => left.order - right.order)
       .map(item => ({
         ...item,
         standard_data_url: resolveAbsoluteAssetUrl(item.standard_data_url),
+        training_tts_cues: item.training_tts_cues?.map((cue: TrainingTtsCue) => ({
+          ...cue,
+          audio_url: resolveTrainingTtsCueUrl(cue.audio_url)
+        })),
         video: resolveExerciseVideoUrl(item.video)
       }))
   }

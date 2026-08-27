@@ -11,6 +11,8 @@ export interface TrainingTtsPhaseTiming {
   countdownDurationSeconds?: number
 }
 
+const embeddedCountdownPattern = /[3３]\s*[，,、]\s*[2２]\s*[，,、]\s*[1１]\s*[，,、]?\s*go[！!]?/i
+
 function toNonNegativeSeconds(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, value)
@@ -94,6 +96,32 @@ export function resolveTrainingPhaseStartAudioUrls(cues: readonly ActionTtsCue[]
 
 export function resolveTrainingPhaseDelayedTtsCues(cues: readonly ActionTtsCue[]) {
   return cues.filter(cue => cue.time > 0)
+}
+
+/**
+ * Resolve a countdown that is already embedded at the end of the pretraining
+ * guidance. These cues are the hand-off into formal training, so a second
+ * formal-countdown module would only repeat the same 3/2/1/Go prompt.
+ */
+export function resolveEmbeddedPretrainingCountdownDuration(
+  item: ExerciseArrangementItem | null | undefined,
+  phaseDurationSeconds: number
+) {
+  const duration = toNonNegativeSeconds(phaseDurationSeconds)
+  if (duration <= 0 || !item) return 0
+
+  const cue = (item.training_tts_cues ?? [])
+    .filter(entry => (
+      entry.phase === 'PRETRAINING'
+      && entry.timing === 'AFTER_OFFSET'
+      && isUsableCue(entry)
+      && embeddedCountdownPattern.test(entry.text)
+    ))
+    .sort((left, right) => right.offset_seconds - left.offset_seconds || right.order - left.order)[0]
+  if (!cue) return 0
+
+  const remaining = duration - toNonNegativeSeconds(cue.offset_seconds)
+  return remaining > 0 && remaining <= 10 ? Math.round(remaining) : 0
 }
 
 export function resolveTrainingCountdownAudioUrls(
