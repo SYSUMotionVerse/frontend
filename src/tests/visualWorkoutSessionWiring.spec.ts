@@ -24,6 +24,8 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain('scheduleVideoPrefetch(0)')
     expect(sessionSource).toContain('void prefetchVideoWindow(itemIndex)')
     expect(sessionSource).toContain('standardsReadyPromise = preloadActionStandards(nextArrangement, requestId)')
+    expect(sessionSource).toContain('function preloadTrainingTts(nextArrangement: ExerciseArrangementDetail)')
+    expect(sessionSource).toContain('void preloadTrainingTts(nextArrangement)')
     expect(sessionSource).toContain('await standardsReadyPromise')
     expect(sessionSource).not.toContain('await prefetchVideoWindow(0, true)')
     expect(sessionSource).toContain('async function prefetchVideoWindow')

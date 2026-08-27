@@ -672,6 +672,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     })
     actionStandards.value = standards
 
+  }
+
+  function preloadTrainingTts(nextArrangement: ExerciseArrangementDetail) {
     // Do not preload cues that can play immediately after the user taps
     // "开始训练". If the user starts before a download finishes, using the
     // remote URL would otherwise duplicate the COS transfer. Only future
@@ -990,6 +993,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       if (!nextArrangement || !exerciseVideo.value?.video_file?.trim()) {
         videoError.value = '当前训练暂未配置可播放的动作编排'
       } else {
+        // TTS must warm during the tutorial, rather than after all scoring
+        // standards finish downloading, so a quick transition cannot lose
+        // the first configured countdown or later module prompt.
+        void preloadTrainingTts(nextArrangement)
         standardsReadyPromise = preloadActionStandards(nextArrangement, requestId)
         phaseRemainingExactSeconds = initialPreviewDurationSeconds
         phaseRemainingSeconds.value = initialPreviewDurationSeconds
