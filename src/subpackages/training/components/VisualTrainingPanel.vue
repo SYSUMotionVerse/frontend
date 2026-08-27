@@ -144,7 +144,6 @@ const phaseCueCount = computed(() => {
       return Math.ceil(remaining)
     }
   }
-  if (props.phaseRemainingSeconds <= 0) return null
   return null
 })
 const phaseCueLabel = computed(() => {
