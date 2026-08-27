@@ -1641,6 +1641,261 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
+  it('resumes the formal action clock when buffering is followed by progress without a play event', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 5,
+      title: '缓冲恢复计时回归',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 10,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 51,
+        video_id: 12,
+        video: {
+          id: 12,
+          title: '缓冲恢复动作',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/buffering-action.mp4',
+          duration: 10
+        },
+        pretraining_mode: 'NONE',
+        pretraining_countdown_duration: 0,
+        expected_duration: 10,
+        formal_countdown_duration: 0,
+        countdown_duration: 0,
+        order: 1
+      }]
+    })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: {
+            template: '<div><slot /></div>'
+          },
+          VisualTrainingPanel: {
+            props: ['videoEventToken', 'phaseKind', 'phaseRemainingSeconds'],
+            emits: [
+              'startRecognition',
+              'poseStats',
+              'startTraining',
+              'videoPlay',
+              'videoWaiting',
+              'videoTimeUpdate'
+            ],
+            template: `
+              <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
+                <span class="phase-remaining">{{ phaseRemainingSeconds }}</span>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+                <button class="video-waiting" @click="$emit('videoWaiting', { token: videoEventToken })">waiting</button>
+                <button class="video-progress" @click="$emit('videoTimeUpdate', { token: videoEventToken, detail: { currentTime: 1, duration: 10 } })">progress</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
+      await wrapper.get('.play-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(1_000)
+      await flushPromises()
+
+      await wrapper.get('.video-waiting').trigger('click')
+      await flushPromises()
+      const pausedRemaining = Number(wrapper.get('.phase-remaining').text())
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(Number(wrapper.get('.phase-remaining').text())).toBe(pausedRemaining)
+
+      // Some WeChat versions resume emitting timeupdate but omit a second
+      // native play event after buffering. Progress must restart the clock.
+      await wrapper.get('.video-progress').trigger('click')
+      await vi.advanceTimersByTimeAsync(1_100)
+      await flushPromises()
+
+      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(pausedRemaining)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a timer-driven next phase alive after the previous action completes', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 6,
+      title: '阶段计时器重入回归',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 2,
+      total_duration: 9,
+      is_active: true,
+      order: 1,
+      countdown_tts_cues: [],
+      items: [
+        {
+          id: 61,
+          video_id: 13,
+          video: {
+            id: 13,
+            title: '第一个动作',
+            exercise_type: 'MARTIAL_ARTS',
+            video_file: 'https://cdn.example.com/reentry-action-1.mp4',
+            duration: 2
+          },
+          pretraining_mode: 'NONE',
+          pretraining_countdown_duration: 0,
+          expected_duration: 2,
+          formal_countdown_duration: 0,
+          countdown_duration: 0,
+          order: 1
+        },
+        {
+          id: 62,
+          video_id: 14,
+          video: {
+            id: 14,
+            title: '第二个动作',
+            exercise_type: 'MARTIAL_ARTS',
+            video_file: 'https://cdn.example.com/reentry-action-2.mp4',
+            duration: 3
+          },
+          pretraining_mode: 'FIRST_FRAME',
+          pretraining_duration: 3,
+          pretraining_countdown_duration: 2,
+          expected_duration: 2,
+          formal_countdown_duration: 0,
+          countdown_duration: 0,
+          order: 2
+        }
+      ]
+    })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          VisualTrainingPanel: {
+            props: ['videoEventToken', 'phaseKind', 'phaseRemainingSeconds'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'videoPlay'],
+            template: `
+              <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
+                <span class="phase-remaining">{{ phaseRemainingSeconds }}</span>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+      await wrapper.get('.play-video').trigger('click')
+
+      await vi.advanceTimersByTimeAsync(2_100)
+      await flushPromises()
+      expect(wrapper.get('.phase-kind').text()).toBe('countdown')
+      const countdownRemaining = Number(wrapper.get('.phase-remaining').text())
+
+      await vi.advanceTimersByTimeAsync(1_100)
+      await flushPromises()
+
+      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(countdownRemaining)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('surfaces a retryable error when native media never starts', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 7,
+      title: '视频启动看门狗回归',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 1,
+      total_duration: 30,
+      is_active: true,
+      order: 1,
+      items: [{
+        id: 71,
+        video_id: 15,
+        video: {
+          id: 15,
+          title: '无法启动的动作',
+          exercise_type: 'MARTIAL_ARTS',
+          video_file: 'https://cdn.example.com/watchdog-action.mp4',
+          duration: 30
+        },
+        pretraining_mode: 'NONE',
+        pretraining_countdown_duration: 0,
+        expected_duration: 30,
+        formal_countdown_duration: 0,
+        countdown_duration: 0,
+        order: 1
+      }]
+    })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          VisualTrainingPanel: {
+            props: ['videoEventToken', 'phaseKind', 'videoError'],
+            emits: ['startRecognition', 'poseStats', 'startTraining'],
+            template: `
+              <div>
+                <span class="phase-kind">{{ phaseKind }}</span>
+                <span class="video-error">{{ videoError }}</span>
+                <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+                <button class="start-training" @click="$emit('startTraining')">start</button>
+              </div>
+            `
+          }
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
+      expect(wrapper.get('.video-error').text()).toBe('')
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      await flushPromises()
+
+      expect(wrapper.get('.video-error').text()).toContain('未能开始播放')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
   it('starts the next action without inserting a rest module', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({

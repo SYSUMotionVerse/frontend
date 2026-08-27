@@ -36,10 +36,19 @@ const items: ExerciseArrangementItem[] = [
     },
     pretraining_mode: 'FULL',
     pretraining_countdown_duration: 2,
-    expected_duration: 30,
-    formal_countdown_duration: 3,
-    countdown_duration: 99,
-    standard_data_url: 'https://cdn.example.com/action-1.json',
+      expected_duration: 30,
+      formal_countdown_duration: 3,
+      countdown_duration: 99,
+      training_tts_cues: [{
+        id: 201,
+        phase: 'PRETRAINING',
+        timing: 'AFTER_OFFSET',
+        offset_seconds: 27,
+        text: '3，2，1，go！',
+        audio_url: 'https://cdn.example.com/embedded-countdown.mp3',
+        order: 0
+      }],
+      standard_data_url: 'https://cdn.example.com/action-1.json',
     order: 2
   },
   {
@@ -71,7 +80,6 @@ describe('visual workout timeline', () => {
       ['formal-training', 0],
       ['pretraining-countdown', 1],
       ['pretraining', 1],
-      ['formal-countdown', 1],
       ['formal-training', 1],
       ['formal-countdown', 2],
       ['formal-training', 2]
@@ -81,12 +89,11 @@ describe('visual workout timeline', () => {
       [15, 30],
       [30, 32],
       [32, 62],
-      [62, 65],
-      [65, 95],
-      [95, 98],
-      [98, 128]
+      [62, 92],
+      [92, 95],
+      [95, 125]
     ])
-    expect(timeline.at(-1)?.endSeconds).toBe(128)
+    expect(timeline.at(-1)?.endSeconds).toBe(125)
   })
 
   it('uses the full action video only when pretraining mode is FULL', () => {
@@ -138,7 +145,8 @@ describe('visual workout timeline', () => {
 
     expect(formalTraining).toBeDefined()
     expect(formalTraining!.endSeconds - formalTraining!.startSeconds).toBe(30)
-    expect(timeline.find(phase => phase.slot === 'formal-countdown')?.endSeconds).toBe(35)
+    expect(timeline.find(phase => phase.slot === 'formal-countdown')).toBeUndefined()
+    expect(formalTraining!.startSeconds).toBe(32)
   })
 
   it('does not insert a rest phase between actions', () => {

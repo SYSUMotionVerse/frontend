@@ -327,6 +327,11 @@ describe('student backend sync orchestration', () => {
       total_duration: 30,
       is_active: true,
       order: 1,
+      countdown_tts_cues: [{
+        seconds_remaining: 3,
+        text: '三',
+        audio_url: '/media/countdown-3.mp3'
+      }],
       items: [{
         id: 61,
         video_id: 9,
@@ -343,6 +348,15 @@ describe('student backend sync orchestration', () => {
         formal_countdown_duration: 3,
         countdown_duration: 3,
         standard_data_url: '/media/hiit.json',
+        training_tts_cues: [{
+          id: 601,
+          phase: 'PRETRAINING',
+          timing: 'START',
+          offset_seconds: 0,
+          text: '开始示范',
+          audio_url: '/media/pretraining-start.mp3',
+          order: 0
+        }],
         order: 1
       }]
     })
@@ -353,9 +367,13 @@ describe('student backend sync orchestration', () => {
       getExerciseArrangement
     })
 
-    await expect(sync.loadVisualExerciseArrangement('hiit')).resolves.toMatchObject({
+    const loadedArrangement = await sync.loadVisualExerciseArrangement('hiit')
+    expect(loadedArrangement).toMatchObject({
       id: 6,
       exercise_type: 'HIIT',
+      countdown_tts_cues: [{
+        audio_url: 'https://api.example.com/media/countdown-3.mp3'
+      }],
       items: [{
         video: {
           id: 9,
@@ -363,7 +381,10 @@ describe('student backend sync orchestration', () => {
           video_file: 'https://api.example.com/media/hiit.mp4',
           standard_data_url: 'https://api.example.com/media/hiit.json'
         },
-        standard_data_url: 'https://api.example.com/media/hiit.json'
+        standard_data_url: 'https://api.example.com/media/hiit.json',
+        training_tts_cues: [{
+          audio_url: 'https://api.example.com/media/pretraining-start.mp3'
+        }]
       }]
     })
     expect(ensureSession).toHaveBeenCalledTimes(1)

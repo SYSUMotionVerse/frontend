@@ -3,6 +3,7 @@ import type { ExerciseArrangementItem } from '../uni-app/api/studentBackendTypes
 import {
   resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
+  resolveEmbeddedPretrainingCountdownDuration,
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
   resolveTrainingPhaseStartAudioUrls,
@@ -107,5 +108,41 @@ describe('trainingTtsConfig', () => {
       expect.objectContaining({ time: 3, audio_url: 'https://cdn.example.com/2.mp3' }),
       expect.objectContaining({ time: 4, audio_url: 'https://cdn.example.com/1.mp3' })
     ])
+  })
+
+  it('detects a 3/2/1/Go hand-off embedded at the end of pretraining', () => {
+    const embeddedItem = {
+      ...item,
+      pretraining_duration: 20,
+      training_tts_cues: [{
+        id: 20,
+        phase: 'PRETRAINING' as const,
+        timing: 'AFTER_OFFSET' as const,
+        offset_seconds: 17,
+        text: '正式训练，3，2，1，go！',
+        audio_url: 'https://cdn.example.com/embedded-countdown.mp3',
+        order: 2
+      }]
+    }
+
+    expect(resolveEmbeddedPretrainingCountdownDuration(embeddedItem, 20)).toBe(3)
+    expect(resolveEmbeddedPretrainingCountdownDuration(item, 20)).toBe(0)
+  })
+
+  it('recognizes full-width countdown digits in embedded hand-off cues', () => {
+    const embeddedItem = {
+      ...item,
+      training_tts_cues: [{
+        id: 21,
+        phase: 'PRETRAINING' as const,
+        timing: 'AFTER_OFFSET' as const,
+        offset_seconds: 17,
+        text: '３，２，１，go！',
+        audio_url: 'https://cdn.example.com/embedded-countdown-full-width.mp3',
+        order: 0
+      }]
+    }
+
+    expect(resolveEmbeddedPretrainingCountdownDuration(embeddedItem, 20)).toBe(3)
   })
 })

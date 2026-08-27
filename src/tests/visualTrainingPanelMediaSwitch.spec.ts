@@ -47,6 +47,7 @@ function mountPanel(
       videoLoading: false,
       videoError: '',
       videoEnded: false,
+      videoProgressSeconds: 0,
       completionHint: '保持节奏',
       recognitionEnabled,
       recognitionReady: false,
@@ -67,6 +68,8 @@ function mountPanel(
       phaseKind: 'preview',
       phaseSlot: 'preview',
       phaseRemainingSeconds: 15,
+      pretrainingDurationSeconds: 30,
+      pretrainingEmbeddedCountdownDuration: 0,
       comparisonMode,
       tutorialMode: false,
       tutorialIndex: 0,
@@ -95,6 +98,19 @@ afterEach(() => {
 })
 
 describe('VisualTrainingPanel media switch', () => {
+  it('binds media events to the token rendered on that video instance', async () => {
+    const wrapper = mountPanel()
+
+    await wrapper.setProps({ videoEventToken: 'phase-a' })
+    await wrapper.get('#follow-along-video').trigger('timeupdate', {
+      detail: { currentTime: 1, duration: 10 }
+    })
+
+    expect(wrapper.emitted('videoTimeUpdate')?.at(-1)?.[0]).toMatchObject({
+      token: 'phase-a'
+    })
+  })
+
   it('restarts the current video when an in-session demonstration begins', async () => {
     const seek = vi.fn()
     const play = vi.fn()
@@ -118,6 +134,36 @@ describe('VisualTrainingPanel media switch', () => {
 
     expect(seek).toHaveBeenCalledWith(0)
     expect(play).toHaveBeenCalled()
+  })
+
+  it('keeps the phase position when an active cached video falls back to its remote source', async () => {
+    const seek = vi.fn()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn(() => ({
+        seek,
+        play: vi.fn(),
+        pause: vi.fn()
+      }))
+    })
+    const wrapper = mountPanel(false, false, true)
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      phaseKind: 'active',
+      phaseSlot: 'formal-training',
+      phaseRemainingSeconds: 12,
+      videoProgressSeconds: 0
+    })
+    seek.mockClear()
+
+    await wrapper.setProps({
+      phaseRemainingSeconds: 12,
+      videoProgressSeconds: 7,
+      videoUrl: 'https://example.com/remote-fallback.mp4'
+    })
+    await nextTick()
+
+    expect(seek).toHaveBeenCalledWith(7)
   })
 
   it('shows a countdown only before an action, never during its final active seconds', async () => {
@@ -158,6 +204,44 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
+  })
+
+  it('moves an embedded hand-off countdown onto the end of pretraining', async () => {
+    const wrapper = mountPanel()
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      phaseKind: 'demonstration',
+      phaseSlot: 'pretraining',
+      phaseRemainingSeconds: 3,
+      pretrainingEmbeddedCountdownDuration: 3,
+      videoAutoplay: true
+    })
+
+    expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('3')
+    expect(wrapper.get('.visual-session__cue-overlay').text()).toContain('正式训练开始')
+  })
+
+  it('uses the video clock so the white digits follow the spoken hand-off cue', async () => {
+    const wrapper = mountPanel()
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      phaseKind: 'demonstration',
+      phaseSlot: 'pretraining',
+      // The wall clock is intentionally behind the media clock. The cue
+      // scheduler uses currentTime, so the overlay must show the same value.
+      phaseRemainingSeconds: 1,
+      videoProgressSeconds: 9,
+      pretrainingDurationSeconds: 12,
+      pretrainingEmbeddedCountdownDuration: 3,
+      videoAutoplay: true
+    })
+
+    expect(wrapper.get('.visual-session__cue-count').text()).toBe('3')
+
+    await wrapper.setProps({ videoProgressSeconds: 10 })
+    expect(wrapper.get('.visual-session__cue-count').text()).toBe('2')
   })
 
   it('uses a mini-program cover view for portrait media controls and keeps the start action tappable', async () => {

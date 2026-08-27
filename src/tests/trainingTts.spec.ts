@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createTrainingTtsPlayer,
   trainingTtsPlaybackRate
@@ -11,6 +11,7 @@ function createAudioContext() {
     obeyMuteSwitch: false,
     playbackRate: 1,
     play: vi.fn(),
+    pause: vi.fn(),
     stop: vi.fn(),
     destroy: vi.fn(),
     onEnded: vi.fn(),
@@ -19,6 +20,10 @@ function createAudioContext() {
 }
 
 describe('trainingTts', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('plays each due cue only once', () => {
     const contexts = [createAudioContext(), createAudioContext()]
     const createContext = vi.fn()
@@ -106,6 +111,30 @@ describe('trainingTts', () => {
     expect(second.play).toHaveBeenCalledOnce()
   })
 
+  it('suspends and resumes the current cue without dropping queued speech', () => {
+    const first = createAudioContext()
+    const second = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+    const player = createTrainingTtsPlayer(createContext)
+
+    player.enqueue([
+      'https://cdn.example.com/first.mp3',
+      'https://cdn.example.com/second.mp3'
+    ])
+    player.suspend()
+
+    expect(first.pause).toHaveBeenCalledOnce()
+    expect(second.play).not.toHaveBeenCalled()
+
+    player.resume()
+    expect(first.play).toHaveBeenCalledTimes(2)
+
+    first.onEnded.mock.calls[0][0]()
+    expect(second.play).toHaveBeenCalledOnce()
+  })
+
   it('resets action cue history without interrupting countdown and start prompts', () => {
     const countdownOne = createAudioContext()
     const start = createAudioContext()
@@ -138,6 +167,20 @@ describe('trainingTts', () => {
     expect(context.playbackRate).toBe(trainingTtsPlaybackRate)
   })
 
+  it('falls back to the uni runtime when the wx snapshot omits the audio factory', () => {
+    const context = createAudioContext()
+    const createInnerAudioContext = vi.fn(() => context)
+    vi.stubGlobal('wx', {})
+    vi.stubGlobal('uni', { createInnerAudioContext })
+    const player = createTrainingTtsPlayer()
+
+    player.playUrl('https://cdn.example.com/fallback.mp3')
+
+    expect(createInnerAudioContext).toHaveBeenCalledOnce()
+    expect(context.src).toBe('https://cdn.example.com/fallback.mp3')
+    expect(context.play).toHaveBeenCalledOnce()
+  })
+
   it('preloads remote audio and plays the local temporary file', async () => {
     const context = createAudioContext()
     const downloadFile = vi.fn(({ success }) => {
@@ -158,6 +201,34 @@ describe('trainingTts', () => {
     expect(downloadFile).toHaveBeenCalledOnce()
     expect(context.src).toBe('wxfile://tmp/countdown-3.mp3')
     expect(context.play).toHaveBeenCalledOnce()
+  })
+
+  it('retries the remote URL when a preloaded temporary file cannot play', async () => {
+    const temporary = createAudioContext()
+    const remote = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(temporary)
+      .mockReturnValueOnce(remote)
+    const downloadFile = vi.fn(({ success }) => {
+      success({
+        statusCode: 200,
+        tempFilePath: 'wxfile://tmp/unplayable.mp3'
+      })
+    })
+    const player = createTrainingTtsPlayer(createContext, { downloadFile })
+    const remoteUrl = 'https://cdn.example.com/retry.mp3'
+
+    await player.preload([remoteUrl])
+    const completed = player.enqueue([remoteUrl])
+    temporary.onError.mock.calls[0][0]({ errMsg: 'MEDIA_ERR_SRC_NOT_SUPPORTED' })
+
+    expect(temporary.stop).toHaveBeenCalledOnce()
+    expect(temporary.destroy).toHaveBeenCalledOnce()
+    expect(remote.src).toBe(remoteUrl)
+    expect(remote.play).toHaveBeenCalledOnce()
+
+    remote.onEnded.mock.calls[0][0]()
+    await expect(completed).resolves.toBeUndefined()
   })
 
   it('clears stale queued prompts when an immediate countdown cue takes priority', () => {
