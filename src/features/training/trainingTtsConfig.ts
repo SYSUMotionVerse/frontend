@@ -156,12 +156,45 @@ export function resolveTrainingCountdownTtsCues(
     }))
 }
 
-/** All database-owned audio for preloading; action-standard audio is excluded. */
+function resolvePretrainingDurationForTts(item: ExerciseArrangementItem) {
+  return Math.max(
+    1,
+    toNonNegativeSeconds(item.pretraining_duration)
+      || toNonNegativeSeconds(item.video.duration)
+      || toNonNegativeSeconds(item.expected_duration)
+  )
+}
+
+function resolveRunnablePhaseAudioUrls(
+  item: ExerciseArrangementItem,
+  phase: TrainingTtsPhase,
+  timing: TrainingTtsPhaseTiming
+) {
+  return [
+    ...resolveTrainingPhaseTtsCues(item, phase, timing),
+    ...resolveTrainingPhaseCompletionAudioUrls(item, phase).map(audio_url => ({ audio_url }))
+  ].map(cue => cue.audio_url)
+}
+
+/**
+ * Database-owned audio that can actually be reached by the current module
+ * configuration. Action-standard audio is deliberately excluded.
+ */
 export function resolveArrangementTtsAudioUrls(items: readonly ExerciseArrangementItem[]) {
-  return items.flatMap(item => (
-    item.training_tts_cues
-      ?.filter(isUsableCue)
-      .map(cue => cue.audio_url)
-      ?? []
-  ))
+  return items.flatMap(item => {
+    const formalAudioUrls = resolveRunnablePhaseAudioUrls(item, 'FORMAL', {
+      phaseDurationSeconds: Math.max(1, toNonNegativeSeconds(item.expected_duration)),
+      countdownDurationSeconds: toNonNegativeSeconds(item.formal_countdown_duration)
+    })
+
+    if (item.pretraining_mode === 'NONE') return formalAudioUrls
+
+    return [
+      ...resolveRunnablePhaseAudioUrls(item, 'PRETRAINING', {
+        phaseDurationSeconds: resolvePretrainingDurationForTts(item),
+        countdownDurationSeconds: toNonNegativeSeconds(item.pretraining_countdown_duration)
+      }),
+      ...formalAudioUrls
+    ]
+  })
 }

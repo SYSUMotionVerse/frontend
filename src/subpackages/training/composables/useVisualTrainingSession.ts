@@ -42,6 +42,7 @@ import {
 import {
   resolveArrangementTtsAudioUrls,
   resolveEmbeddedPretrainingCountdownDuration,
+  resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
@@ -676,7 +677,13 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // remote URL would otherwise duplicate the COS transfer. Only future
     // actions have enough lead time to benefit from local warmup.
     const laterAudioUrls = resolveArrangementTtsAudioUrls(nextArrangement.items.slice(1))
-    void ttsPlayer.preload(laterAudioUrls)
+    // The app-wide 3/2/1 prompt can run before the first video module. It is
+    // small and shared by every action, so warm it alongside later actions.
+    const countdownAudioUrls = resolveTrainingCountdownAudioUrls(
+      nextArrangement.countdown_tts_cues,
+      3
+    )
+    void ttsPlayer.preload([...laterAudioUrls, ...countdownAudioUrls])
   }
 
   function finalizeActiveAction() {

@@ -7,7 +7,8 @@ import {
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
   resolveTrainingPhaseStartAudioUrls,
-  resolveTrainingPhaseTtsCues
+  resolveTrainingPhaseTtsCues,
+  resolveArrangementTtsAudioUrls
 } from '../features/training/trainingTtsConfig'
 
 const item: ExerciseArrangementItem = {
@@ -87,6 +88,37 @@ describe('trainingTtsConfig', () => {
     ])
     expect(resolveTrainingPhaseCompletionAudioUrls(item, 'FORMAL')).toEqual([
       'https://cdn.example.com/formal-complete.mp3'
+    ])
+  })
+
+  it('preloads only cues from training modules that will actually run', () => {
+    const disabledPretraining = {
+      ...item,
+      pretraining_mode: 'NONE' as const,
+      training_tts_cues: [
+        {
+          id: 10,
+          phase: 'PRETRAINING' as const,
+          timing: 'START' as const,
+          offset_seconds: 0,
+          text: '这条预训练语音不会有对应模块。',
+          audio_url: 'https://cdn.example.com/unreachable-pretraining.mp3',
+          order: 0
+        },
+        {
+          id: 11,
+          phase: 'FORMAL' as const,
+          timing: 'START' as const,
+          offset_seconds: 0,
+          text: '这条正式训练语音会播放。',
+          audio_url: 'https://cdn.example.com/formal-start.mp3',
+          order: 0
+        }
+      ]
+    }
+
+    expect(resolveArrangementTtsAudioUrls([disabledPretraining])).toEqual([
+      'https://cdn.example.com/formal-start.mp3'
     ])
   })
 
