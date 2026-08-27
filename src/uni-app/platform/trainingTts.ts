@@ -302,6 +302,15 @@ export function createTrainingTtsPlayer(
       }
       playedCueIndexes = new Set()
     },
+    // Move into an adjacent training module without cutting off a cue that
+    // has already reached the native audio player. Any still-queued cue is
+    // stale once its source module ends, so discard it before the next
+    // module enqueues its own start guidance.
+    advanceTimeline() {
+      playbackGeneration += 1
+      clearQueuedAudio()
+      playedCueIndexes = new Set()
+    },
     // Keep a cue that has already reached the native audio player, but cancel
     // anything still waiting for a COS preload (or queued behind it). This is
     // used at a countdown boundary so a slow download cannot speak after the

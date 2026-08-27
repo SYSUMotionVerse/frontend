@@ -219,6 +219,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   let startCountdownDeadlineMs: number | null = null
   let practiceStartPending = false
   let preserveStartCountdownAudio = false
+  let preserveTrailingModuleGuidance = false
   let startedMediaGuidanceToken = ''
   let moduleTransitionGeneration = 0
   let moduleTransitionInFlight = false
@@ -466,6 +467,14 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       countdownAudioPending.value = false
       onComplete()
     })
+  }
+
+  function nextItemStartsWithCountdown(item: ExerciseArrangementItem | null) {
+    if (!item) return false
+    if (resolvePretrainingMode(item.pretraining_mode) !== 'NONE') {
+      return resolveCountdownDuration(item.pretraining_countdown_duration) > 0
+    }
+    return resolveCountdownDuration(item.formal_countdown_duration) > 0
   }
 
   function pretrainingGuidanceCues() {
@@ -781,12 +790,18 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     playbackState.value = 'idle'
     videoAutoplay.value = true
     scheduleMediaStartWatchdog()
+    const keepTrailingModuleGuidance = preserveTrailingModuleGuidance
+    preserveTrailingModuleGuidance = false
     // Keep the action-level 3-2-1 sequence intact when it crosses the phase
     // boundary. All other transitions still clear their stale prompts.
     if (preserveStartCountdownAudio) {
       preserveStartCountdownAudio = false
       ttsPlayer.cancelPendingPlayback()
       ttsPlayer.resetTimeline()
+    } else if (keepTrailingModuleGuidance) {
+      // The document can place a "next action" cue in the final seconds of
+      // formal training. Let a cue already playing finish under the next
+      // module while start guidance for that module queues behind it.
     } else {
       ttsPlayer.reset()
     }
@@ -805,6 +820,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       return
     }
 
+    preserveTrailingModuleGuidance = false
     phaseKind.value = 'countdown'
     phaseSlot.value = 'formal-countdown'
     setPhaseRemaining(countdownDuration)
@@ -838,7 +854,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     videoPhaseGeneration += 1
     startedMediaGuidanceToken = ''
     const keepCountdownAudio = preserveStartCountdownAudio
+    const keepTrailingModuleGuidance = preserveTrailingModuleGuidance
     preserveStartCountdownAudio = false
+    preserveTrailingModuleGuidance = false
 
     if (resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL') === 'NONE') {
       beginFormalCountdownOrTraining()
@@ -858,6 +876,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (keepCountdownAudio) {
       ttsPlayer.cancelPendingPlayback()
       ttsPlayer.resetTimeline()
+    } else if (keepTrailingModuleGuidance) {
+      // `beginNextItem` has already discarded stale queued cues. Do not stop
+      // the one document-timed cue that is intentionally crossing this
+      // boundary into the next pretraining module.
     } else {
       ttsPlayer.reset()
     }
@@ -883,6 +905,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       return
     }
 
+    preserveTrailingModuleGuidance = false
     phaseKind.value = 'countdown'
     phaseSlot.value = 'pretraining-countdown'
     setPhaseRemaining(countdownDuration)
@@ -968,7 +991,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearMediaStartWatchdog()
     videoAutoplay.value = false
     playbackState.value = 'idle'
-    continueAfterModuleAudio(formalCompletionAudioUrls, () => {
+    const advanceToNextItem = () => {
       if (isLastItem) {
         videoEnded.value = true
         playbackState.value = 'ended'
@@ -984,9 +1007,25 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       videoAutoplay.value = false
       void prefetchVideoWindow(activeItemIndex.value)
       syncSessionProgress()
-      ttsPlayer.reset()
+      const nextItem = activeItem.value
+      if (nextItemStartsWithCountdown(nextItem)) {
+        preserveTrailingModuleGuidance = false
+        ttsPlayer.reset()
+      } else {
+        preserveTrailingModuleGuidance = true
+        ttsPlayer.advanceTimeline()
+      }
       beginPretrainingCountdownOrPretraining()
-    })
+    }
+
+    // Timed guidance belongs to the document timeline, not to a hidden rest
+    // interval. Let a final "next action" cue continue into the following
+    // module instead of extending the completed action or cutting it off.
+    if (formalCompletionAudioUrls.length > 0 || isLastItem) {
+      continueAfterModuleAudio(formalCompletionAudioUrls, advanceToNextItem)
+    } else {
+      advanceToNextItem()
+    }
   }
 
   async function stopRecording() {
@@ -1035,6 +1074,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     tutorialRequestId += 1
     practiceStartPending = false
     preserveStartCountdownAudio = false
+    preserveTrailingModuleGuidance = false
     startedMediaGuidanceToken = ''
     clearPhaseTimer()
     clearMediaStartWatchdog()

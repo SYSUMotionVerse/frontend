@@ -155,6 +155,31 @@ describe('trainingTts', () => {
     expect(start.play).toHaveBeenCalledOnce()
   })
 
+  it('carries an in-progress boundary cue into the next module without replaying stale queued speech', () => {
+    const boundaryCue = createAudioContext()
+    const nextModuleCue = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(boundaryCue)
+      .mockReturnValueOnce(nextModuleCue)
+    const player = createTrainingTtsPlayer(createContext)
+
+    player.enqueue([
+      'https://cdn.example.com/prepare-next-action.mp3',
+      'https://cdn.example.com/stale-follow-up.mp3'
+    ])
+    player.advanceTimeline()
+    player.enqueue(['https://cdn.example.com/next-module-start.mp3'])
+
+    expect(boundaryCue.stop).not.toHaveBeenCalled()
+    expect(boundaryCue.destroy).not.toHaveBeenCalled()
+
+    boundaryCue.onEnded.mock.calls[0][0]()
+
+    expect(nextModuleCue.src).toBe('https://cdn.example.com/next-module-start.mp3')
+    expect(nextModuleCue.play).toHaveBeenCalledOnce()
+    expect(createContext).toHaveBeenCalledTimes(2)
+  })
+
   it('plays a shared audio URL on command', () => {
     const context = createAudioContext()
     const player = createTrainingTtsPlayer(() => context)
