@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createActionStandardLoader, parseActionStandard } from '../uni-app/platform/actionStandardLoader'
+import {
+  createActionStandardLoader,
+  mapWithConcurrency,
+  parseActionStandard
+} from '../uni-app/platform/actionStandardLoader'
 import { ACTION_ANGLE_NAMES } from '../domain/training/actionScoringTypes'
 
 function validStandard() {
@@ -85,5 +89,29 @@ describe('actionStandardLoader', () => {
     await expect(loader.load(url)).rejects.toThrow('network')
     await expect(loader.load(url)).resolves.toEqual(expect.objectContaining({ action_id: 'squat' }))
     expect(requestJson).toHaveBeenCalledTimes(2)
+  })
+
+  it('limits concurrent standard-data work while retaining item order', async () => {
+    const completions: Array<() => void> = []
+    let active = 0
+    let peakActive = 0
+    const result = mapWithConcurrency([1, 2, 3, 4], async item => {
+      active += 1
+      peakActive = Math.max(peakActive, active)
+      await new Promise<void>(resolve => completions.push(resolve))
+      active -= 1
+      return item * 2
+    }, 2)
+
+    await vi.waitFor(() => expect(completions).toHaveLength(2))
+    expect(peakActive).toBe(2)
+
+    while (completions.length > 0) {
+      completions.shift()?.()
+      await Promise.resolve()
+    }
+
+    await expect(result).resolves.toEqual([2, 4, 6, 8])
+    expect(peakActive).toBe(2)
   })
 })

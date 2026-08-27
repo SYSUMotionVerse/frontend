@@ -6,7 +6,9 @@ import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const { achievements, loadState, refresh } = useGrowthOverview()
+const { achievements, loadState, refresh } = useGrowthOverview({
+  sections: ['awards']
+})
 const earnedCount = computed(() => achievements.value.filter(badge => badge.earned).length)
 </script>
 

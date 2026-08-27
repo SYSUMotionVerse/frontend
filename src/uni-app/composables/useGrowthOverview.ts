@@ -21,79 +21,74 @@ import type {
 import { useStudentStore } from './useStudentStore'
 import { createRequestCache } from './useRequestCache'
 
+const growthOverviewSections = [
+  'history',
+  'adherence',
+  'physicalMetrics',
+  'visualScoreTrend',
+  'awards'
+] as const
+
+export type GrowthOverviewSection = typeof growthOverviewSections[number]
+
+interface UseGrowthOverviewOptions {
+  sections?: readonly GrowthOverviewSection[]
+}
+
 const backendAssessments = shallowRef<GrowthAssessmentHistoryItem[] | null>(null)
 const backendSessions = shallowRef<GrowthTrainingHistoryItem[] | null>(null)
 const backendAdherence = shallowRef<StudentAdherenceData | null>(null)
 const backendPhysicalMetrics = shallowRef<GrowthPhysicalMetrics | null>(null)
 const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
 const backendAwards = shallowRef<BackendAchievementAwards | null>(null)
-const loadState = shallowRef<{
-  status: 'loading' | 'ready' | 'partial' | 'error'
-  message: string
-}>({
-  status: 'loading',
-  message: '正在同步成长记录…'
-})
 
-const growthOverviewCache = createRequestCache({
-  ttlMs: 5 * 60_000,
-  async load() {
-    const results = await Promise.allSettled([
-      studentBackendSync.loadGrowthHistory(),
-      studentBackendSync.loadAdherenceData(),
-      studentBackendSync.loadPhysicalMetrics(),
-      studentBackendSync.loadVisualScoreTrend(),
-      studentBackendSync.loadAchievementAwards?.() ?? Promise.resolve(null)
-    ])
-    const [
-      historyResult,
-      adherenceResult,
-      physicalMetricsResult,
-      visualScoreTrendResult,
-      awardsResult
-    ] = results
-    const failures: string[] = []
+const growthSectionMetadata: Record<GrowthOverviewSection, {
+  label: string
+  errorContext: string
+}> = {
+  history: { label: '训练与评估历史', errorContext: '成长历史加载' },
+  adherence: { label: '坚持记录', errorContext: '成长依从性加载' },
+  physicalMetrics: { label: '体能指标', errorContext: '成长体测趋势加载' },
+  visualScoreTrend: { label: '动作得分趋势', errorContext: '视觉训练得分趋势加载' },
+  awards: { label: '成长徽章', errorContext: '成长徽章加载' }
+}
 
-    if (historyResult.status === 'fulfilled') {
-      backendAssessments.value = historyResult.value.assessments
-      backendSessions.value = historyResult.value.trainingSessions
-    } else {
-      failures.push('训练与评估历史')
-      reportBackendSyncError('成长历史加载', historyResult.reason)
+// Growth detail pages use different sources. Keeping one cache per source means
+// opening a focused page no longer requests unrelated history and trends.
+const growthSectionCaches: Record<GrowthOverviewSection, ReturnType<typeof createRequestCache<void>>> = {
+  history: createRequestCache({
+    ttlMs: 5 * 60_000,
+    async load() {
+      const history = await studentBackendSync.loadGrowthHistory()
+      backendAssessments.value = history.assessments
+      backendSessions.value = history.trainingSessions
     }
-    if (adherenceResult.status === 'fulfilled') {
-      backendAdherence.value = adherenceResult.value
-    } else {
-      failures.push('坚持记录')
-      reportBackendSyncError('成长依从性加载', adherenceResult.reason)
+  }),
+  adherence: createRequestCache({
+    ttlMs: 5 * 60_000,
+    async load() {
+      backendAdherence.value = await studentBackendSync.loadAdherenceData()
     }
-    if (physicalMetricsResult.status === 'fulfilled') {
-      backendPhysicalMetrics.value = physicalMetricsResult.value
-    } else {
-      failures.push('体能指标')
-      reportBackendSyncError('成长体测趋势加载', physicalMetricsResult.reason)
+  }),
+  physicalMetrics: createRequestCache({
+    ttlMs: 5 * 60_000,
+    async load() {
+      backendPhysicalMetrics.value = await studentBackendSync.loadPhysicalMetrics()
     }
-    if (visualScoreTrendResult.status === 'fulfilled') {
-      scoreTrend.value = visualScoreTrendResult.value
-    } else {
-      failures.push('动作得分趋势')
-      reportBackendSyncError('视觉训练得分趋势加载', visualScoreTrendResult.reason)
+  }),
+  visualScoreTrend: createRequestCache({
+    ttlMs: 5 * 60_000,
+    async load() {
+      scoreTrend.value = await studentBackendSync.loadVisualScoreTrend()
     }
-    if (awardsResult.status === 'fulfilled') {
-      backendAwards.value = awardsResult.value
-    } else {
-      failures.push('成长徽章')
-      reportBackendSyncError('成长徽章加载', awardsResult.reason)
+  }),
+  awards: createRequestCache({
+    ttlMs: 5 * 60_000,
+    async load() {
+      backendAwards.value = await studentBackendSync.loadAchievementAwards?.() ?? null
     }
-
-    loadState.value = failures.length === 0
-      ? { status: 'ready', message: '' }
-      : {
-          status: failures.length === results.length ? 'error' : 'partial',
-          message: `${failures.join('、')}暂时无法同步，可重新加载。`
-        }
-  }
-})
+  })
+}
 
 function resetBackendGrowthData() {
   backendAssessments.value = null
@@ -102,16 +97,31 @@ function resetBackendGrowthData() {
   backendPhysicalMetrics.value = null
   scoreTrend.value = null
   backendAwards.value = null
-  loadState.value = { status: 'ready', message: '' }
-  growthOverviewCache.invalidate()
+  Object.values(growthSectionCaches).forEach(cache => cache.invalidate())
 }
 
 export function invalidateGrowthOverview() {
-  growthOverviewCache.invalidate()
+  Object.values(growthSectionCaches).forEach(cache => cache.invalidate())
 }
 
-export function useGrowthOverview() {
+function resolveRequestedSections(options: UseGrowthOverviewOptions) {
+  if (!options.sections?.length) {
+    return [...growthOverviewSections]
+  }
+
+  return [...new Set(options.sections)]
+}
+
+export function useGrowthOverview(options: UseGrowthOverviewOptions = {}) {
   const store = useStudentStore()
+  const requestedSections = resolveRequestedSections(options)
+  const loadState = shallowRef<{
+    status: 'loading' | 'ready' | 'partial' | 'error'
+    message: string
+  }>({
+    status: 'loading',
+    message: '正在同步成长记录…'
+  })
   const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
 
   const localAssessments = computed<GrowthAssessmentHistoryItem[]>(() =>
@@ -220,18 +230,38 @@ export function useGrowthOverview() {
     ]
   })
 
-  async function refresh(options: { force?: boolean } = {}) {
+  async function refresh(refreshOptions: { force?: boolean } = {}) {
     if (!studentBackendSync.isEnabled()) {
       resetBackendGrowthData()
+      loadState.value = { status: 'ready', message: '' }
       return
     }
-    if (options.force || loadState.value.status === 'loading') {
+    if (refreshOptions.force || loadState.value.status === 'loading') {
       loadState.value = {
         status: 'loading',
         message: '正在同步成长记录…'
       }
     }
-    await growthOverviewCache.get(options)
+    const results = await Promise.allSettled(
+      requestedSections.map(section => growthSectionCaches[section].get(refreshOptions))
+    )
+    const failures: string[] = []
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') return
+
+      const section = requestedSections[index]
+      const metadata = growthSectionMetadata[section]
+      failures.push(metadata.label)
+      reportBackendSyncError(metadata.errorContext, result.reason)
+    })
+
+    loadState.value = failures.length === 0
+      ? { status: 'ready', message: '' }
+      : {
+          status: failures.length === results.length ? 'error' : 'partial',
+          message: `${failures.join('、')}暂时无法同步，可重新加载。`
+        }
   }
 
   onMounted(() => {

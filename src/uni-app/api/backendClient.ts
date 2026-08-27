@@ -23,6 +23,7 @@ import type {
   BackendTrainingProgress,
   BackendAchievementAwards,
   BackendStationNotification,
+  BackendStationNotificationPage,
   BackendUnreadNotifications,
   BackendReminderReturn,
   BackendReminderReturnPayload,
@@ -363,37 +364,36 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     }
   }
 
-  async function requestAllPages<T>(initialPath: string) {
-    const items: T[] = []
-    let nextPath: string | null = initialPath
-    let pageCount = 0
+  function resolveNextPagePath(next: string | null | undefined) {
+    if (!next) return null
+    if (next.startsWith('/') && !next.startsWith('//')) return next
 
-    while (nextPath && pageCount < 100) {
-      const response: T[] | PaginatedResponse<T> = await request<
-        T[] | PaginatedResponse<T>
-      >(nextPath)
-      if (Array.isArray(response)) {
-        items.push(...response)
-        break
-      }
-
-      items.push(...unwrapCollectionResponse<T>(response))
-      const next: string | null | undefined = response.next
-      if (!next) break
-      if (next.startsWith(baseUrl)) {
-        nextPath = next.slice(baseUrl.length) || '/'
-      } else if (next.startsWith('/') && !next.startsWith('//')) {
-        nextPath = next
-      } else {
-        throw new Error('Backend pagination returned an unsafe next-page URL.')
-      }
-      pageCount += 1
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+    if (next.startsWith(`${normalizedBaseUrl}/`)) {
+      return next.slice(normalizedBaseUrl.length) || '/'
     }
 
-    if (pageCount >= 100) {
-      throw new Error('Backend pagination exceeded the safety limit.')
+    throw new Error('Backend pagination returned an unsafe next-page URL.')
+  }
+
+  async function listNotificationPage(
+    nextPage = '/notifications/messages/?notification_type=TRAINING_REMINDER'
+  ): Promise<BackendStationNotificationPage> {
+    const response = await request<
+      BackendStationNotification[] | PaginatedResponse<BackendStationNotification>
+    >(nextPage)
+
+    if (Array.isArray(response)) {
+      return {
+        notifications: response,
+        nextPage: null
+      }
     }
-    return items
+
+    return {
+      notifications: unwrapCollectionResponse<BackendStationNotification>(response),
+      nextPage: resolveNextPagePath(response.next)
+    }
   }
 
   function resetSession() {
@@ -567,10 +567,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         '/exercises/progress/achievements/'
       )
     },
+    listNotificationPage,
     listNotifications() {
-      return requestAllPages<BackendStationNotification>(
-        '/notifications/messages/?notification_type=TRAINING_REMINDER'
-      )
+      return listNotificationPage().then(page => page.notifications)
     },
     getUnreadNotifications() {
       return request<BackendUnreadNotifications>(

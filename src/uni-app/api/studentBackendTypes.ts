@@ -598,6 +598,7 @@ export interface StudentBackendSyncDependencies {
   getComplianceTrend: (count: number) => Promise<BackendComplianceTrend>
   getTrainingProgress: () => Promise<BackendTrainingProgress>
   getAchievementAwards?: () => Promise<BackendAchievementAwards>
+  listNotificationPage?: (nextPage?: string) => Promise<BackendStationNotificationPage>
   listNotifications: () => Promise<BackendStationNotification[]>
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
@@ -616,6 +617,11 @@ export interface BackendStationNotification {
   reminder_slot: '12:00' | '18:00' | null
   action_target: string
   created_at: string
+}
+
+export interface BackendStationNotificationPage {
+  notifications: BackendStationNotification[]
+  nextPage: string | null
 }
 
 export interface BackendUnreadNotifications {

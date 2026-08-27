@@ -6,7 +6,9 @@ import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const { adherenceCalendar, adherenceData, loadState, refresh } = useGrowthOverview()
+const { adherenceCalendar, adherenceData, loadState, refresh } = useGrowthOverview({
+  sections: ['adherence']
+})
 const complianceLoaded = computed(() => adherenceData.value !== null)
 const complianceTodayCount = computed(() => {
   const todayCount = adherenceData.value?.todayCount ?? 0

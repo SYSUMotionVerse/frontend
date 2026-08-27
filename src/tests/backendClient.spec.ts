@@ -705,7 +705,7 @@ describe('backend client session handling', () => {
     )
   })
 
-  it('loads every notification page returned by the backend', async () => {
+  it('loads notification pages explicitly instead of reading the full history', async () => {
     const uniMock = createUniMock([
       {
         statusCode: 200,
@@ -728,7 +728,18 @@ describe('backend client session handling', () => {
     ;(globalThis as { uni?: unknown }).uni = uniMock
     const client = createBackendClient('http://api.example.com')
 
-    await expect(client.listNotifications()).resolves.toEqual([{ id: 1 }, { id: 2 }])
+    await expect(client.listNotificationPage()).resolves.toEqual({
+      notifications: [{ id: 1 }],
+      nextPage: '/notifications/messages/?notification_type=TRAINING_REMINDER&page=2'
+    })
+    expect(uniMock.request).toHaveBeenCalledTimes(1)
+
+    await expect(
+      client.listNotificationPage('/notifications/messages/?notification_type=TRAINING_REMINDER&page=2')
+    ).resolves.toEqual({
+      notifications: [{ id: 2 }],
+      nextPage: null
+    })
     expect(uniMock.request).toHaveBeenCalledTimes(2)
   })
 

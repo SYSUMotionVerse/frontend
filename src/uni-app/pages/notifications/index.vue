@@ -35,7 +35,11 @@ onShow(() => {
       <StationNotificationList
         v-else
         :notifications="notifications"
+        :has-more="stationNotifications.hasMore.value"
+        :is-loading-more="stationNotifications.isLoadingMore.value"
+        :load-more-error="stationNotifications.loadMoreError.value"
         @open="stationNotifications.open"
+        @load-more="stationNotifications.loadMore"
       />
     </view>
   </UniTrainingPageShell>

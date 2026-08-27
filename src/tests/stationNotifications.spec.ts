@@ -85,6 +85,60 @@ describe('station notifications', () => {
     })
   })
 
+  it('loads more notifications only after the user requests the next page', async () => {
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    const notifications = useStationNotifications()
+    notifications.invalidate()
+    loadStationNotifications
+      .mockResolvedValueOnce({
+        count: 1,
+        notifications: [
+          {
+            id: 17,
+            notification_type: 'TRAINING_REMINDER',
+            title: '晚间训练提醒',
+            content: '今天已完成 1/3 项。',
+            is_read: false,
+            reminder_slot: '18:00',
+            action_target: '/pages/training/home',
+            created_at: '2026-07-16T10:00:00Z'
+          }
+        ],
+        nextPage: '/notifications/messages/?notification_type=TRAINING_REMINDER&page=2'
+      })
+      .mockResolvedValueOnce({
+        count: 0,
+        notifications: [
+          {
+            id: 16,
+            notification_type: 'TRAINING_REMINDER',
+            title: '午间训练提醒',
+            content: '记得活动一下。',
+            is_read: true,
+            reminder_slot: '12:00',
+            action_target: '/pages/training/home',
+            created_at: '2026-07-16T04:00:00Z'
+          }
+        ],
+        nextPage: null
+      })
+
+    await notifications.refresh({ force: true })
+
+    expect(loadStationNotifications).toHaveBeenCalledTimes(1)
+    expect(notifications.hasMore.value).toBe(true)
+    expect(notifications.state.value.notifications).toHaveLength(1)
+
+    await notifications.loadMore()
+
+    expect(loadStationNotifications).toHaveBeenLastCalledWith(
+      '/notifications/messages/?notification_type=TRAINING_REMINDER&page=2'
+    )
+    expect(notifications.state.value.notifications.map(item => item.id)).toEqual([17, 16])
+    expect(notifications.hasMore.value).toBe(false)
+    notifications.invalidate()
+  })
+
   it('formats ISO instants deterministically in Asia/Shanghai', async () => {
     const { formatNotificationCreatedAt } = await import(
       '../uni-app/api/stationNotificationModels'

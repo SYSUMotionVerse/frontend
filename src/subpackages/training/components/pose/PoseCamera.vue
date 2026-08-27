@@ -38,27 +38,22 @@ class FrameAdapter {
   }
 
   triggerFrame(frame: any) {
-    // WeChat passes raw data as ArrayBuffer in the `data` field.
-    const f: Frame = {
-      width: frame.width,
-      height: frame.height,
-      data: new Uint8Array(frame.data as ArrayBuffer),
-    };
     if (!this.processCb) return;
 
     const now = Date.now();
-    if (!this.lastProcessTime) {
-      this.lastProcessTime = now;
-      this.processCb(f);
-      return;
-    }
     // Throttle: only process every `frameGap` frames
     const elapsed = now - this.lastProcessTime;
     const minGap = (1000 / 30) * this.getFrameGap(); // ~100ms per frame at 3-gap
-    if (elapsed >= minGap) {
-      this.lastProcessTime = now;
-      this.processCb(f);
-    }
+    if (this.lastProcessTime && elapsed < minGap) return;
+
+    this.lastProcessTime = now;
+    // WeChat passes raw data as ArrayBuffer in the `data` field. Create the
+    // typed-array view only for frames that make it through the throttle.
+    this.processCb({
+      width: frame.width,
+      height: frame.height,
+      data: new Uint8Array(frame.data as ArrayBuffer),
+    });
   }
 }
 
@@ -78,7 +73,6 @@ const state = reactive({
   canvasDisplayH: 0,
   isActive: false,
   cameraError: '',
-  frameCount: 0,
 });
 
 const targetFps = computed(() => Math.max(1, Math.round(props.targetFps ?? 5)))
@@ -122,6 +116,7 @@ const overlayCanvasStyle = computed(() => {
   }
 })
 const frameAdapter = new FrameAdapter(() => frameGap.value);
+let processedFrameCount = 0;
 let cameraContext: any = null;
 let cameraListener: any = null;
 let shouldStartFrameListener = false;
@@ -156,8 +151,8 @@ onMounted(async () => {
 
   // Wire frame adapter → parent callback
   frameAdapter.onProcessFrame((frame: Frame) => {
-    state.frameCount++;
-    if (state.frameCount === 1) {
+    processedFrameCount += 1;
+    if (processedFrameCount === 1) {
       props.onStatus?.({ type: 'firstFrame', detail: `${frame.width}×${frame.height}` });
     }
     props.onFrame(frame);

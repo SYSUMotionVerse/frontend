@@ -18,7 +18,11 @@ import { useVisualTrainingSubmission } from '../../../uni-app/composables/useVis
 import { invalidateGrowthOverview } from '../../../uni-app/composables/useGrowthOverview'
 import { useTrainingProgress } from '../../../uni-app/composables/useTrainingProgress'
 import { trainingVideoCache } from '../../../uni-app/platform/videoCache'
-import { actionStandardLoader } from '../../../uni-app/platform/actionStandardLoader'
+import {
+  ACTION_STANDARD_PRELOAD_CONCURRENCY,
+  actionStandardLoader,
+  mapWithConcurrency
+} from '../../../uni-app/platform/actionStandardLoader'
 import { createTrainingTtsPlayer } from '../../../uni-app/platform/trainingTts'
 import { aggregateActionScores, scoreAction } from '../../../domain/training/actionScoring'
 import {
@@ -638,7 +642,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     nextArrangement: ExerciseArrangementDetail,
     requestId: number
   ) {
-    const loaded = await Promise.all(nextArrangement.items.map(async item => {
+    const loaded = await mapWithConcurrency(nextArrangement.items, async item => {
       const url = resolveStandardUrl(item)
       if (!url) {
         return {
@@ -659,7 +663,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
           error: `${item.video.title}无法评分：${detail}`
         } as const
       }
-    }))
+    }, ACTION_STANDARD_PRELOAD_CONCURRENCY)
     if (requestId !== videoRequestId) return
 
     const standards: Record<number, ActionStandard> = {}

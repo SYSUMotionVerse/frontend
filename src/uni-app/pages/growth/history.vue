@@ -7,7 +7,9 @@ import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const { assessments, loadState, refresh, sessions } = useGrowthOverview()
+const { assessments, loadState, refresh, sessions } = useGrowthOverview({
+  sections: ['history']
+})
 </script>
 
 <template>

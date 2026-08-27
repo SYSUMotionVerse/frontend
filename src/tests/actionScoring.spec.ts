@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateActionScores, scoreAction } from '../domain/training/actionScoring'
+import {
+  aggregateActionScores,
+  MAX_ACTION_SCORING_FRAMES,
+  scoreAction
+} from '../domain/training/actionScoring'
 import {
   ACTION_ANGLE_NAMES,
   type ActionMotion,
@@ -131,6 +135,24 @@ describe('scoreAction', () => {
     expect(dtw.score).toBeGreaterThan(resampled.score)
     expect(dtw.score).toBeCloseTo(100, 10)
     expect(dtw.debug.alignment_path_length).toBeGreaterThanOrEqual(warpedKnee.length)
+  })
+
+  it('bounds long action inputs before dynamic-time-warping', () => {
+    const sequence = Array.from(
+      { length: MAX_ACTION_SCORING_FRAMES + 120 },
+      (_, frameIndex) => Array.from(
+        { length: ACTION_ANGLE_NAMES.length },
+        (_, angleIndex) => 1 + Math.sin(frameIndex / 12 + angleIndex / 4) * 0.2
+      )
+    )
+
+    const result = scoreAction(createStandard(sequence), createMotion(sequence), {
+      alignmentMethod: 'dtw'
+    })
+
+    expect(result.debug.standard_frames).toBe(MAX_ACTION_SCORING_FRAMES)
+    expect(result.debug.user_frames).toBe(MAX_ACTION_SCORING_FRAMES)
+    expect(result.score).toBeCloseTo(100, 10)
   })
 
   it('rejects an action with no enabled usable angles', () => {

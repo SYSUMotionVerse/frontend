@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   MAIN_PACKAGE_WARNING_LIMIT_BYTES,
+  SUBPACKAGE_WARNING_LIMIT_BYTES,
   assertMainPackageSize,
+  assertSubpackageSizes,
   measureMiniProgramPackage,
 } from '../../scripts/check-mini-program-package-size.mjs'
 
@@ -43,6 +45,14 @@ describe('mini-program package size', () => {
         subpackages: [],
       }),
     ).toThrow('exceeds the release limit of 1500 KB')
+  })
+
+  it('keeps each lazy subpackage within the performance budget', () => {
+    expect(() => assertSubpackageSizes({
+      mainPackageBytes: 1,
+      totalBytes: SUBPACKAGE_WARNING_LIMIT_BYTES + 1,
+      subpackages: [{ root: 'subpackages/training', bytes: SUBPACKAGE_WARNING_LIMIT_BYTES + 1 }],
+    })).toThrow('Subpackage subpackages/training')
   })
 })
 

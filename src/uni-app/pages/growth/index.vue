@@ -25,7 +25,9 @@ const {
   sessionBadges,
   sessions,
   summaryCards
-} = useGrowthOverview()
+} = useGrowthOverview({
+  sections: ['history', 'adherence', 'physicalMetrics', 'awards']
+})
 
 const earnedAchievementCount = computed(() =>
   achievements.value.filter(achievement => achievement.earned).length

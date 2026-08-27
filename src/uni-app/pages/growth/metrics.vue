@@ -7,7 +7,9 @@ import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const { loadState, physicalMetricsState, refresh, scoreTrend } = useGrowthOverview()
+const { loadState, physicalMetricsState, refresh, scoreTrend } = useGrowthOverview({
+  sections: ['physicalMetrics', 'visualScoreTrend']
+})
 const emptyStateHint = computed(() =>
   physicalMetricsState.value.hasMetrics ? '' : physicalMetricsState.value.message
 )

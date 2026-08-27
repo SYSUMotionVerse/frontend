@@ -18,7 +18,8 @@ const studentBackendSync = {
   loadGrowthHistory: vi.fn(),
   loadAdherenceData: vi.fn(),
   loadPhysicalMetrics: vi.fn(),
-  loadVisualScoreTrend: vi.fn()
+  loadVisualScoreTrend: vi.fn(),
+  loadAchievementAwards: vi.fn()
 }
 
 vi.mock('../uni-app/composables/useStudentStore', () => ({
@@ -31,8 +32,10 @@ vi.mock('../uni-app/api/studentBackend', async (importOriginal) => ({
 }))
 
 describe('production growth reads', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    const { invalidateGrowthOverview } = await import('../uni-app/composables/useGrowthOverview')
+    invalidateGrowthOverview()
     Object.assign(store.state, createInitialStudentState())
     store.getSnapshot.mockReturnValue(store.state)
     studentBackendSync.isEnabled.mockReturnValue(true)
@@ -92,6 +95,7 @@ describe('production growth reads', () => {
         bestOverallScore: 91
       }
     })
+    studentBackendSync.loadAchievementAwards.mockResolvedValue(null)
   })
 
   it('summarizes growth data without repeating detail-page content on the routed home page', async () => {
@@ -109,7 +113,8 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadGrowthHistory).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadAdherenceData).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadPhysicalMetrics).toHaveBeenCalledTimes(1)
-    expect(studentBackendSync.loadVisualScoreTrend).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('最近一周达标3 天')
     expect(wrapper.text()).toContain('达标日/有训练日67%')
     expect(wrapper.text()).toContain('2 / 3 已解锁')
@@ -165,6 +170,7 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadAdherenceData).not.toHaveBeenCalled()
     expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
     expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('1 次训练 · 1 次评估')
     expect(wrapper.text()).not.toContain('本地楼梯训练记录。')
     expect(wrapper.text()).not.toContain('基线 长问卷')
@@ -186,10 +192,73 @@ describe('production growth reads', () => {
 
     expect(studentBackendSync.loadPhysicalMetrics).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadVisualScoreTrend).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadGrowthHistory).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAdherenceData).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('2600')
     expect(wrapper.text()).toContain('2750')
     expect(wrapper.text()).toContain('91')
     expect(wrapper.text()).toContain('稳定性')
+  })
+
+  it('loads only durable history on the training and assessment detail page', async () => {
+    const HistoryPage = (await import('../pages/growth/history.vue')).default
+    mount(HistoryPage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: { template: '<div><slot /></div>' },
+          UniPageHeading: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(studentBackendSync.loadGrowthHistory).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadAdherenceData).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
+  })
+
+  it('loads only adherence data on the adherence detail page', async () => {
+    const AdherencePage = (await import('../pages/growth/adherence.vue')).default
+    mount(AdherencePage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: { template: '<div><slot /></div>' },
+          UniPageHeading: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(studentBackendSync.loadGrowthHistory).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAdherenceData).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
+  })
+
+  it('loads only awards on the achievements detail page', async () => {
+    const AchievementsPage = (await import('../pages/growth/achievements.vue')).default
+    mount(AchievementsPage, {
+      global: {
+        stubs: {
+          UniGrowthPageShell: { template: '<div><slot /></div>' },
+          UniPageHeading: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(studentBackendSync.loadGrowthHistory).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAdherenceData).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadAchievementAwards).toHaveBeenCalledTimes(1)
   })
 
   it('renders training frequency and assessment score trends from durable history', async () => {

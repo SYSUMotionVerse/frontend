@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { relative, resolve, sep } from 'node:path'
 
 export const MAIN_PACKAGE_WARNING_LIMIT_BYTES = 1500 * 1024
+export const SUBPACKAGE_WARNING_LIMIT_BYTES = 1500 * 1024
 
 export async function measureMiniProgramPackage(outputDirectory) {
   const absoluteOutputDirectory = resolve(outputDirectory)
@@ -47,6 +48,19 @@ export function assertMainPackageSize(
   }
 }
 
+export function assertSubpackageSizes(
+  measurement,
+  limitBytes = SUBPACKAGE_WARNING_LIMIT_BYTES,
+) {
+  for (const subpackage of measurement.subpackages) {
+    if (subpackage.bytes > limitBytes) {
+      throw new Error(
+        `Subpackage ${subpackage.root} is ${formatKilobytes(subpackage.bytes)} KB and exceeds the performance budget of ${formatKilobytes(limitBytes)} KB`,
+      )
+    }
+  }
+}
+
 export function formatPackageMeasurement(measurement) {
   const lines = [
     `Main package: ${formatKilobytes(measurement.mainPackageBytes)} KB / ${formatKilobytes(MAIN_PACKAGE_WARNING_LIMIT_BYTES)} KB release limit`,
@@ -54,7 +68,7 @@ export function formatPackageMeasurement(measurement) {
   ]
   for (const subpackage of measurement.subpackages) {
     lines.push(
-      `Subpackage ${subpackage.root}: ${formatKilobytes(subpackage.bytes)} KB`,
+      `Subpackage ${subpackage.root}: ${formatKilobytes(subpackage.bytes)} KB / ${formatKilobytes(SUBPACKAGE_WARNING_LIMIT_BYTES)} KB performance budget`,
     )
   }
   return lines.join('\n')
@@ -93,6 +107,7 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
     const measurement = await measureMiniProgramPackage(outputDirectory)
     console.log(formatPackageMeasurement(measurement))
     assertMainPackageSize(measurement)
+    assertSubpackageSizes(measurement)
   } catch (error) {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)

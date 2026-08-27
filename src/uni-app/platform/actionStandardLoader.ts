@@ -4,6 +4,32 @@ interface ActionStandardLoaderDependencies {
   requestJson: (url: string) => Promise<unknown>
 }
 
+export const ACTION_STANDARD_PRELOAD_CONCURRENCY = 2
+
+export async function mapWithConcurrency<Input, Output>(
+  items: readonly Input[],
+  mapper: (item: Input, index: number) => Promise<Output>,
+  concurrency = ACTION_STANDARD_PRELOAD_CONCURRENCY
+) {
+  const workerCount = Math.min(
+    items.length,
+    Math.max(1, Math.floor(Number.isFinite(concurrency) ? concurrency : 1))
+  )
+  const results = new Array<Output>(items.length)
+  let nextIndex = 0
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await mapper(items[currentIndex] as Input, currentIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()))
+  return results
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

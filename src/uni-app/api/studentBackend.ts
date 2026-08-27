@@ -1123,19 +1123,26 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       return dependencies.getAchievementAwards()
     },
-    async loadStationNotifications() {
+    async loadStationNotifications(nextPage?: string) {
       if (!dependencies.isEnabled()) {
-        return { count: 0, notifications: [] }
+        return { count: 0, notifications: [], nextPage: null }
       }
 
       await dependencies.ensureSession()
-      const [notifications, unread] = await Promise.all([
-        dependencies.listNotifications(),
-        dependencies.getUnreadNotifications()
-      ])
+      const notificationPage = dependencies.listNotificationPage
+        ? dependencies.listNotificationPage(nextPage)
+        : dependencies.listNotifications().then(notifications => ({
+            notifications,
+            nextPage: null
+          }))
+      const unread = nextPage
+        ? Promise.resolve(null)
+        : dependencies.getUnreadNotifications()
+      const [page, unreadNotifications] = await Promise.all([notificationPage, unread])
       return {
-        count: unread.count,
-        notifications: notifications.filter(item => item.notification_type === 'TRAINING_REMINDER')
+        count: unreadNotifications?.count ?? 0,
+        notifications: page.notifications.filter(item => item.notification_type === 'TRAINING_REMINDER'),
+        nextPage: page.nextPage
       }
     },
     async markStationNotificationRead(id: number) {

@@ -13,6 +13,10 @@ import {
 
 const DEFAULT_TOLERANCE = 0.35
 
+// DTW retains a predecessor matrix, so unbounded camera input grows memory and
+// CPU quadratically. This still covers a 36-second action sampled at 10 FPS.
+export const MAX_ACTION_SCORING_FRAMES = 360
+
 const angleLabels: Record<ActionAngleName, string> = {
   left_elbow: '左肘',
   right_elbow: '右肘',
@@ -40,6 +44,15 @@ function finiteNumber(value: unknown) {
   if (typeof value === 'boolean') return Number.NaN
   const number = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(number) ? number : Number.NaN
+}
+
+function sampleActionFrames<T>(frames: readonly T[], maximum: number) {
+  if (frames.length <= maximum) return [...frames]
+
+  return Array.from({ length: maximum }, (_, index) => {
+    const sourceIndex = Math.round(index * (frames.length - 1) / (maximum - 1))
+    return frames[sourceIndex] as T
+  })
 }
 
 function rowsToMatrix(
@@ -276,22 +289,40 @@ export function scoreAction(
     throw new Error("alignment_method 只支持 'resample' 或 'dtw'。")
   }
 
-  const standardRows = rowsToMatrix(
+  const standardSequence = sampleActionFrames(
     actionStandard.standard_sequence,
+    MAX_ACTION_SCORING_FRAMES
+  )
+  const userFrames = sampleActionFrames(userMotion.frames, MAX_ACTION_SCORING_FRAMES)
+  const samplingWarnings = [
+    ...(actionStandard.standard_sequence.length > MAX_ACTION_SCORING_FRAMES
+      ? [`标准动作帧数已均匀采样至 ${MAX_ACTION_SCORING_FRAMES} 帧用于评分。`]
+      : []),
+    ...(userMotion.frames.length > MAX_ACTION_SCORING_FRAMES
+      ? [`用户动作帧数已均匀采样至 ${MAX_ACTION_SCORING_FRAMES} 帧用于评分。`]
+      : [])
+  ]
+  const standardRows = rowsToMatrix(
+    standardSequence,
     actionStandard.angle_names,
     ACTION_ANGLE_NAMES
   )
   const standardTimes = standardRows.map((_, index) => index)
   const standardInterpolation = interpolateColumns(standardRows, standardTimes, '标准')
 
-  const timeResult = resolveFrameTimes(userMotion)
+  const sampledUserMotion: ActionMotion = {
+    ...userMotion,
+    frames: userFrames
+  }
+  const timeResult = resolveFrameTimes(sampledUserMotion)
   const userRows = rowsToMatrix(
-    userMotion.frames.map(frame => frame.angles),
+    userFrames.map(frame => frame.angles),
     userMotion.angle_names,
     ACTION_ANGLE_NAMES
   )
   const userInterpolation = interpolateColumns(userRows, timeResult.times, '用户')
   const warnings = [
+    ...samplingWarnings,
     ...standardInterpolation.warnings,
     ...timeResult.warnings,
     ...userInterpolation.warnings

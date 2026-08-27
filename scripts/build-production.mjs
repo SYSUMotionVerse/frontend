@@ -9,6 +9,7 @@ import {
 } from './release-config.mjs'
 import {
   assertMainPackageSize,
+  assertSubpackageSizes,
   formatPackageMeasurement,
   measureMiniProgramPackage,
 } from './check-mini-program-package-size.mjs'
@@ -70,6 +71,7 @@ const packageMeasurement = await measureMiniProgramPackage(
 console.log(formatPackageMeasurement(packageMeasurement))
 try {
   assertMainPackageSize(packageMeasurement)
+  assertSubpackageSizes(packageMeasurement)
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)
   process.exit(1)

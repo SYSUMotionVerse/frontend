@@ -3,10 +3,14 @@ import type { StationNotificationViewModel } from '../../uni-app/api/stationNoti
 
 const props = defineProps<{
   notifications: readonly StationNotificationViewModel[]
+  hasMore?: boolean
+  isLoadingMore?: boolean
+  loadMoreError?: string
 }>()
 
 const emit = defineEmits<{
   open: [notification: StationNotificationViewModel]
+  loadMore: []
 }>()
 </script>
 
@@ -35,6 +39,19 @@ const emit = defineEmits<{
         未读状态同步失败，点击可重试
       </text>
     </button>
+    <view v-if="props.hasMore" class="notification-list__more">
+      <button
+        class="notification-list__more-button"
+        :disabled="props.isLoadingMore"
+        data-notification-load-more
+        @click="emit('loadMore')"
+      >
+        {{ props.isLoadingMore ? '正在加载…' : '加载更多提醒' }}
+      </button>
+      <text v-if="props.loadMoreError" class="notification-list__more-error">
+        {{ props.loadMoreError }}
+      </text>
+    </view>
   </view>
   <view v-else class="notification-empty">
     <text class="notification-empty__title">还没有训练提醒</text>
@@ -121,6 +138,35 @@ const emit = defineEmits<{
   font-size: 21rpx;
   line-height: 1.4;
   font-weight: 800;
+}
+
+.notification-list__more {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.notification-list__more-button {
+  width: 100%;
+  margin: 0;
+  padding: 22rpx 28rpx;
+  border: 2rpx solid rgba(123, 135, 152, 0.18);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #46586d;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.notification-list__more-button::after {
+  border: none;
+}
+
+.notification-list__more-error {
+  color: #a14f4f;
+  font-size: 21rpx;
+  font-weight: 700;
 }
 
 .notification-empty {

@@ -10,12 +10,18 @@ export interface MiniProgramPackageMeasurement {
 }
 
 export const MAIN_PACKAGE_WARNING_LIMIT_BYTES: number
+export const SUBPACKAGE_WARNING_LIMIT_BYTES: number
 
 export function measureMiniProgramPackage(
   outputDirectory: string,
 ): Promise<MiniProgramPackageMeasurement>
 
 export function assertMainPackageSize(
+  measurement: MiniProgramPackageMeasurement,
+  limitBytes?: number,
+): void
+
+export function assertSubpackageSizes(
   measurement: MiniProgramPackageMeasurement,
   limitBytes?: number,
 ): void
