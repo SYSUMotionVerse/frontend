@@ -1,15 +1,30 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+import ImmersiveNavigationBar from '../layout/ImmersiveNavigationBar.vue'
+
+const props = withDefaults(defineProps<{
   chip: string
   title: string
   subtitle: string
-}>()
+  navigationTitle?: string
+  showBack?: boolean
+}>(), {
+  navigationTitle: '',
+  showBack: true
+})
+
+const resolvedNavigationTitle = computed(() => props.navigationTitle || props.title)
 </script>
 
 <template>
   <view class="access-entry">
     <view class="access-entry__halo access-entry__halo--gold" />
     <view class="access-entry__halo access-entry__halo--teal" />
+    <ImmersiveNavigationBar
+      class="access-entry__navigation"
+      :title="resolvedNavigationTitle"
+      :show-back="props.showBack"
+    />
 
     <view class="access-entry__inner">
       <view class="access-entry__hero">
@@ -35,12 +50,13 @@ defineProps<{
   min-height: 100vh;
   overflow: hidden;
   background: #FCF7F0;
-  padding: 56rpx 48rpx 120rpx;
+  padding: 0 48rpx 120rpx;
   color: #1A202C;
 }
 
 .access-entry__halo {
-  position: absolute;
+  position: fixed;
+  z-index: 0;
   border-radius: 9999px;
   pointer-events: none;
 }
@@ -61,6 +77,11 @@ defineProps<{
   background: rgba(137, 207, 255, 0.2);
 }
 
+.access-entry__navigation {
+  width: calc(100% + 96rpx);
+  margin: 0 -48rpx;
+}
+
 .access-entry__inner {
   position: relative;
   z-index: 1;
@@ -69,6 +90,7 @@ defineProps<{
   max-width: 720px;
   flex-direction: column;
   gap: 32rpx;
+  padding-top: 24rpx;
   animation: access-entry-reveal 180ms ease-out both;
 }
 

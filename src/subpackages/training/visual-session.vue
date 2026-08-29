@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { onLoad, onResize, onShow } from '@dcloudio/uni-app'
 import VisualTrainingPanel from './components/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../domain/student/types'
@@ -28,6 +28,7 @@ const viewport = shallowRef({
 })
 const orientationReady = shallowRef(false)
 const session = useVisualTrainingSession({ modality })
+const navigationTitle = computed(() => session.tutorialMode.value ? '动作讲解' : '武术跟练')
 
 const comparisonMediaSize = computed(() => {
   if (!comparisonMode.value || !viewport.value.width || !viewport.value.height) return undefined
@@ -166,17 +167,6 @@ onResize(({ size }) => {
   updateOrientationFromRuntime()
 })
 
-watch(
-  () => session.exerciseVideo.value?.title?.trim(),
-  (videoTitle) => {
-    if (typeof uni.setNavigationBarTitle !== 'function') return
-    void uni.setNavigationBarTitle({
-      title: videoTitle || '可视化训练'
-    })
-  },
-  { immediate: true }
-)
-
 function setCapture(instance: unknown) {
   session.capture.value = instance as VisualTrainingCaptureApi | null
 }
@@ -186,12 +176,19 @@ function setCapture(instance: unknown) {
   <UniTrainingPageShell
     dock-tab="playground"
     :show-dock="false"
+    :show-decorations="!comparisonMode"
     :fit-viewport="true"
+    :page-title="navigationTitle"
+    :show-navigation="!comparisonMode"
+    show-back
     access-mode="execute"
   >
     <view
       class="visual-session-page"
-      :class="{ 'visual-session-page--comparison': comparisonMode }"
+      :class="{
+        'visual-session-page--comparison': comparisonMode,
+        'visual-session-page--tutorial': session.tutorialMode.value && !comparisonMode
+      }"
       :style="comparisonPageStyle"
     >
       <VisualTrainingPanel
@@ -290,6 +287,13 @@ function setCapture(instance: unknown) {
 }
 
 .visual-session-page--comparison .visual-session-page__panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.visual-session-page--tutorial,
+.visual-session-page--tutorial .visual-session-page__panel {
   height: 100%;
   min-height: 0;
   overflow: hidden;

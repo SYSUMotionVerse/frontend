@@ -18,6 +18,7 @@ declare namespace WechatMiniprogram {
     createCameraContext(component?: any): CameraContext;
     createOffscreenCanvas(options?: any): OffscreenCanvas;
     getSystemInfoSync(): SystemInfo;
+    getMenuButtonBoundingClientRect?(): MenuButtonBoundingClientRect;
     createSelectorQuery(): SelectorQuery;
     getImageInfo(options: any): any;
   }
@@ -33,6 +34,15 @@ declare namespace WechatMiniprogram {
     windowWidth: number;
     windowHeight: number;
     pixelRatio: number;
+  }
+
+  interface MenuButtonBoundingClientRect {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+    width: number;
+    height: number;
   }
 
   interface SelectorQuery {

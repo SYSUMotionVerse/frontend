@@ -14,8 +14,10 @@ const props = withDefaults(defineProps<{
   title?: string
   titlePill?: string
   variant?: 'home' | 'compact'
+  miniTagTone?: 'accent' | 'muted'
   unreadCount?: number
   showHeadline?: boolean
+  showStatus?: boolean
   showReminderControl?: boolean
   reminderStatus?: ReminderAuthorizationStatus
   reminderSyncState?: ReminderSyncState
@@ -25,8 +27,10 @@ const props = withDefaults(defineProps<{
   title: '今天先完成主线任务',
   titlePill: '训练首页',
   variant: 'home',
+  miniTagTone: 'accent',
   unreadCount: 0,
   showHeadline: true,
+  showStatus: true,
   showReminderControl: false,
   reminderStatus: 'not_requested',
   reminderSyncState: 'idle',
@@ -59,7 +63,10 @@ const reminderActionLabel = computed(() => {
 
         <view class="home-header__copy">
           <text class="home-header__name">你好，{{ props.displayName }}</text>
-          <text class="home-header__mini-tag">{{ props.miniTag }}</text>
+          <text
+            class="home-header__mini-tag"
+            :class="{ 'home-header__mini-tag--muted': props.miniTagTone === 'muted' }"
+          >{{ props.miniTag }}</text>
         </view>
       </view>
 
@@ -86,7 +93,7 @@ const reminderActionLabel = computed(() => {
       </view>
     </view>
 
-    <text class="home-header__status">{{ props.reminderLabel }}</text>
+    <text v-if="props.showStatus" class="home-header__status">{{ props.reminderLabel }}</text>
 
     <view v-if="props.showHeadline" class="home-header__headline">
       <text class="home-header__hint-pill">{{ props.titlePill }}</text>
@@ -130,6 +137,8 @@ const reminderActionLabel = computed(() => {
 .home-header__notification {
   position: relative;
   display: flex;
+  width: 88rpx;
+  height: 88rpx;
   flex: none;
   flex-direction: column;
   align-items: center;
@@ -200,6 +209,13 @@ const reminderActionLabel = computed(() => {
   letter-spacing: 0.14em;
 }
 
+.home-header__mini-tag--muted {
+  color: #718096;
+  font-size: 20rpx;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .home-header--compact .home-header__mini-tag {
   font-size: 16rpx;
   letter-spacing: 0.12em;
@@ -253,6 +269,10 @@ const reminderActionLabel = computed(() => {
 }
 
 .home-header__reminder-action {
+  position: absolute;
+  top: 94rpx;
+  right: 0;
+  z-index: 2;
   display: inline-flex;
   min-height: 34rpx;
   margin: -2rpx 0 0;
@@ -266,6 +286,7 @@ const reminderActionLabel = computed(() => {
   font-size: 16rpx;
   line-height: 1.2;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .home-header__reminder-action::after {

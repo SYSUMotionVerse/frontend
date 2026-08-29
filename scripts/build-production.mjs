@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { loadEnv } from 'vite'
 import {
   validateGeneratedProjectConfig,
@@ -14,7 +15,10 @@ import {
   measureMiniProgramPackage,
 } from './check-mini-program-package-size.mjs'
 
-const root = resolve(process.cwd())
+const useDirectUni = process.argv.includes('--direct-uni')
+const root = useDirectUni
+  ? resolve(dirname(fileURLToPath(import.meta.url)), '..')
+  : resolve(process.cwd())
 const fileEnvironment = loadEnv('production', root, '')
 const releaseEnvironment = {
   ...fileEnvironment,
@@ -38,8 +42,21 @@ if (process.argv.includes('--check-config')) {
   process.exit(0)
 }
 
-const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-const child = spawn(command, ['exec', 'uni', 'build', '-p', 'mp-weixin'], {
+const command = useDirectUni
+  ? process.execPath
+  : process.platform === 'win32'
+    ? 'pnpm.cmd'
+    : 'pnpm'
+const commandArguments = useDirectUni
+  ? [
+      resolve(root, 'node_modules/@dcloudio/vite-plugin-uni/bin/uni.js'),
+      'build',
+      '-p',
+      'mp-weixin',
+    ]
+  : ['exec', 'uni', 'build', '-p', 'mp-weixin']
+const child = spawn(command, commandArguments, {
+  cwd: root,
   env: releaseEnvironment,
   stdio: 'inherit',
 })

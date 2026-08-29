@@ -5,6 +5,7 @@ import { buildSessionBadge, resolveModalityLabel } from '../../../domain/student
 import type { SessionRecord } from '../../../domain/student/types'
 import { studentBackendSync } from '../../api/studentBackend'
 import { useStudentStore } from '../../composables/useStudentStore'
+import ImmersiveNavigationBar from '../../components/layout/ImmersiveNavigationBar.vue'
 
 const store = useStudentStore()
 const sessionId = shallowRef('latest')
@@ -185,6 +186,7 @@ onShareAppMessage((options) => {
 
 <template>
   <view class="feedback-page">
+    <ImmersiveNavigationBar title="训练反馈" show-back />
     <view class="feedback-page__inner">
       <view v-if="loadingSession" class="feedback-page__state-card">
         <text class="feedback-page__state-title">正在加载训练结果</text>
@@ -320,9 +322,9 @@ onShareAppMessage((options) => {
 
 .feedback-page__inner {
   display: flex;
-  min-height: 100vh;
+  min-height: 0;
   flex-direction: column;
-  padding: 48rpx 40rpx calc(56rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 40rpx calc(56rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

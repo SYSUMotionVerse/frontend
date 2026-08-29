@@ -36,7 +36,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('recordActionDisabled')
   })
 
-  it('lets the student swap the main stage with the lower-right preview', () => {
+  it('keeps the main demonstration unobstructed with a fixed lower-right camera', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -49,16 +49,15 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(videoIndex).toBeGreaterThan(-1)
     expect(cameraIndex).toBeGreaterThan(videoIndex)
     expect(infoIndex).toBeGreaterThan(cameraIndex)
-    expect(source).toContain("type ActiveMedia = 'demonstration' | 'camera'")
-    expect(source).toContain("const activeMedia = shallowRef<ActiveMedia>('demonstration')")
-    expect(source).toContain("@tap.stop=\"selectMedia('demonstration')\"")
-    expect(source).toContain("@tap.stop=\"selectMedia('camera')\"")
+    expect(source).not.toContain("type ActiveMedia = 'demonstration' | 'camera'")
+    expect(source).not.toContain('const activeMedia =')
+    expect(source).not.toContain('selectMedia(')
     expect(source).toContain('动作演示')
     expect(source).toContain('我的画面')
     expect(source).toContain("emit('startRecognition', 5)")
     expect(source).toContain('visual-session__media-stage--primary')
     expect(source).toContain('visual-session__media-stage--secondary')
-    expect(source).toContain('visual-session__secondary-switch')
+    expect(source).not.toContain('visual-session__secondary-switch')
     expect(source).toContain('visual-session__secondary-space')
     expect(source).not.toContain('visual-session__media-switch')
     expect(source).not.toContain('visual-session__recording-badge')
@@ -68,6 +67,11 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('下一训练步骤：{{ restNextTitle }}')
     expect(source).toContain('动作剩余')
     expect(source).toContain('visual-session__start-overlay')
+    expect(source).toContain("'visual-session__start-overlay--ready'")
+    expect(source).toContain('border-radius: 30rpx;')
+    expect(source).toContain('font-size: 30rpx;')
+    expect(source).toContain("phaseSlot === 'pretraining-countdown'")
+    expect(source).not.toMatch(/class="visual-session__start-button"/)
     expect(source).toContain('startCountdown > 0')
     expect(source).toContain(':controls="false"')
     expect(source).toContain(':show-center-play-btn="false"')
@@ -115,15 +119,21 @@ describe('VisualTrainingPanel mini-program styles', () => {
       /\.visual-session__stage\s*\{[\s\S]*height:\s*936rpx;[\s\S]*aspect-ratio:\s*3\s*\/\s*4;[\s\S]*flex:\s*0\s+0\s+auto;[\s\S]*min-height:\s*0;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__lower-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*280rpx;[\s\S]*min-height:\s*280rpx;[\s\S]*flex:\s*0 0 280rpx;[\s\S]*gap:\s*24rpx;/
+      /\.visual-session__tutorial-media\s*\{[\s\S]*width:\s*100%;[\s\S]*aspect-ratio:\s*4\s*\/\s*3;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__media-stage--secondary\s*\{[\s\S]*top:\s*calc\(100% \+ 30rpx\);[\s\S]*right:\s*0;[\s\S]*width:\s*200rpx;[\s\S]*height:\s*280rpx;/
+      /\.visual-session__tutorial-video\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*514rpx;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__secondary-space\s*\{[\s\S]*width:\s*200rpx;[\s\S]*height:\s*280rpx;[\s\S]*flex:\s*0 0 200rpx;/
+      /\.visual-session__lower-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*430rpx;[\s\S]*min-height:\s*430rpx;[\s\S]*flex:\s*0 0 430rpx;[\s\S]*gap:\s*24rpx;/
     )
-    expect(panelSource).toContain(':object-fit="comparisonMode ? \'contain\' : \'cover\'"')
+    expect(panelSource).toMatch(
+      /\.visual-session__media-stage--secondary\s*\{[\s\S]*top:\s*calc\(100% \+ 30rpx\);[\s\S]*right:\s*0;[\s\S]*width:\s*330rpx;[\s\S]*height:\s*430rpx;/
+    )
+    expect(panelSource).toMatch(
+      /\.visual-session__secondary-space\s*\{[\s\S]*width:\s*330rpx;[\s\S]*height:\s*430rpx;[\s\S]*flex:\s*0 0 330rpx;/
+    )
+    expect(panelSource).toContain('object-fit="cover"')
     expect(panelSource).toMatch(/\.visual-session__secondary[\s\S]*border-radius:\s*9999px;/)
     expect(panelSource).not.toContain('.visual-session__record')
     expect(panelSource).toContain('hover-class="visual-session__action--pressed"')
@@ -137,7 +147,8 @@ describe('VisualTrainingPanel mini-program styles', () => {
     )
 
     expect(source).toContain('v-if="showStartAction && !comparisonMode"')
-    expect(source).toContain(":class=\"{ 'visual-session--comparison': comparisonMode }\"")
+    expect(source).toContain("'visual-session--comparison': comparisonMode")
+    expect(source).toContain("'visual-session--tutorial': tutorialMode && !comparisonMode")
     expect(source).not.toContain('@media (orientation: landscape)')
     expect(source).toContain('class="visual-session__comparison-layout"')
     expect(source).toContain('class="visual-session__comparison-actions"')
@@ -155,7 +166,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('v-if="phaseCueCount && !comparisonMode"')
     expect(source).toContain("phaseKind === 'active' && !comparisonMode")
     expect(source).not.toContain('先观看完整动作，倒计时后开始跟练')
-    expect(source).toContain('v-if="!comparisonMode && !tutorialMode" class="visual-session__actions"')
+    expect(source).not.toContain('v-if="!comparisonMode && !tutorialMode" class="visual-session__actions"')
     expect(source).toContain('class="visual-session__landscape-start"')
     expect(source).toContain('<DemonstrationVideoControls')
     expect(source).not.toContain('showTrainingDemonstrationControls')

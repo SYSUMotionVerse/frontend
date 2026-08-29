@@ -15,16 +15,15 @@ describe('visual session dock button styles', () => {
     expect(source).toMatch(/\.visual-session__completion-retry::after[\s\S]*border:\s*none;/)
   })
 
-  it('uses the questionnaire selected-option accent for the portrait exit action', () => {
+  it('does not encourage interruption with a portrait exit action', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
     )
 
-    expect(source).toContain('hover-class="visual-session__secondary--pressed"')
-    expect(source).toContain('color="#FF8B8B"')
-    expect(source).toMatch(
-      /\.visual-session__secondary\s*\{[\s\S]*border:\s*2rpx solid #FF8B8B;[\s\S]*background:\s*#FFFCF8;[\s\S]*color:\s*#FF8B8B;/
-    )
+    expect(source).not.toContain('hover-class="visual-session__secondary--pressed"')
+    expect(source).not.toContain('color="#FF8B8B"')
+    expect(source).not.toContain('v-if="!comparisonMode && !tutorialMode" class="visual-session__actions"')
+    expect(source).toContain('class="visual-session__comparison-exit"')
   })
 })

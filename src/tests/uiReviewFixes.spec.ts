@@ -163,7 +163,7 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(selectionPage).toContain('mini-tag="训练游乐场"')
+    expect(selectionPage).toContain('mini-tag="选择今天要完成的训练"')
     expect(selectionPage).toContain('推荐先做${recommendedMode.title}，完成后点亮今日进度。')
     expect(selectionPage).toContain('问卷未解锁')
     expect(selectionPage).toContain('进度同步中')
@@ -179,8 +179,8 @@ describe('ui review fixes', () => {
     expect(selectionPage).not.toContain('TrainingProgressSnapshot')
     expect(selectionPage).not.toContain('select-page__launch-trail')
     expect(selectionPage).not.toContain('select-page__launch-action--wushu')
-    expect(selectionPage).toContain('min-height: 124rpx;')
-    expect(selectionPage).toContain('border: 2rpx solid rgba(255, 211, 132, 0.3);')
+    expect(selectionPage).toContain('min-height: 164rpx;')
+    expect(selectionPage).toContain('border: 2rpx solid rgba(255, 211, 132, 0.22);')
     expect(selectionPage).not.toContain('width: 112rpx;')
     expect(selectionPage).not.toContain('TrainingModeCard')
     expect(selectionPage).toContain('select-page__streak-note')
@@ -194,8 +194,9 @@ describe('ui review fixes', () => {
 
     expect(selectionPage).toContain("const displayName = computed(() => store.state.profile.name.trim() || '同学')")
     expect(selectionPage).toContain('TrainingHomeHeader')
-    expect(selectionPage).toContain('mini-tag="训练游乐场"')
+    expect(selectionPage).toContain('mini-tag="选择今天要完成的训练"')
     expect(selectionPage).toContain('variant="home"')
+    expect(selectionPage).toContain('mini-tag-tone="muted"')
     expect(selectionPage).toContain(':unread-count="stationNotifications.unreadCount.value"')
   })
 
@@ -315,8 +316,8 @@ describe('ui review fixes', () => {
     expect(growthIndexPage).toContain('.growth-page__link:active')
     expect(growthIndexPage).toContain('growth-page__overview')
     expect(growthIndexPage).not.toContain('growth-page__buddy')
-    expect(growthIndexPage).toContain('--growth-space-4: 56rpx;')
-    expect(growthIndexPage).toContain('border-radius: 44rpx;')
+    expect(growthIndexPage).toContain('--growth-space-4: 26rpx;')
+    expect(growthIndexPage).toContain('border-radius: 30rpx;')
     expect(growthIndexPage).toContain(':color="stat.iconColor"')
     expect(growthIndexPage).toContain(':color="link.iconColor"')
     expect(metricsPage).toContain('physicalMetricsState.value.hasMetrics')
@@ -646,6 +647,7 @@ describe('ui review fixes', () => {
 
     expect(homePage).toContain('TrainingHomeHeader')
     expect(homePage).toContain('variant="home"')
+    expect(homePage).toContain(':show-status="false"')
     expect(selectionPage).toContain('TrainingHomeHeader')
     expect(selectionPage).toContain('variant="home"')
     expect(selectionPage).toContain(':show-headline="false"')
@@ -695,7 +697,7 @@ describe('ui review fixes', () => {
     )
 
     expect(homePage).not.toContain('home-page__section-kicker')
-    expect(homePage).toContain('font-size: 30rpx;')
+    expect(homePage).toContain('font-size: 32rpx;')
     expect(featureCard).toContain('feature-card__eyebrow')
     expect(featureCard).toContain('font-size: 18rpx;')
     expect(featureCard).toContain('letter-spacing: 0.14em;')
@@ -742,8 +744,8 @@ describe('ui review fixes', () => {
     )
 
     expect(homePage).toContain('class="home-page"')
-    expect(homePage).toContain('gap: 32rpx;')
-    expect(homePage).toContain('gap: 18rpx;')
+    expect(homePage).toContain('gap: 34rpx;')
+    expect(homePage).toContain('gap: 16rpx;')
   })
 
 
@@ -864,16 +866,16 @@ describe('ui review fixes', () => {
 
     expect(accessShell).toContain('padding: 56rpx 48rpx 216rpx;')
     expect(accessShell).toContain('gap: 56rpx;')
-    expect(uniAccessShell).toContain('padding: 56rpx 48rpx 120rpx;')
+    expect(uniAccessShell).toContain('padding: 0 48rpx 120rpx;')
     expect(uniAccessShell).toContain('gap: 32rpx;')
-    expect(uniTrainingShell).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
+    expect(uniTrainingShell).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
-    expect(uniGrowthShell).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
+    expect(uniGrowthShell).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
-    expect(miniappHomePage).toContain('gap: 32rpx;')
-    expect(miniappHomePage).toContain('gap: 18rpx;')
-    expect(miniappGrowthPage).toContain('--growth-space-4: 56rpx;')
-    expect(miniappGrowthPage).toContain('padding: 28rpx 26rpx;')
+    expect(miniappHomePage).toContain('gap: 34rpx;')
+    expect(miniappHomePage).toContain('gap: 16rpx;')
+    expect(miniappGrowthPage).toContain('--growth-space-4: 26rpx;')
+    expect(miniappGrowthPage).toContain('padding: 24rpx;')
   })
 
   it('uses one built-in default user icon without personal avatar controls', () => {

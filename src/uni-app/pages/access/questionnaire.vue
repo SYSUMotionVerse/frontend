@@ -361,6 +361,7 @@ function previewTrainingContent() {
 <template>
   <UniAccessPageShell
     chip="A2"
+    navigation-title="问卷"
     :title="title"
     :subtitle="subtitle"
   >

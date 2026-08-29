@@ -33,7 +33,8 @@
     {
       "path": "pages/training/home",
       "style": {
-        "navigationBarTitleText": "训练首页"
+        "navigationBarTitleText": "训练首页",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -45,7 +46,8 @@
     {
       "path": "pages/training/select",
       "style": {
-        "navigationBarTitleText": "选择训练"
+        "navigationBarTitleText": "选择训练",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -69,7 +71,8 @@
     {
       "path": "pages/growth/index",
       "style": {
-        "navigationBarTitleText": "成长记录"
+        "navigationBarTitleText": "成长记录",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -105,6 +108,7 @@
           "path": "visual-session",
           "style": {
             "navigationBarTitleText": "可视化训练",
+            "navigationStyle": "custom",
             "pageOrientation": "auto"
           }
         }
@@ -112,6 +116,7 @@
     }
   ],
   "globalStyle": {
+    "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "运动小站",
     "navigationBarBackgroundColor": "#FCF7F0",

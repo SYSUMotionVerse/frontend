@@ -79,17 +79,17 @@ const emit = defineEmits<{
 }>()
 
 const poseCamera = shallowRef<InstanceType<typeof PoseDetectionView> | null>(null)
-type ActiveMedia = 'demonstration' | 'camera'
-const activeMedia = shallowRef<ActiveMedia>('demonstration')
 const demonstrationPlaybackRate = shallowRef(1)
-const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
 const POSE_MOUNT_DELAY_MS = 500
 const poseMountReady = shallowRef(false)
 let poseMountTimer: ReturnType<typeof setTimeout> | null = null
-const showingCamera = computed(() => activeMedia.value === 'camera')
-const demonstrationPrimary = computed(() => props.comparisonMode || !showingCamera.value)
+const demonstrationPrimary = computed(() => true)
+const tutorialSteps = computed(() => Array.from(
+  { length: props.tutorialTotalActions },
+  (_, index) => index
+))
 const cameraPlaceholderLabel = computed(() =>
   props.recognitionStatus === 'failed'
     ? '摄像头准备失败'
@@ -218,6 +218,11 @@ function requestCameraStart() {
   emit('startRecognition', 5)
 }
 
+function handlePortraitStart() {
+  if (startActionDisabled.value || props.recognitionStatus === 'failed') return
+  emit('startTraining')
+}
+
 watch(
   () => props.recognitionEnabled,
   (enabled, previous) => {
@@ -227,16 +232,11 @@ watch(
     }
     poseMountReady.value = false
     if (!enabled) {
-      if (showingCamera.value) activeMedia.value = 'demonstration'
       if (previous === true) requestCameraStart()
       return
     }
 
     cameraStartRequested.value = false
-    if (cameraViewRequested.value) {
-      activeMedia.value = 'camera'
-      cameraViewRequested.value = false
-    }
 
     poseMountTimer = setTimeout(() => {
       poseMountTimer = null
@@ -389,30 +389,16 @@ async function stopRecord() {
   return recordedPath
 }
 
-function selectMedia(media: ActiveMedia) {
-  if (media === 'demonstration') {
-    cameraViewRequested.value = false
-    activeMedia.value = media
-    return
-  }
-
-  if (!props.recognitionEnabled) {
-    activeMedia.value = media
-    if (cameraViewRequested.value) return
-    cameraViewRequested.value = true
-    requestCameraStart()
-    return
-  }
-  activeMedia.value = media
-}
-
 defineExpose({ startRecord, stopRecord })
 </script>
 
 <template>
   <view
     class="visual-session"
-    :class="{ 'visual-session--comparison': comparisonMode }"
+    :class="{
+      'visual-session--comparison': comparisonMode,
+      'visual-session--tutorial': tutorialMode && !comparisonMode
+    }"
   >
     <!-- ═══ Tutorial Mode ═══ -->
     <view
@@ -421,8 +407,22 @@ defineExpose({ startRecord, stopRecord })
       :class="{ 'visual-session__tutorial--comparison': comparisonMode }"
     >
       <view v-if="!comparisonMode" class="visual-session__tutorial-header">
-        <text class="visual-session__tutorial-title">动作讲解 {{ tutorialIndex + 1 }}/{{ tutorialTotalActions }}</text>
-        <text class="visual-session__tutorial-subtitle">{{ tutorialVideoTitle }}</text>
+        <view class="visual-session__tutorial-progress" aria-label="动作讲解进度">
+          <view
+            v-for="step in tutorialSteps"
+            :key="step"
+            class="visual-session__tutorial-dot"
+            :class="{ 'visual-session__tutorial-dot--active': step <= tutorialIndex }"
+          />
+        </view>
+        <view class="visual-session__tutorial-heading-row">
+          <view class="visual-session__tutorial-count">
+            <text class="visual-session__tutorial-count-current">{{ tutorialIndex + 1 }}</text>
+            <text class="visual-session__tutorial-count-total">/{{ tutorialTotalActions }}</text>
+          </view>
+          <view class="visual-session__tutorial-divider" />
+          <text class="visual-session__tutorial-subtitle">{{ tutorialVideoTitle }}</text>
+        </view>
       </view>
 
       <view class="visual-session__tutorial-layout">
@@ -449,7 +449,7 @@ defineExpose({ startRecord, stopRecord })
             :enable-progress-gesture="true"
             :autoplay="false"
             :loop="false"
-            object-fit="contain"
+            object-fit="cover"
             @loadedmetadata="handleTutorialVideoLoadedMetadata"
           />
           <view
@@ -470,50 +470,47 @@ defineExpose({ startRecord, stopRecord })
 
         <view class="visual-session__tutorial-content">
           <view v-if="comparisonMode" class="visual-session__tutorial-header visual-session__tutorial-header--comparison">
-            <text class="visual-session__tutorial-title">动作讲解 {{ tutorialIndex + 1 }}/{{ tutorialTotalActions }}</text>
-            <text class="visual-session__tutorial-subtitle">{{ tutorialVideoTitle }}</text>
+            <view class="visual-session__tutorial-progress" aria-label="动作讲解进度">
+              <view
+                v-for="step in tutorialSteps"
+                :key="step"
+                class="visual-session__tutorial-dot"
+                :class="{ 'visual-session__tutorial-dot--active': step <= tutorialIndex }"
+              />
+            </view>
+            <view class="visual-session__tutorial-heading-row">
+              <view class="visual-session__tutorial-count">
+                <text class="visual-session__tutorial-count-current">{{ tutorialIndex + 1 }}</text>
+                <text class="visual-session__tutorial-count-total">/{{ tutorialTotalActions }}</text>
+              </view>
+              <view class="visual-session__tutorial-divider" />
+              <text class="visual-session__tutorial-subtitle">{{ tutorialVideoTitle }}</text>
+            </view>
           </view>
 
           <scroll-view scroll-y class="visual-session__tutorial-text-panel">
+            <text class="visual-session__tutorial-text-title">动作介绍</text>
+            <view class="visual-session__tutorial-text-accent" aria-hidden="true" />
             <text v-if="tutorialText" class="visual-session__tutorial-text">{{ tutorialText }}</text>
             <text v-else class="visual-session__tutorial-text visual-session__tutorial-text--empty">暂无文字讲解</text>
-
-            <view v-if="tutorialRecords.length > 0" class="visual-session__tutorial-records">
-              <text class="visual-session__tutorial-records-title">参考训记</text>
-              <view
-                v-for="record in tutorialRecords"
-                :key="record.id"
-                class="visual-session__tutorial-record"
-              >
-                <text class="visual-session__tutorial-record-score">{{ record.score !== null ? record.score + '分' : '待评分' }}</text>
-                <text class="visual-session__tutorial-record-date">{{ record.created_at.slice(0, 10) }}</text>
-                <text v-if="record.comment" class="visual-session__tutorial-record-comment">{{ record.comment }}</text>
-              </view>
-            </view>
           </scroll-view>
 
           <view class="visual-session__tutorial-actions">
             <button
-              v-if="tutorialIndex > 0"
               class="visual-session__tutorial-btn visual-session__tutorial-btn--secondary"
               type="button"
+              :disabled="tutorialIndex === 0"
               @click="emit('prevTutorial')"
             >上一个动作</button>
             <button
-              v-if="!tutorialIsLast"
               class="visual-session__tutorial-btn visual-session__tutorial-btn--secondary"
               type="button"
+              :disabled="tutorialIsLast"
               @click="emit('nextTutorial')"
             >下一个动作</button>
-            <button
-              class="visual-session__tutorial-btn visual-session__tutorial-btn--primary"
-              type="button"
-              @click="emit('startPractice')"
-            >开始跟练</button>
           </view>
 
           <button
-            v-if="tutorialIndex === 0"
             class="visual-session__tutorial-skip"
             type="button"
             @click="emit('skipTutorial')"
@@ -538,11 +535,10 @@ defineExpose({ startRecord, stopRecord })
         class="visual-session__demonstration-stage"
         :style="comparisonMediaStyle"
         :class="{
-          'visual-session__media-stage--primary': demonstrationPrimary,
-          'visual-session__media-stage--secondary': !comparisonMode && showingCamera
+          'visual-session__media-stage--primary': true
         }"
       >
-        <cover-view v-if="comparisonMode || showingCamera" class="visual-session__media-label">
+        <cover-view v-if="comparisonMode" class="visual-session__media-label">
           动作演示
         </cover-view>
         <view v-if="videoLoading" class="visual-session__video-state">
@@ -568,7 +564,7 @@ defineExpose({ startRecord, stopRecord })
           :controls="false"
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
-          :object-fit="comparisonMode ? 'contain' : 'cover'"
+          object-fit="cover"
           @timeupdate="emit('videoTimeUpdate', wrapVideoEvent($event))"
           @play="emit('videoPlay', wrapVideoEvent($event))"
           @pause="emit('videoPause', wrapVideoEvent($event))"
@@ -577,22 +573,16 @@ defineExpose({ startRecord, stopRecord })
           @ended="emit('videoEnded', wrapVideoEvent($event))"
           @error="emit('videoError', wrapVideoEvent($event))"
         />
-        <cover-view
-          v-if="!comparisonMode && showingCamera"
-          class="visual-session__secondary-switch"
-          aria-label="将动作演示切换到主画面"
-          @tap.stop="selectMedia('demonstration')"
-        ></cover-view>
       </view>
       <view
         class="visual-session__camera-stage"
         :style="comparisonMediaStyle"
         :class="{
-          'visual-session__media-stage--primary': comparisonMode || showingCamera,
-          'visual-session__media-stage--secondary': !comparisonMode && !showingCamera
+          'visual-session__media-stage--primary': comparisonMode,
+          'visual-session__media-stage--secondary': !comparisonMode
         }"
       >
-        <cover-view v-if="comparisonMode || !showingCamera" class="visual-session__media-label">
+        <cover-view v-if="comparisonMode" class="visual-session__media-label">
           我的画面
         </cover-view>
         <PoseDetectionView
@@ -610,7 +600,7 @@ defineExpose({ startRecord, stopRecord })
           <uni-icons type="camera-filled" size="28" color="#fffaf4" />
           <text>{{ cameraPlaceholderLabel }}</text>
         </view>
-        <cover-view v-if="recognitionEnabled && poseMountReady" class="visual-session__pose-badge">
+        <cover-view v-if="comparisonMode && recognitionEnabled && poseMountReady" class="visual-session__pose-badge">
           {{ poseStatusLabel }}
         </cover-view>
         <cover-view
@@ -625,12 +615,6 @@ defineExpose({ startRecord, stopRecord })
           <cover-view class="visual-session__guide-leg visual-session__guide-leg--right"></cover-view>
           <cover-view class="visual-session__guide-label">站在框内</cover-view>
         </cover-view>
-        <cover-view
-          v-if="!comparisonMode && !showingCamera"
-          class="visual-session__secondary-switch"
-          aria-label="将我的画面切换到主画面"
-          @tap.stop="selectMedia('camera')"
-        ></cover-view>
       </view>
       <cover-view
         v-if="demonstrationPrimary && !comparisonMode && !videoLoading && !videoError && videoUrl && phaseKind === 'preview' && trainingStarted && startCountdown === 0 && !phaseCueCount"
@@ -641,7 +625,7 @@ defineExpose({ startRecord, stopRecord })
         <cover-view class="visual-session__phase-remaining">{{ phaseRemainingSeconds }} 秒</cover-view>
       </cover-view>
       <cover-view
-        v-if="phaseKind === 'demonstration' && !comparisonMode && demonstrationPrimary && !videoLoading && !videoError && videoUrl"
+        v-if="trainingStarted && !comparisonMode && demonstrationPrimary && (phaseSlot === 'pretraining-countdown' || phaseSlot === 'pretraining')"
         class="visual-session__demonstration-label"
       >
         <cover-view class="visual-session__demonstration-kicker">预训练示范</cover-view>
@@ -650,24 +634,13 @@ defineExpose({ startRecord, stopRecord })
       <cover-view
         v-if="showStartAction && !comparisonMode"
         class="visual-session__start-overlay"
+        :class="{ 'visual-session__start-overlay--ready': !startActionDisabled && recognitionStatus !== 'failed' }"
+        @tap="handlePortraitStart"
       >
-        <cover-view
-          v-if="!startActionDisabled"
-          class="visual-session__start-button"
-          @tap="emit('startTraining')"
-        >
-          {{ recognitionStatus === 'failed' ? '相机未就绪' : '开始训练' }}
-        </cover-view>
-        <cover-view
-          v-else
-          class="visual-session__start-button visual-session__start-button--disabled"
-        >
-          {{ recognitionStatus === 'failed' ? '相机未就绪' : '开始训练' }}
-        </cover-view>
         <cover-view class="visual-session__start-hint">
           {{ recognitionStatus === 'failed'
             ? '相机未就绪，请退出训练后重试'
-            : startActionDisabled ? '正在准备摄像头…' : '开始后按后台模块配置进入训练' }}
+            : startActionDisabled ? '正在准备摄像头…' : '摄像头已就绪，轻触画面开始训练' }}
         </cover-view>
       </cover-view>
       <cover-view
@@ -742,24 +715,10 @@ defineExpose({ startRecord, stopRecord })
           v-if="!videoLoading && !videoError && videoUrl && workoutTimelineReady"
           :state="workoutState"
         />
-        <view class="visual-session__feedback">
-          <text class="visual-session__hint">{{ completionHint }}</text>
-        </view>
       </view>
       <view v-if="!comparisonMode" class="visual-session__secondary-space" aria-hidden="true" />
     </view>
 
-    <view v-if="!comparisonMode && !tutorialMode" class="visual-session__actions">
-      <button
-        class="visual-session__secondary"
-        aria-label="退出训练"
-        hover-class="visual-session__secondary--pressed"
-        @click="emit('interrupt')"
-      >
-        <uni-icons type="closeempty" size="20" color="#FF8B8B" />
-        <text>退出训练</text>
-      </button>
-    </view>
   </view>
 </template>
 
@@ -768,10 +727,11 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__tutorial {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
-  padding: 24rpx;
-  background: #fcf7f0;
+  overflow: hidden;
+  padding: 0 32rpx;
+  background: transparent;
   box-sizing: border-box;
 }
 
@@ -785,10 +745,13 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__tutorial-media {
   position: relative;
   width: 100%;
+  height: 514rpx;
   min-height: 0;
   flex: 0 0 auto;
   overflow: hidden;
-  border-radius: 16rpx;
+  aspect-ratio: 4 / 3;
+  border-radius: 34rpx;
+  box-shadow: 0 12rpx 30rpx rgba(47, 39, 31, 0.08);
 }
 
 .visual-session__tutorial-content {
@@ -799,28 +762,82 @@ defineExpose({ startRecord, stopRecord })
 }
 
 .visual-session__tutorial-header {
-  margin-bottom: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin: 0 8rpx 18rpx;
 }
 
-.visual-session__tutorial-title {
-  font-size: 36rpx;
-  font-weight: 700;
+.visual-session__tutorial-progress {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 18rpx;
+}
+
+.visual-session__tutorial-dot {
+  width: 15rpx;
+  height: 15rpx;
+  flex: none;
+  border-radius: 9999px;
+  background: #ded5cb;
+}
+
+.visual-session__tutorial-dot--active {
+  background: #ff6f62;
+}
+
+.visual-session__tutorial-heading-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 26rpx;
+}
+
+.visual-session__tutorial-count {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
   color: #20344f;
-  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.visual-session__tutorial-count-current {
+  color: #ff6f62;
+  font-size: 70rpx;
+  font-weight: 900;
+  line-height: 0.92;
+}
+
+.visual-session__tutorial-count-total {
+  margin-left: 6rpx;
+  color: #20344f;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.visual-session__tutorial-divider {
+  width: 2rpx;
+  height: 54rpx;
+  flex: none;
+  background: rgba(32, 48, 66, 0.5);
 }
 
 .visual-session__tutorial-subtitle {
-  font-size: 28rpx;
-  color: #536176;
-  margin-top: 8rpx;
   display: block;
+  min-width: 0;
+  color: #20344f;
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .visual-session__tutorial-loading {
   display: flex;
   width: 100%;
   align-items: center;
   justify-content: center;
-  height: 380rpx;
+  height: 514rpx;
   gap: 12rpx;
   color: #536176;
   font-size: 28rpx;
@@ -828,9 +845,9 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__tutorial-video {
   display: block;
   width: 100%;
-  height: 380rpx;
-  background: #17263b;
-  border-radius: 16rpx;
+  height: 514rpx;
+  background: #edf1f4;
+  border-radius: 34rpx;
 }
 
 .visual-session__tutorial-no-video {
@@ -838,9 +855,9 @@ defineExpose({ startRecord, stopRecord })
   width: 100%;
   align-items: center;
   justify-content: center;
-  height: 380rpx;
+  height: 514rpx;
   background: #f0ece6;
-  border-radius: 16rpx;
+  border-radius: 34rpx;
   color: #82786d;
   font-size: 28rpx;
 }
@@ -848,18 +865,34 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__tutorial-text-panel {
   min-height: 0;
   flex: 1;
-  margin-top: 16rpx;
-  padding: 20rpx;
-  background: #fffaf4;
-  border-radius: 12rpx;
+  max-height: 460rpx;
+  margin-top: 36rpx;
+  padding: 0 16rpx;
+  background: transparent;
+}
+
+.visual-session__tutorial-text-title {
+  display: block;
+  color: #20344f;
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.visual-session__tutorial-text-accent {
+  width: 68rpx;
+  height: 5rpx;
+  margin: 18rpx 0 26rpx;
+  border-radius: 9999px;
+  background: #ff6f62;
 }
 
 .visual-session__tutorial-text {
-  font-size: 28rpx;
-  line-height: 1.8;
-  color: #3a4a5a;
-  white-space: pre-wrap;
   display: block;
+  color: #20344f;
+  font-size: 27rpx;
+  line-height: 1.72;
+  white-space: pre-wrap;
 }
 .visual-session__tutorial-text--empty {
   color: #82786d;
@@ -902,35 +935,38 @@ defineExpose({ startRecord, stopRecord })
 }
 .visual-session__tutorial-actions {
   display: flex;
-  gap: 16rpx;
+  gap: 30rpx;
   margin-top: 16rpx;
-  padding: 0 8rpx;
+  padding: 0 10rpx;
 }
 .visual-session__tutorial-btn {
   flex: 1;
   height: 88rpx;
   line-height: 88rpx;
   text-align: center;
-  font-size: 30rpx;
-  border-radius: 12rpx;
-  border: none;
-}
-.visual-session__tutorial-btn--primary {
-  background: #4a8a6a;
-  color: #fffaf4;
-  font-weight: 600;
+  font-size: 28rpx;
+  font-weight: 800;
+  border-radius: 24rpx;
 }
 .visual-session__tutorial-btn--secondary {
-  background: #e8e4df;
-  color: #536176;
+  border: 2rpx solid #ff8b7b;
+  background: rgba(255, 250, 244, 0.68);
+  color: #ff6f62;
+}
+.visual-session__tutorial-btn--secondary:disabled {
+  border-color: rgba(113, 128, 150, 0.2);
+  color: rgba(113, 128, 150, 0.46);
 }
 .visual-session__tutorial-skip {
   border: 0;
   background: transparent;
   text-align: center;
-  padding: 16rpx;
-  font-size: 26rpx;
-  color: #82786d;
+  padding: 12rpx 16rpx 0;
+  font-size: 24rpx;
+  color: #9b896e;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 10rpx;
 }
 
 .visual-session__tutorial-btn::after,
@@ -965,7 +1001,7 @@ defineExpose({ startRecord, stopRecord })
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 3;
   border-radius: 12px;
   background: #17263b;
 }
@@ -998,8 +1034,35 @@ defineExpose({ startRecord, stopRecord })
   white-space: nowrap;
 }
 
+.visual-session__tutorial--comparison .visual-session__tutorial-progress {
+  gap: 5px;
+}
+
+.visual-session__tutorial--comparison .visual-session__tutorial-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.visual-session__tutorial--comparison .visual-session__tutorial-heading-row {
+  gap: 8px;
+}
+
+.visual-session__tutorial--comparison .visual-session__tutorial-count-current {
+  font-size: 24px;
+}
+
+.visual-session__tutorial--comparison .visual-session__tutorial-count-total {
+  margin-left: 2px;
+  font-size: 12px;
+}
+
+.visual-session__tutorial--comparison .visual-session__tutorial-divider {
+  width: 1px;
+  height: 24px;
+}
+
 .visual-session__tutorial--comparison .visual-session__tutorial-subtitle {
-  margin-top: 4px;
+  margin-top: 0;
   overflow: hidden;
   font-size: 12px;
   line-height: 1.25;
@@ -1013,7 +1076,7 @@ defineExpose({ startRecord, stopRecord })
   margin-top: 0;
   padding: 12px;
   border-radius: 12px;
-  background: #f5eee6;
+  background: rgba(255, 250, 244, 0.9);
 }
 
 .visual-session__tutorial--comparison .visual-session__tutorial-text {
@@ -1068,10 +1131,10 @@ defineExpose({ startRecord, stopRecord })
   height: auto;
   min-height: calc(100vh - 24rpx);
   flex-direction: column;
-  gap: 30rpx;
+  gap: 26rpx;
   box-sizing: border-box;
-  padding: 28rpx 24rpx 40rpx;
-  background: #fcf7f0;
+  padding: 28rpx 28rpx 40rpx;
+  background: transparent;
 }
 
 .visual-session__actions,
@@ -1119,7 +1182,7 @@ defineExpose({ startRecord, stopRecord })
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
-  border-radius: 16rpx;
+  border-radius: 30rpx;
   background: #20344f;
   transition: opacity 180ms ease-out;
 }
@@ -1138,10 +1201,10 @@ defineExpose({ startRecord, stopRecord })
   top: calc(100% + 30rpx);
   right: 0;
   z-index: 5;
-  width: 200rpx;
-  height: 280rpx;
-  border: 2rpx solid rgba(32, 52, 79, 0.18);
-  box-shadow: 0 10rpx 24rpx rgba(47, 39, 31, 0.16);
+  width: 330rpx;
+  height: 430rpx;
+  border: 2rpx solid #20344f;
+  box-shadow: 0 10rpx 24rpx rgba(47, 39, 31, 0.1);
 }
 
 .visual-session__video,
@@ -1183,26 +1246,6 @@ defineExpose({ startRecord, stopRecord })
   padding: 8rpx 12rpx;
 }
 
-.visual-session__secondary-switch {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 16rpx;
-  background: transparent;
-  padding: 0;
-}
-
-.visual-session__secondary-switch::after {
-  border: none;
-}
-
-.visual-session__secondary-switch--pressed {
-  background: rgba(255, 250, 244, 0.12);
-}
-
 .visual-session__video-state {
   display: flex;
   align-items: center;
@@ -1225,8 +1268,8 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__demonstration-label {
   position: absolute;
   left: 20rpx;
-  bottom: 100rpx;
-  z-index: 6;
+  bottom: 20rpx;
+  z-index: 8;
   display: flex;
   align-items: flex-start;
   flex-direction: column;
@@ -1290,6 +1333,8 @@ defineExpose({ startRecord, stopRecord })
   align-items: center;
   justify-content: center;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: 30rpx;
   background: rgba(15, 27, 43, 0.3);
   color: #fffaf4;
   text-align: center;
@@ -1311,11 +1356,6 @@ defineExpose({ startRecord, stopRecord })
   line-height: 1;
 }
 
-.visual-session__start-button {
-  min-height: 88rpx;
-  padding: 24rpx 42rpx;
-}
-
 .visual-session__start-button::after,
 .visual-session__landscape-start::after {
   border: none;
@@ -1327,10 +1367,10 @@ defineExpose({ startRecord, stopRecord })
 }
 
 .visual-session__start-hint {
-  margin-top: 18rpx;
   color: rgba(255, 250, 244, 0.86);
-  font-size: 21rpx;
-  font-weight: 700;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .visual-session__start-countdown {
@@ -1432,9 +1472,9 @@ defineExpose({ startRecord, stopRecord })
 
 .visual-session__lower-grid {
   display: flex;
-  height: 280rpx;
-  min-height: 280rpx;
-  flex: 0 0 280rpx;
+  height: 430rpx;
+  min-height: 430rpx;
+  flex: 0 0 430rpx;
   align-items: stretch;
   gap: 24rpx;
 }
@@ -1442,23 +1482,31 @@ defineExpose({ startRecord, stopRecord })
 .visual-session__info-panel {
   display: flex;
   min-width: 0;
-  height: 280rpx;
+  height: 430rpx;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   box-sizing: border-box;
-  border: 2rpx solid rgba(32, 52, 79, 0.12);
-  border-radius: 16rpx;
-  background: #f5eee6;
-  padding: 26rpx 28rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.42);
+  border-radius: 30rpx;
+  background: rgba(255, 250, 244, 0.94);
+  padding: 24rpx 26rpx;
+}
+
+.visual-session--tutorial {
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .visual-session__secondary-space {
-  width: 200rpx;
-  height: 280rpx;
+  width: 330rpx;
+  height: 430rpx;
   min-height: 0;
-  flex: 0 0 200rpx;
+  flex: 0 0 330rpx;
 }
 
 .visual-session__pose-view {

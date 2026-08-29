@@ -37,7 +37,7 @@ function cyclePlaybackRate() {
       aria-label="重放演示"
       @tap.stop="emit('replay')"
     >
-      <text class="demonstration-video-controls__replay-icon" aria-hidden="true">↺</text>
+      <cover-view class="demonstration-video-controls__replay-icon" aria-hidden="true">↺</cover-view>
     </cover-view>
     <cover-view
       class="demonstration-video-controls__button demonstration-video-controls__button--speed"
@@ -55,18 +55,19 @@ function cyclePlaybackRate() {
   top: 16rpx;
   right: 16rpx;
   z-index: 9;
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
+  width: 128rpx;
+  height: 60rpx;
 }
 
 .demonstration-video-controls__button {
+  position: absolute;
+  top: 2rpx;
   display: flex;
   width: 56rpx;
   height: 56rpx;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box;
   border: 1rpx solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.42);
@@ -78,23 +79,41 @@ function cyclePlaybackRate() {
   white-space: nowrap;
 }
 
+.demonstration-video-controls__button--replay {
+  left: 0;
+}
+
+.demonstration-video-controls__button--speed {
+  right: 0;
+  display: block;
+}
+
 .demonstration-video-controls__replay-icon {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
   font-size: 34rpx;
   font-weight: 400;
   line-height: 1;
+  text-align: center;
 }
 
 .demonstration-video-controls__button--speed {
   font-size: 19rpx;
+  line-height: 56rpx;
 }
 
 .demonstration-video-controls--compact {
   right: 6px;
   top: 6px;
-  gap: 6px;
+  width: 70px;
+  height: 32px;
 }
 
 .demonstration-video-controls--compact .demonstration-video-controls__button {
+  top: 0;
   width: 32px;
   height: 32px;
   font-size: 11px;
@@ -102,5 +121,10 @@ function cyclePlaybackRate() {
 
 .demonstration-video-controls--compact .demonstration-video-controls__replay-icon {
   font-size: 20px;
+  line-height: 1;
+}
+
+.demonstration-video-controls--compact .demonstration-video-controls__button--speed {
+  line-height: 32px;
 }
 </style>

@@ -163,7 +163,7 @@ function goHome() {
 </script>
 
 <template>
-  <UniTrainingPageShell :show-dock="false">
+  <UniTrainingPageShell :show-dock="false" page-title="简短问卷" show-back>
     <view class="short-questionnaire-page">
       <ShortQuestionnaireForm
         :submitting="isSubmitting"

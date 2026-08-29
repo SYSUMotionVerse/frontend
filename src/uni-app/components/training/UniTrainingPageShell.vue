@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import FloatingDock from '../navigation/FloatingDock.vue'
+import ImmersiveNavigationBar from '../layout/ImmersiveNavigationBar.vue'
 import {
   ensureProtectedStudentAccess,
   type ProtectedAccessMode
@@ -12,12 +13,20 @@ const props = withDefaults(defineProps<{
   dockTab?: DockTab
   showDock?: boolean
   fitViewport?: boolean
+  showDecorations?: boolean
   accessMode?: ProtectedAccessMode
+  pageTitle?: string
+  showBack?: boolean
+  showNavigation?: boolean
 }>(), {
   dockTab: 'playground',
   showDock: true,
   fitViewport: false,
-  accessMode: 'browse'
+  showDecorations: false,
+  accessMode: 'browse',
+  pageTitle: '',
+  showBack: false,
+  showNavigation: true
 })
 
 onMounted(() => {
@@ -33,8 +42,16 @@ onMounted(() => {
       'training-shell--fit-viewport': props.fitViewport
     }"
   >
-    <view v-if="props.showDock && !props.fitViewport" class="training-shell__halo training-shell__halo--coral" />
-    <view v-if="props.showDock && !props.fitViewport" class="training-shell__halo training-shell__halo--gold" />
+    <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--coral" />
+    <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--gold" />
+    <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--teal" />
+    <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--coral-soft" />
+    <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--gold-soft" />
+    <ImmersiveNavigationBar
+      v-if="props.showNavigation && props.pageTitle"
+      :title="props.pageTitle"
+      :show-back="props.showBack"
+    />
     <view
       class="training-shell__inner"
       :class="{
@@ -58,14 +75,17 @@ onMounted(() => {
 <style scoped>
 .training-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  box-sizing: border-box;
   overflow: hidden;
   background: #FCF7F0;
-  padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));
+  padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));
 }
 
 .training-shell--no-dock {
-  padding: 24rpx 0 0;
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -79,25 +99,51 @@ onMounted(() => {
 }
 
 .training-shell__halo {
-  position: absolute;
+  position: fixed;
+  z-index: 0;
   border-radius: 9999px;
   pointer-events: none;
 }
 
 .training-shell__halo--coral {
-  top: -88rpx;
-  right: -36rpx;
-  width: 240rpx;
-  height: 240rpx;
+  top: -102rpx;
+  right: -72rpx;
+  width: 300rpx;
+  height: 300rpx;
   background: rgba(255, 139, 139, 0.18);
 }
 
 .training-shell__halo--gold {
-  top: 320rpx;
-  left: -72rpx;
-  width: 180rpx;
-  height: 180rpx;
+  top: 404rpx;
+  left: -92rpx;
+  width: 210rpx;
+  height: 210rpx;
   background: rgba(255, 211, 132, 0.2);
+}
+
+.training-shell__halo--teal {
+  top: 720rpx;
+  right: -112rpx;
+  width: 184rpx;
+  height: 184rpx;
+  background: rgba(137, 207, 255, 0.1);
+}
+
+.training-shell__halo--coral-soft {
+  top: 66vh;
+  left: -54rpx;
+  width: 116rpx;
+  height: 116rpx;
+  background: rgba(255, 139, 139, 0.07);
+}
+
+.training-shell__halo--gold-soft {
+  top: auto;
+  right: -44rpx;
+  bottom: calc(190rpx + env(safe-area-inset-bottom));
+  width: 104rpx;
+  height: 104rpx;
+  background: rgba(255, 211, 132, 0.09);
 }
 
 .training-shell__inner {
@@ -105,18 +151,22 @@ onMounted(() => {
   z-index: 1;
   margin: 0 auto;
   width: min(880px, 100%);
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 36rpx;
+  padding-top: 0;
 }
 
 .training-shell__inner--fit-viewport {
-  height: 100%;
+  height: auto;
   gap: 0;
+  padding-top: 0;
 }
 
 .training-shell__inner--no-dock {
-  min-height: calc(100vh - 24rpx);
+  min-height: 0;
   height: auto;
   max-width: none;
   gap: 0;
@@ -124,7 +174,7 @@ onMounted(() => {
 }
 
 .training-shell__inner--no-dock.training-shell__inner--fit-viewport {
-  height: 100%;
+  height: auto;
   min-height: 0;
 }
 

@@ -10,8 +10,8 @@ describe('UniTrainingPageShell no-dock layout', () => {
     )
 
     expect(source).toContain("'training-shell--no-dock': !props.showDock")
-    expect(source).toMatch(/\.training-shell--no-dock\s*\{[\s\S]*padding:\s*24rpx 0 0;/)
-    expect(source).toMatch(/\.training-shell__inner--no-dock\s*\{[\s\S]*height:\s*calc\(100vh - 24rpx\);/)
+    expect(source).toMatch(/\.training-shell--no-dock\s*\{[\s\S]*padding:\s*0;/)
+    expect(source).toMatch(/\.training-shell__inner--no-dock\s*\{[\s\S]*min-height:\s*0;/)
   })
 
   it('removes the remaining top inset when a no-dock page explicitly fills the viewport', () => {
@@ -35,9 +35,12 @@ describe('UniTrainingPageShell no-dock layout', () => {
     )
 
     expect(source).toContain('background: #FCF7F0;')
-    expect(source).toContain('v-if="props.showDock && !props.fitViewport"')
+    expect(source).toContain('v-if="props.showDock || props.showDecorations"')
+    expect(source).toContain('showDecorations?: boolean')
     expect(source).toContain('training-shell__halo--coral')
     expect(source).toContain('training-shell__halo--gold')
-    expect(source).toContain('padding: 56rpx 32rpx calc(216rpx + env(safe-area-inset-bottom));')
+    expect(source).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
+    expect(source).toContain('ImmersiveNavigationBar')
+    expect(source).toContain('training-shell__halo--teal')
   })
 })

@@ -101,14 +101,16 @@ onShareAppMessage((options) => {
 </script>
 
 <template>
-  <UniGrowthPageShell dock-tab="growth">
+  <UniGrowthPageShell dock-tab="growth" page-title="成长记录">
     <view class="growth-page">
       <TrainingHomeHeader
         :display-name="displayName"
         reminder-label="成长记录持续更新"
         :unread-count="stationNotifications.unreadCount.value"
         :show-headline="false"
-        mini-tag="成长中心"
+        :show-status="false"
+        mini-tag="你的成长在持续记录"
+        mini-tag-tone="muted"
         variant="home"
         @open-notifications="stationNotifications.openList"
       />
@@ -120,13 +122,7 @@ onShareAppMessage((options) => {
       />
 
       <view class="growth-page__overview">
-        <view class="growth-page__overview-heading">
-          <view class="growth-page__overview-copy">
-            <text class="growth-page__overview-title">看见你的积累。</text>
-            <text class="growth-page__overview-subtitle">训练、达标和评估，都在这里留下记录。</text>
-          </view>
-
-        </view>
+        <text class="growth-page__group-title">本周概览</text>
 
         <view class="growth-page__overview-stats" aria-label="本周成长摘要">
           <view
@@ -149,8 +145,7 @@ onShareAppMessage((options) => {
       <view class="growth-page__section growth-page__section-shell growth-page__section-shell--adherence">
         <view class="growth-page__section-head">
           <view class="growth-page__section-copy">
-            <text class="growth-page__section-title">最近的坚持记录</text>
-            <text class="growth-page__section-description">每个圆点代表一天。</text>
+            <text class="growth-page__section-title">本周打卡记录</text>
           </view>
           <navigator class="growth-page__link" url="/pages/growth/adherence">查看详情</navigator>
         </view>
@@ -204,12 +199,12 @@ onShareAppMessage((options) => {
 
 .growth-page {
   --growth-space-1: 14rpx;
-  --growth-space-2: 28rpx;
-  --growth-space-3: 40rpx;
-  --growth-space-4: 56rpx;
+  --growth-space-2: 18rpx;
+  --growth-space-3: 22rpx;
+  --growth-space-4: 26rpx;
   flex-direction: column;
   gap: var(--growth-space-4);
-  padding-bottom: 112rpx;
+  padding-bottom: 12rpx;
 }
 
 .growth-page__overview {
@@ -217,17 +212,18 @@ onShareAppMessage((options) => {
   gap: var(--growth-space-3);
 }
 
-.growth-page__overview-heading {
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--growth-space-2);
-}
-
 .growth-page__overview-copy,
 .growth-page__section-copy,
 .growth-page__exploration-copy {
   flex-direction: column;
   gap: var(--growth-space-1);
+}
+
+.growth-page__group-title {
+  color: #203042;
+  font-size: 26rpx;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .growth-page__eyebrow {
@@ -254,11 +250,7 @@ onShareAppMessage((options) => {
 }
 
 .growth-page__overview-stats {
-  gap: 0;
-  overflow: hidden;
-  border: 2rpx solid rgba(255, 211, 132, 0.34);
-  border-radius: 44rpx;
-  background: #fffaf4;
+  gap: 14rpx;
 }
 
 .growth-page__overview-stat {
@@ -266,11 +258,15 @@ onShareAppMessage((options) => {
   flex: 1;
   flex-direction: column;
   gap: 8rpx;
-  padding: 28rpx 26rpx;
+  padding: 22rpx 20rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.24);
+  border-radius: 28rpx;
+  background: rgba(255, 250, 244, 0.94);
+  box-shadow: 0 8rpx 18rpx rgba(71, 56, 39, 0.035);
 }
 
 .growth-page__overview-stat + .growth-page__overview-stat {
-  border-left: 1rpx solid rgba(224, 111, 120, 0.2);
+  border-left-color: rgba(255, 211, 132, 0.24);
 }
 
 .growth-page__overview-stat-head {
@@ -300,19 +296,19 @@ onShareAppMessage((options) => {
 
 .growth-page__overview-stat-label {
   color: #718096;
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 700;
 }
 
 .growth-page__overview-stat-value {
   color: #203042;
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 900;
 }
 
 .growth-page__overview-stat-description {
   color: #8a97a8;
-  font-size: 20rpx;
+  font-size: 17rpx;
   line-height: 1.4;
 }
 
@@ -322,9 +318,9 @@ onShareAppMessage((options) => {
 }
 
 .growth-page__section-shell {
-  padding: 32rpx;
+  padding: 24rpx;
   border: 2rpx solid rgba(255, 211, 132, 0.3);
-  border-radius: 44rpx;
+  border-radius: 30rpx;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
@@ -348,7 +344,7 @@ onShareAppMessage((options) => {
   display: block;
   margin: 0;
   color: #1a202c;
-  font-size: 30rpx;
+  font-size: 26rpx;
   font-weight: 900;
 }
 
@@ -363,15 +359,15 @@ onShareAppMessage((options) => {
 
 .growth-page__link {
   display: inline-flex;
-  min-height: 88rpx;
+  min-height: 48rpx;
   align-items: center;
   justify-content: center;
   padding: 10rpx 16rpx;
   border: none;
   border-radius: 9999px;
-  background: rgba(199, 107, 91, 0.08);
-  color: #a64f42;
-  font-size: 24rpx;
+  background: transparent;
+  color: #ff6f62;
+  font-size: 21rpx;
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: normal;
@@ -389,14 +385,14 @@ onShareAppMessage((options) => {
 
 .growth-page__exploration-list {
   flex-direction: column;
-  gap: 12rpx;
+  gap: 10rpx;
 }
 
 .growth-page__exploration-row {
   align-items: center;
-  gap: 20rpx;
-  padding: 22rpx 20rpx;
-  border-radius: 28rpx;
+  gap: 18rpx;
+  padding: 18rpx;
+  border-radius: 24rpx;
   background: #fcf7f0;
   transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
@@ -411,9 +407,9 @@ onShareAppMessage((options) => {
 }
 
 .growth-page__exploration-icon {
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 20rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 18rpx;
   transition: transform 160ms ease-out;
 }
 
@@ -429,13 +425,13 @@ onShareAppMessage((options) => {
 
 .growth-page__exploration-title {
   color: #203042;
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 800;
 }
 
 .growth-page__exploration-meta {
   color: #c76b5b;
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 700;
 }
 

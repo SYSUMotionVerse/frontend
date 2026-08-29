@@ -174,14 +174,16 @@ async function chooseMode(modality: TrainingModality) {
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="playground">
+  <UniTrainingPageShell dock-tab="playground" page-title="选择训练">
     <view class="select-page">
       <TrainingHomeHeader
         :display-name="displayName"
         :reminder-label="reminderLabel"
         :unread-count="stationNotifications.unreadCount.value"
         :show-headline="false"
-        mini-tag="训练游乐场"
+        :show-status="false"
+        mini-tag="选择今天要完成的训练"
+        mini-tag-tone="muted"
         variant="home"
         @open-notifications="stationNotifications.openList"
       />
@@ -203,7 +205,8 @@ async function chooseMode(modality: TrainingModality) {
           :key="mode.modality"
           :class="[
             'select-page__launch-action',
-            `select-page__launch-action--${mode.status}`
+            `select-page__launch-action--${mode.status}`,
+            `select-page__launch-action--${mode.tone}`
           ]"
           form-type="button"
           type="button"
@@ -244,6 +247,7 @@ async function chooseMode(modality: TrainingModality) {
       </view>
 
       <view class="select-page__streak-note">
+        <uni-icons type="info-filled" size="14" color="#9aa6b5" />
         <text>完成任一训练后，将更新今日达标状态。</text>
       </view>
     </view>
@@ -255,21 +259,22 @@ async function chooseMode(modality: TrainingModality) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 40rpx;
-  padding-bottom: 48rpx;
+  gap: 30rpx;
+  min-height: 100%;
+  padding-bottom: 0;
 }
 
 .select-page__hero {
   display: flex;
   flex-direction: column;
-  gap: 14rpx;
-  padding: 4rpx 8rpx 0;
+  gap: 10rpx;
+  padding: 6rpx 10rpx 0;
 }
 
 .select-page__eyebrow {
   display: block;
   color: #c76b5b;
-  font-size: 20rpx;
+  font-size: 24rpx;
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -277,36 +282,31 @@ async function chooseMode(modality: TrainingModality) {
 
 .select-page__hero-copy {
   display: block;
-  max-width: 500rpx;
-  color: #203042;
-  font-size: 40rpx;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
+  max-width: 640rpx;
+  color: #718096;
+  font-size: 21rpx;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
 .select-page__launch-list {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
-  padding: 12rpx;
-  border: 2rpx solid rgba(255, 211, 132, 0.3);
-  border-radius: 44rpx;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
+  gap: 18rpx;
 }
 
 .select-page__launch-action {
   display: flex;
   width: 100%;
-  min-height: 124rpx;
+  min-height: 164rpx;
   align-items: center;
-  gap: 20rpx;
+  gap: 24rpx;
   box-sizing: border-box;
-  padding: 22rpx 20rpx;
-  border: none;
+  padding: 26rpx 28rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.22);
   border-radius: 28rpx;
-  background: #fcf7f0;
+  background: rgba(255, 250, 244, 0.9);
   color: #203042;
   text-align: left;
   transition: background-color 160ms ease-out, transform 160ms ease-out, opacity 160ms ease-out;
@@ -317,7 +317,18 @@ async function chooseMode(modality: TrainingModality) {
 }
 
 .select-page__launch-action--recommended {
-  background: #ffe8e5;
+  border-color: rgba(255, 139, 139, 0.22);
+  background: rgba(255, 226, 225, 0.78);
+}
+
+.select-page__launch-action--teal:not(.select-page__launch-action--recommended) {
+  border-color: rgba(120, 184, 220, 0.12);
+  background: rgba(243, 249, 252, 0.9);
+}
+
+.select-page__launch-action--gold:not(.select-page__launch-action--recommended) {
+  border-color: rgba(255, 211, 132, 0.3);
+  background: rgba(255, 250, 239, 0.92);
 }
 
 .select-page__launch-action:active {
@@ -332,8 +343,8 @@ async function chooseMode(modality: TrainingModality) {
 
 .select-page__launch-mark {
   display: flex;
-  width: 60rpx;
-  height: 60rpx;
+  width: 70rpx;
+  height: 70rpx;
   flex: none;
   align-items: center;
   justify-content: center;
@@ -353,13 +364,13 @@ async function chooseMode(modality: TrainingModality) {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 7rpx;
   box-sizing: border-box;
 }
 
 .select-page__launch-title {
   color: #203042;
-  font-size: 26rpx;
+  font-size: 28rpx;
   font-weight: 800;
   line-height: 1.24;
 }
@@ -408,7 +419,7 @@ async function chooseMode(modality: TrainingModality) {
   justify-content: center;
   gap: 2rpx;
   color: #8a97a8;
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: 800;
   line-height: 1.2;
   white-space: nowrap;
@@ -419,8 +430,10 @@ async function chooseMode(modality: TrainingModality) {
 }
 
 .select-page__streak-note {
-  display: block;
-  padding: 0 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 12rpx 8rpx 0;
   color: #718096;
   font-size: 21rpx;
   font-weight: 600;

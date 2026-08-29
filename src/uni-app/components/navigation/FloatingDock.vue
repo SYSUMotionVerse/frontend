@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+import { computed, onMounted, shallowRef } from 'vue'
 
 type DockTab = 'home' | 'playground' | 'growth'
 type DockIcon = 'home-filled' | 'fire-filled' | 'medal-filled'
@@ -7,6 +8,42 @@ type DockIcon = 'home-filled' | 'fire-filled' | 'medal-filled'
 const props = defineProps<{
   activeTab: DockTab
 }>()
+
+const bottomGapPx = shallowRef(42)
+const dockStyle = computed(() => ({
+  '--floating-dock-bottom-gap': `${bottomGapPx.value}px`
+}))
+
+onMounted(() => {
+  if (typeof uni === 'undefined') {
+    return
+  }
+
+  const windowInfo = typeof uni.getWindowInfo === 'function'
+    ? uni.getWindowInfo()
+    : typeof uni.getSystemInfoSync === 'function'
+      ? uni.getSystemInfoSync()
+      : undefined
+  if (!windowInfo) return
+
+  const safeAreaInsets = (windowInfo as { safeAreaInsets?: { bottom?: number } }).safeAreaInsets
+  const safeArea = (windowInfo as {
+    safeArea?: { bottom?: number }
+    windowHeight?: number
+    windowWidth?: number
+  }).safeArea
+  const windowHeight = windowInfo.windowHeight ?? 0
+  const windowWidth = windowInfo.windowWidth ?? 375
+  const safeAreaBottom = Math.max(
+    0,
+    safeAreaInsets?.bottom
+      ?? (safeArea?.bottom === undefined ? 0 : windowHeight - safeArea.bottom)
+  )
+  const baseGapPx = 16 * windowWidth / 750
+  const targetTotalBottomPx = baseGapPx + 34
+
+  bottomGapPx.value = Math.max(baseGapPx, targetTotalBottomPx - safeAreaBottom)
+})
 
 const dockItems: Array<{
   key: DockTab
@@ -22,7 +59,7 @@ const dockItems: Array<{
   },
   {
     key: 'playground',
-    label: '游乐场',
+    label: '运动',
     icon: 'fire-filled',
     url: '/pages/training/select'
   },
@@ -36,14 +73,21 @@ const dockItems: Array<{
 </script>
 
 <template>
-  <view class="floating-dock">
-    <block v-for="item in dockItems" :key="item.key">
+  <view class="floating-dock" :style="dockStyle">
+    <view
+      v-for="(item, index) in dockItems"
+      :key="item.key"
+      :class="[
+        'floating-dock__cell',
+        { 'floating-dock__cell--divided': index > 0 }
+      ]"
+    >
       <view
         v-if="item.key === props.activeTab"
         class="floating-dock__item floating-dock__item--active"
       >
         <view class="floating-dock__icon floating-dock__icon--active">
-          <uni-icons :type="item.icon" size="32" color="#ffffff" />
+          <uni-icons class="floating-dock__glyph" :type="item.icon" size="20" color="#ffffff" />
         </view>
         <text class="floating-dock__label floating-dock__label--active">{{ item.label }}</text>
       </view>
@@ -56,52 +100,88 @@ const dockItems: Array<{
         :url="item.url"
       >
         <view class="floating-dock__icon">
-          <uni-icons :type="item.icon" size="22" color="#7f95b2" />
+          <uni-icons class="floating-dock__glyph" :type="item.icon" size="16" color="#7f95b2" />
         </view>
         <text class="floating-dock__label">{{ item.label }}</text>
       </navigator>
-    </block>
+    </view>
   </view>
 </template>
 
 <style scoped>
 .floating-dock {
   position: fixed;
-  left: 32rpx;
-  right: 32rpx;
-  bottom: 28rpx;
+  left: 104rpx;
+  right: 104rpx;
+  bottom: calc(var(--floating-dock-bottom-gap, 42px) + env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
+  height: 98rpx;
   align-items: center;
   justify-content: space-between;
-  gap: 12rpx;
-  padding: 18rpx 24rpx;
+  gap: 0;
+  box-sizing: border-box;
+  padding: 19rpx 2rpx;
+  border: 2rpx solid rgba(234, 216, 190, 0.82);
   border-radius: 9999px;
-  background: rgba(255, 250, 244, 0.96);
+  background: rgba(255, 252, 248, 0.97);
   box-shadow:
-    0 24rpx 42rpx rgba(37, 47, 61, 0.1),
-    0 12rpx 0 rgba(244, 231, 208, 0.82);
+    0 18rpx 38rpx rgba(37, 47, 61, 0.15),
+    0 6rpx 12rpx rgba(90, 72, 52, 0.08),
+    0 4rpx 0 rgba(244, 231, 208, 0.68);
+}
+
+.floating-dock__cell {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 56rpx;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .floating-dock__item {
   display: flex;
-  flex: 1 1 0;
-  min-width: 0;
+  width: 100%;
+  height: 56rpx;
+  flex: none;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
-  padding: 10rpx 8rpx;
+  gap: 16rpx;
+  box-sizing: border-box;
+  padding: 0 4rpx;
   border-radius: 9999px;
   text-decoration: none;
 }
 
 .floating-dock__item--active {
-  flex-direction: column;
-  gap: 10rpx;
+  width: 144rpx;
+  height: 56rpx;
+  max-width: calc(100% - 8rpx);
+  justify-content: center;
+  gap: 8rpx;
+  padding: 0;
+  border-radius: 28rpx;
+  background: #ff6f6f;
+  box-shadow: 0 3rpx 8rpx rgba(222, 92, 92, 0.16);
+}
+
+.floating-dock__cell--divided::before {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2rpx;
+  height: 36rpx;
+  border-radius: 9999px;
+  background: rgba(225, 203, 171, 0.68);
+  content: '';
+  transform: translateY(-50%);
 }
 
 .floating-dock__item--pressed {
-  transform: translateY(2rpx);
+  opacity: 0.78;
 }
 
 .floating-dock__icon {
@@ -117,108 +197,33 @@ const dockItems: Array<{
 }
 
 .floating-dock__icon--active {
-  width: 96rpx;
-  height: 96rpx;
-  background: linear-gradient(135deg, #ff8088, #ff9ba0);
+  width: 40rpx;
+  height: 56rpx;
+  background: transparent;
   color: #ffffff;
-  box-shadow: 0 14rpx 0 rgba(231, 215, 204, 0.9);
 }
 
 .floating-dock__glyph {
-  position: relative;
-  width: 34rpx;
-  height: 34rpx;
-}
-
-.floating-dock__glyph--home {
-  width: 36rpx;
-  height: 34rpx;
-}
-
-.floating-dock__home-roof {
-  position: absolute;
-  left: 4rpx;
-  top: 2rpx;
-  width: 28rpx;
-  height: 18rpx;
-  background: currentColor;
-  clip-path: polygon(50% 0, 100% 58%, 82% 58%, 82% 100%, 18% 100%, 18% 58%, 0 58%);
-}
-
-.floating-dock__home-body {
-  position: absolute;
-  left: 10rpx;
-  bottom: 2rpx;
-  width: 16rpx;
-  height: 14rpx;
-  border-radius: 4rpx;
-  background: currentColor;
-}
-
-.floating-dock__spark-core {
-  position: absolute;
-  inset: 4rpx;
-  border-radius: 9999px;
-  background: currentColor;
-}
-
-.floating-dock__spark-core::after {
-  position: absolute;
-  inset: 8rpx;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
-  content: '';
-}
-
-.floating-dock__spark-star {
-  position: absolute;
-  right: -1rpx;
-  top: -2rpx;
-  width: 12rpx;
-  height: 12rpx;
-  background: currentColor;
-  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-}
-
-.floating-dock__sprout-stem {
-  position: absolute;
-  left: 16rpx;
-  bottom: 3rpx;
-  width: 4rpx;
-  height: 22rpx;
-  border-radius: 9999px;
-  background: currentColor;
-}
-
-.floating-dock__sprout-leaf {
-  position: absolute;
-  top: 4rpx;
-  width: 16rpx;
-  height: 20rpx;
-  border-radius: 16rpx 16rpx 16rpx 0;
-  background: currentColor;
-}
-
-.floating-dock__sprout-leaf--left {
-  left: 2rpx;
-  transform: rotate(-34deg);
-}
-
-.floating-dock__sprout-leaf--right {
-  right: 2rpx;
-  transform: scaleX(-1) rotate(-34deg);
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .floating-dock__label {
   display: block;
   color: #90a0ba;
-  font-size: 22rpx;
+  font-size: 24rpx;
   line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: 0.12em;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .floating-dock__label--active {
-  color: #233244;
+  color: #ffffff;
 }
 </style>

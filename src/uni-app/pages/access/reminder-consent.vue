@@ -34,6 +34,7 @@ async function handleRetryFailure() {
 <template>
   <UniAccessPageShell
     chip="A4"
+    navigation-title="训练提醒"
     title="训练提醒"
     subtitle="先了解提醒内容，再决定是否向微信申请授权。"
   >

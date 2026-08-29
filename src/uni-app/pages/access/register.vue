@@ -51,6 +51,7 @@ async function handleSubmit(payload: RegistrationPayload) {
 <template>
   <UniAccessPageShell
     chip="A1"
+    navigation-title="注册"
     title="注册"
     subtitle="请先完善个人信息，注册完成后才能解锁训练。"
   >

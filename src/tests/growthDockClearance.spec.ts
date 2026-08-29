@@ -9,6 +9,6 @@ describe('growth dock clearance', () => {
       'utf8'
     )
 
-    expect(source).toMatch(/\.growth-page\s*\{[\s\S]*padding-bottom:\s*112rpx;/)
+    expect(source).toMatch(/\.growth-page\s*\{[\s\S]*padding-bottom:\s*12rpx;/)
   })
 })

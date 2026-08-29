@@ -208,10 +208,10 @@ describe('VisualTrainingPanel media switch', () => {
 
     expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
-    expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__actions').exists()).toBe(false)
   })
 
-  it('uses a mini-program cover view for portrait media controls and keeps the start action tappable', async () => {
+  it('uses the rounded portrait readiness overlay as the start action without a center button', async () => {
     const wrapper = mountPanel(true)
 
     await wrapper.setProps({
@@ -219,16 +219,30 @@ describe('VisualTrainingPanel media switch', () => {
       recognitionStatus: 'ready'
     })
 
-    const startAction = wrapper.get('.visual-session__start-button')
+    const startAction = wrapper.get('.visual-session__start-overlay')
     expect(startAction.element.tagName.toLowerCase()).toBe('cover-view')
-    expect(wrapper.text()).toContain('开始后按后台模块配置进入训练')
+    expect(wrapper.find('.visual-session__start-button').exists()).toBe(false)
+    expect(wrapper.text()).toContain('摄像头已就绪，轻触画面开始训练')
 
     await startAction.trigger('tap')
 
     expect(wrapper.emitted('startTraining')).toHaveLength(1)
   })
 
-  it('swaps the large and lower-right views and requests camera startup only once', async () => {
+  it('shows the pretraining notice from the first countdown frame in the lower-left corner', async () => {
+    const wrapper = mountPanel(true)
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      phaseKind: 'countdown',
+      phaseSlot: 'pretraining-countdown',
+      phaseRemainingSeconds: 3
+    })
+
+    expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
+  })
+
+  it('keeps the demonstration large and the camera in the lower-right slot', () => {
     const wrapper = mountPanel()
 
     expect(wrapper.emitted('startRecognition')).toEqual([[5]])
@@ -236,31 +250,15 @@ describe('VisualTrainingPanel media switch', () => {
       .toContain('visual-session__media-stage--primary')
     expect(wrapper.find('.visual-session__camera-stage').classes())
       .toContain('visual-session__media-stage--secondary')
-
-    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
-
-    expect(wrapper.find('.visual-session__camera-stage').classes())
-      .toContain('visual-session__media-stage--primary')
-    expect(wrapper.find('.visual-session__demonstration-stage').classes())
-      .toContain('visual-session__media-stage--secondary')
-    expect(wrapper.emitted('startRecognition')).toEqual([[5]])
-
-    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
-
-    expect(wrapper.find('.visual-session__demonstration-stage').classes())
-      .toContain('visual-session__media-stage--primary')
-    expect(wrapper.emitted('startRecognition')).toEqual([[5]])
+    expect(wrapper.find('.visual-session__secondary-switch').exists()).toBe(false)
   })
 
-  it('keeps the mounted pose camera alive while switching views', async () => {
+  it('keeps the mounted pose camera alive in the fixed secondary view', async () => {
     vi.useFakeTimers()
     const wrapper = mountPanel(true)
 
     await vi.advanceTimersByTimeAsync(500)
     expect(wrapper.find('.visual-session__pose-view').exists()).toBe(true)
-
-    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
-    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
 
     expect(wrapper.find('.visual-session__pose-view').exists()).toBe(true)
   })

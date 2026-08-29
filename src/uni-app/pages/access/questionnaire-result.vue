@@ -40,6 +40,7 @@ function handleContinue() {
 <template>
   <UniAccessPageShell
     chip="A3"
+    navigation-title="问卷结果"
     title="问卷结果"
     subtitle="评估结果已生成，请查阅后进入训练首页。"
   >

@@ -58,9 +58,9 @@ defineProps<{
 .session-badges {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  margin-top: 20rpx;
-  padding-top: 28rpx;
+  gap: 18rpx;
+  margin-top: 14rpx;
+  padding-top: 20rpx;
   border-top: 2rpx solid rgba(226, 232, 240, 0.86);
 }
 
@@ -68,14 +68,14 @@ defineProps<{
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24rpx;
+  gap: 18rpx;
 }
 
 .session-badges__eyebrow,
 .session-badges__hint {
   display: block;
   color: #2B7CB8;
-  font-size: 22rpx;
+  font-size: 19rpx;
   font-weight: 900;
   letter-spacing: 0.14em;
 }
@@ -84,12 +84,14 @@ defineProps<{
   display: block;
   margin-top: 6rpx;
   color: #1A202C;
-  font-size: 34rpx;
+  font-size: 29rpx;
   font-weight: 900;
 }
 
 .session-badges__hint {
   color: #64748B;
+  font-size: 18rpx;
+  letter-spacing: 0;
   text-align: right;
 }
 
@@ -216,15 +218,15 @@ defineProps<{
 .session-badges__empty {
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
-  padding: 30rpx;
-  border-radius: 32rpx;
+  gap: 8rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 24rpx;
   background: rgba(241, 245, 249, 0.66);
 }
 
 .session-badges__empty-title {
   color: #1A202C;
-  font-size: 30rpx;
+  font-size: 24rpx;
   font-weight: 900;
 }
 </style>

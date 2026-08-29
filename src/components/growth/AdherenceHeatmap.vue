@@ -28,6 +28,9 @@ const groupedWeeks = computed(() => {
   })
 
   if (activeWeek.length > 0) {
+    while (activeWeek.length < 7) {
+      activeWeek.push(null)
+    }
     weeks.push(activeWeek)
   }
 
@@ -54,7 +57,7 @@ function cellClass(day: GrowthCalendarDay): string {
 
 <template>
   <view class="adherence-shell">
-    <view class="adherence-grid">
+    <view class="adherence-chart">
       <view class="adherence-weekdays" aria-hidden="true">
         <text v-for="label in weekdayLabels" :key="label">{{ label }}</text>
       </view>
@@ -90,20 +93,23 @@ function cellClass(day: GrowthCalendarDay): string {
 <style scoped>
 .adherence-shell {
   display: flex;
-  flex-direction: column;
-  gap: 16rpx;
+  align-items: flex-end;
+  gap: 88rpx;
 }
 
-.adherence-grid {
+.adherence-chart {
   display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
   gap: 12rpx;
 }
 
 .adherence-weekdays {
   display: flex;
-  flex: 0 0 32rpx;
-  flex-direction: column;
-  gap: 12rpx;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .adherence-weekdays text {
@@ -117,15 +123,19 @@ function cellClass(day: GrowthCalendarDay): string {
 
 .adherence {
   display: flex;
-  gap: 16rpx;
-  overflow-x: auto;
-  padding-bottom: 8rpx;
+  width: 100%;
+  max-height: 246rpx;
+  flex-direction: column;
+  gap: 12rpx;
+  overflow-y: auto;
+  padding-right: 2rpx;
 }
 
 .adherence-week {
   display: flex;
-  flex-direction: column;
-  gap: 12rpx;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .adherence-cell {
@@ -160,14 +170,18 @@ function cellClass(day: GrowthCalendarDay): string {
 
 .adherence-legend {
   display: flex;
+  width: 32rpx;
+  flex: none;
   align-items: center;
+  flex-direction: column;
   justify-content: flex-end;
   gap: 8rpx;
 }
 
 .adherence-legend__label {
   color: #8899b4;
-  font-size: 22rpx;
+  font-size: 18rpx;
+  line-height: 24rpx;
 }
 
 .adherence-legend__swatch {

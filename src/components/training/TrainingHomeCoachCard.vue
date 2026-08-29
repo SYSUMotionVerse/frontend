@@ -1,16 +1,31 @@
 <script setup lang="ts">
-defineProps<{
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+import { computed } from 'vue'
+
+const props = defineProps<{
   eyebrow: string
   title: string
   body: string
   footer: string
 }>()
+
+const isRecovery = computed(() => props.eyebrow.includes('恢复'))
 </script>
 
 <template>
   <view class="coach-card">
     <view class="coach-card__meta">
-      <text class="coach-card__eyebrow">{{ eyebrow }}</text>
+      <view class="coach-card__eyebrow-row">
+        <uni-icons
+          type="fire-filled"
+          size="16"
+          :color="isRecovery ? '#2b7cb8' : '#e56458'"
+        />
+        <text
+          class="coach-card__eyebrow"
+          :class="{ 'coach-card__eyebrow--recovery': isRecovery }"
+        >{{ eyebrow }}</text>
+      </view>
       <text class="coach-card__title">{{ title }}</text>
     </view>
 
@@ -24,11 +39,17 @@ defineProps<{
   display: flex;
   flex-direction: column;
   gap: 16rpx;
-  padding: 28rpx;
+  padding: 28rpx 30rpx;
   border: 2rpx solid rgba(255, 211, 132, 0.3);
-  border-radius: 28rpx;
+  border-radius: 32rpx;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
+}
+
+.coach-card__eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
 }
 
 .coach-card__meta {
@@ -45,6 +66,8 @@ defineProps<{
   font-weight: 800;
   letter-spacing: 0.08em;
 }
+
+.coach-card__eyebrow--recovery { color: #203042; }
 
 .coach-card__title {
   display: block;

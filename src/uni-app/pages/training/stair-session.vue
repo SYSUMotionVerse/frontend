@@ -212,7 +212,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="playground" :fit-viewport="true" access-mode="execute">
+  <UniTrainingPageShell
+    dock-tab="playground"
+    :fit-viewport="true"
+    page-title="阶梯训练"
+    show-back
+    access-mode="execute"
+  >
     <StairTrainingPanel
       :is-running="isRunning"
       :seconds-left="secondsLeft"

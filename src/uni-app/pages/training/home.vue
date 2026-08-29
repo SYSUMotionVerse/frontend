@@ -142,17 +142,19 @@ async function startNextTraining() {
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="home">
+  <UniTrainingPageShell dock-tab="home" page-title="训练首页">
     <view class="home-page">
       <TrainingHomeHeader
         :display-name="displayName"
         :reminder-label="reminderLabel"
         :unread-count="stationNotifications.unreadCount.value"
         :show-headline="false"
+        :show-status="false"
         :reminder-status="reminderConsent.status.value"
         :reminder-sync-state="reminderConsent.syncState.value"
         :reminder-working="reminderConsent.isWorking.value"
-        mini-tag="训练首页"
+        mini-tag="新的一天，加油开始吧！"
+        mini-tag-tone="muted"
         show-reminder-control
         variant="home"
         @open-notifications="stationNotifications.openList"
@@ -174,13 +176,13 @@ async function startNextTraining() {
         :data-training-modality="nextTraining.id"
         @click="startNextTraining"
       >
+        <text class="home-next-action__eyebrow">
+          今日下一项
+        </text>
         <view :class="['home-next-action__mark', `home-next-action__mark--${nextTraining.tone}`]">
           <uni-icons :type="nextTraining.icon" size="20" :color="nextTraining.iconColor" />
         </view>
         <view class="home-next-action__copy">
-          <text class="home-next-action__eyebrow">
-            今日下一项
-          </text>
           <text class="home-next-action__title">{{ nextTraining.title }}</text>
           <text class="home-next-action__detail">
             {{ isBrowseOnly ? '完成问卷后即可开始今天的训练。' : nextTraining.hint }}
@@ -188,7 +190,7 @@ async function startNextTraining() {
         </view>
         <view class="home-next-action__enter" aria-hidden="true">
           <text>{{ nextActionLabel }}</text>
-          <uni-icons type="right" size="16" :color="isBrowseOnly ? '#a76c1c' : '#c76b5b'" />
+          <uni-icons type="right" size="16" color="#fffaf4" />
         </view>
       </button>
 
@@ -239,20 +241,21 @@ async function startNextTraining() {
   --home-surface: #fffaf4;
   display: flex;
   flex-direction: column;
-  gap: 32rpx;
-  padding-bottom: 32rpx;
+  gap: 34rpx;
+  padding-bottom: 20rpx;
 }
 
 .home-next-action {
+  position: relative;
   display: flex;
   width: 100%;
-  min-height: 128rpx;
+  min-height: 172rpx;
   margin: 0;
-  padding: 22rpx 20rpx;
+  padding: 58rpx 34rpx 28rpx;
   align-items: center;
-  gap: 20rpx;
+  gap: 26rpx;
   border: 2rpx solid rgba(255, 211, 132, 0.3);
-  border-radius: 44rpx;
+  border-radius: 40rpx;
   background: var(--home-surface);
   box-sizing: border-box;
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
@@ -280,12 +283,12 @@ async function startNextTraining() {
 
 .home-next-action__mark {
   display: inline-flex;
-  width: 60rpx;
-  height: 60rpx;
+  width: 76rpx;
+  height: 76rpx;
   flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
 }
 
 .home-next-action__mark--coral { background: #ffe8e5; }
@@ -301,13 +304,20 @@ async function startNextTraining() {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 10rpx;
+  gap: 8rpx;
+}
+
+.home-next-action--complete .home-next-action__eyebrow {
+  position: static;
 }
 
 .home-next-action__eyebrow {
+  position: absolute;
+  top: 24rpx;
+  left: 34rpx;
   display: block;
   color: #c76b5b;
-  font-size: 20rpx;
+  font-size: 21rpx;
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.25;
@@ -316,7 +326,7 @@ async function startNextTraining() {
 .home-next-action__title {
   display: block;
   color: var(--home-ink);
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.24;
@@ -326,30 +336,35 @@ async function startNextTraining() {
 .home-next-action__complete-copy {
   display: block;
   color: var(--home-muted);
-  font-size: 22rpx;
+  font-size: 21rpx;
   font-weight: 600;
   line-height: 1.48;
 }
 
 .home-next-action__enter {
   display: inline-flex;
-  min-height: 56rpx;
+  min-width: 132rpx;
+  min-height: 76rpx;
   flex: none;
   align-self: center;
   align-items: center;
-  gap: 4rpx;
+  gap: 6rpx;
   margin-left: auto;
-  color: #c76b5b;
-  font-size: 22rpx;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #ff6f77;
+  color: #fffaf4;
+  font-size: 28rpx;
   font-weight: 800;
   line-height: 1.2;
+  padding: 0 18rpx;
 }
 
 .home-page__section {
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
-  padding-top: 8rpx;
+  gap: 20rpx;
+  padding-top: 4rpx;
 }
 
 .home-page__progress-status {
@@ -373,7 +388,7 @@ async function startNextTraining() {
 .home-page__section-title {
   display: block;
   color: var(--home-ink);
-  font-size: 30rpx;
+  font-size: 32rpx;
   line-height: 1.2;
   font-weight: 900;
   letter-spacing: -0.01em;

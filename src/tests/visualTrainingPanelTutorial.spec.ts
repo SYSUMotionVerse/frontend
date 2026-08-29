@@ -125,7 +125,7 @@ describe('VisualTrainingPanel tutorial layout', () => {
     expect(wrapper.find('.visual-session__tutorial').exists()).toBe(false)
     expect(wrapper.find('#follow-along-video').exists()).toBe(true)
     expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
-    expect(wrapper.find('.visual-session__actions').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__actions').exists()).toBe(false)
   })
 
   it('uses native tutorial controls while keeping replay and speed on that video only', async () => {
@@ -146,6 +146,7 @@ describe('VisualTrainingPanel tutorial layout', () => {
     expect(wrapper.get('#tutorial-video').attributes('controls')).toBeDefined()
     expect(wrapper.get('#tutorial-video').attributes('show-center-play-btn')).toBeDefined()
     expect(wrapper.get('#tutorial-video').attributes('enable-progress-gesture')).toBeDefined()
+    expect(wrapper.get('#tutorial-video').attributes('object-fit')).toBe('cover')
     expect(playbackRate).toHaveBeenCalledWith(1.25)
     expect(seek).toHaveBeenCalledWith(0)
     expect(play).toHaveBeenCalled()
@@ -177,16 +178,18 @@ describe('VisualTrainingPanel tutorial layout', () => {
     expect(video.attributes('style')).toContain('width: 200px')
     expect(video.attributes('style')).toContain('height: 266px')
 
-    expect(wrapper.get('.visual-session__tutorial-btn--secondary').text()).toContain('下一个动作')
-    expect(wrapper.get('.visual-session__tutorial-btn--primary').text()).toContain('开始跟练')
+    const navigationButtons = wrapper.findAll('.visual-session__tutorial-btn--secondary')
+    expect(navigationButtons).toHaveLength(2)
+    expect(navigationButtons[0]?.text()).toContain('上一个动作')
+    expect(navigationButtons[1]?.text()).toContain('下一个动作')
+    expect(wrapper.find('.visual-session__tutorial-btn--primary').exists()).toBe(false)
     expect(wrapper.get('.visual-session__tutorial-skip').text()).toContain('跳过讲解')
 
-    await wrapper.get('.visual-session__tutorial-btn--secondary').trigger('click')
-    await wrapper.get('.visual-session__tutorial-btn--primary').trigger('click')
+    await navigationButtons[1]?.trigger('click')
     await wrapper.get('.visual-session__tutorial-skip').trigger('click')
 
     expect(wrapper.emitted('nextTutorial')).toHaveLength(1)
-    expect(wrapper.emitted('startPractice')).toHaveLength(1)
+    expect(wrapper.emitted('startPractice')).toBeUndefined()
     expect(wrapper.emitted('skipTutorial')).toHaveLength(1)
   })
 
