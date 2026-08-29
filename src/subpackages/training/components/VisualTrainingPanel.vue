@@ -79,13 +79,17 @@ const emit = defineEmits<{
 }>()
 
 const poseCamera = shallowRef<InstanceType<typeof PoseDetectionView> | null>(null)
+type ActiveMedia = 'demonstration' | 'camera'
+const activeMedia = shallowRef<ActiveMedia>('demonstration')
 const demonstrationPlaybackRate = shallowRef(1)
+const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
 const POSE_MOUNT_DELAY_MS = 500
 const poseMountReady = shallowRef(false)
 let poseMountTimer: ReturnType<typeof setTimeout> | null = null
-const demonstrationPrimary = computed(() => true)
+const showingCamera = computed(() => activeMedia.value === 'camera')
+const demonstrationPrimary = computed(() => props.comparisonMode || !showingCamera.value)
 const tutorialSteps = computed(() => Array.from(
   { length: props.tutorialTotalActions },
   (_, index) => index
@@ -232,11 +236,16 @@ watch(
     }
     poseMountReady.value = false
     if (!enabled) {
+      if (showingCamera.value) activeMedia.value = 'demonstration'
       if (previous === true) requestCameraStart()
       return
     }
 
     cameraStartRequested.value = false
+    if (cameraViewRequested.value) {
+      activeMedia.value = 'camera'
+      cameraViewRequested.value = false
+    }
 
     poseMountTimer = setTimeout(() => {
       poseMountTimer = null
@@ -389,6 +398,23 @@ async function stopRecord() {
   return recordedPath
 }
 
+function selectMedia(media: ActiveMedia) {
+  if (media === 'demonstration') {
+    cameraViewRequested.value = false
+    activeMedia.value = media
+    return
+  }
+
+  if (!props.recognitionEnabled) {
+    activeMedia.value = media
+    if (cameraViewRequested.value) return
+    cameraViewRequested.value = true
+    requestCameraStart()
+    return
+  }
+  activeMedia.value = media
+}
+
 defineExpose({ startRecord, stopRecord })
 </script>
 
@@ -535,10 +561,11 @@ defineExpose({ startRecord, stopRecord })
         class="visual-session__demonstration-stage"
         :style="comparisonMediaStyle"
         :class="{
-          'visual-session__media-stage--primary': true
+          'visual-session__media-stage--primary': demonstrationPrimary,
+          'visual-session__media-stage--secondary': !comparisonMode && showingCamera
         }"
       >
-        <cover-view v-if="comparisonMode" class="visual-session__media-label">
+        <cover-view v-if="comparisonMode || showingCamera" class="visual-session__media-label">
           动作演示
         </cover-view>
         <view v-if="videoLoading" class="visual-session__video-state">
@@ -573,16 +600,22 @@ defineExpose({ startRecord, stopRecord })
           @ended="emit('videoEnded', wrapVideoEvent($event))"
           @error="emit('videoError', wrapVideoEvent($event))"
         />
+        <cover-view
+          v-if="!comparisonMode && showingCamera"
+          class="visual-session__secondary-switch"
+          aria-label="将动作演示切换到主画面"
+          @tap.stop="selectMedia('demonstration')"
+        />
       </view>
       <view
         class="visual-session__camera-stage"
         :style="comparisonMediaStyle"
         :class="{
-          'visual-session__media-stage--primary': comparisonMode,
-          'visual-session__media-stage--secondary': !comparisonMode
+          'visual-session__media-stage--primary': comparisonMode || showingCamera,
+          'visual-session__media-stage--secondary': !comparisonMode && !showingCamera
         }"
       >
-        <cover-view v-if="comparisonMode" class="visual-session__media-label">
+        <cover-view v-if="comparisonMode || !showingCamera" class="visual-session__media-label">
           我的画面
         </cover-view>
         <PoseDetectionView
@@ -615,6 +648,12 @@ defineExpose({ startRecord, stopRecord })
           <cover-view class="visual-session__guide-leg visual-session__guide-leg--right"></cover-view>
           <cover-view class="visual-session__guide-label">站在框内</cover-view>
         </cover-view>
+        <cover-view
+          v-if="!comparisonMode && !showingCamera"
+          class="visual-session__secondary-switch"
+          aria-label="将我的画面切换到主画面"
+          @tap.stop="selectMedia('camera')"
+        />
       </view>
       <cover-view
         v-if="demonstrationPrimary && !comparisonMode && !videoLoading && !videoError && videoUrl && phaseKind === 'preview' && trainingStarted && startCountdown === 0 && !phaseCueCount"
@@ -1244,6 +1283,16 @@ defineExpose({ startRecord, stopRecord })
   font-size: 18rpx;
   font-weight: 800;
   padding: 8rpx 12rpx;
+}
+
+.visual-session__secondary-switch {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: transparent;
 }
 
 .visual-session__video-state {

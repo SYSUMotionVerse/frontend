@@ -36,7 +36,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('recordActionDisabled')
   })
 
-  it('keeps the main demonstration unobstructed with a fixed lower-right camera', () => {
+  it('keeps both media views mounted and allows the lower-right view to become primary', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -49,15 +49,17 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(videoIndex).toBeGreaterThan(-1)
     expect(cameraIndex).toBeGreaterThan(videoIndex)
     expect(infoIndex).toBeGreaterThan(cameraIndex)
-    expect(source).not.toContain("type ActiveMedia = 'demonstration' | 'camera'")
-    expect(source).not.toContain('const activeMedia =')
-    expect(source).not.toContain('selectMedia(')
+    expect(source).toContain("type ActiveMedia = 'demonstration' | 'camera'")
+    expect(source).toContain("const activeMedia = shallowRef<ActiveMedia>('demonstration')")
+    expect(source).toContain('function selectMedia(media: ActiveMedia)')
     expect(source).toContain('动作演示')
     expect(source).toContain('我的画面')
     expect(source).toContain("emit('startRecognition', 5)")
     expect(source).toContain('visual-session__media-stage--primary')
     expect(source).toContain('visual-session__media-stage--secondary')
-    expect(source).not.toContain('visual-session__secondary-switch')
+    expect(source).toContain('visual-session__secondary-switch')
+    expect(source).toContain("@tap.stop=\"selectMedia('camera')\"")
+    expect(source).toContain("@tap.stop=\"selectMedia('demonstration')\"")
     expect(source).toContain('visual-session__secondary-space')
     expect(source).not.toContain('visual-session__media-switch')
     expect(source).not.toContain('visual-session__recording-badge')

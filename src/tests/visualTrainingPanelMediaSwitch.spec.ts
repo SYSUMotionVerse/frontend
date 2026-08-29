@@ -242,7 +242,7 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
   })
 
-  it('keeps the demonstration large and the camera in the lower-right slot', () => {
+  it('swaps the large and lower-right views and requests camera startup only once', async () => {
     const wrapper = mountPanel()
 
     expect(wrapper.emitted('startRecognition')).toEqual([[5]])
@@ -250,15 +250,31 @@ describe('VisualTrainingPanel media switch', () => {
       .toContain('visual-session__media-stage--primary')
     expect(wrapper.find('.visual-session__camera-stage').classes())
       .toContain('visual-session__media-stage--secondary')
-    expect(wrapper.find('.visual-session__secondary-switch').exists()).toBe(false)
+
+    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
+
+    expect(wrapper.find('.visual-session__camera-stage').classes())
+      .toContain('visual-session__media-stage--primary')
+    expect(wrapper.find('.visual-session__demonstration-stage').classes())
+      .toContain('visual-session__media-stage--secondary')
+    expect(wrapper.emitted('startRecognition')).toEqual([[5]])
+
+    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
+
+    expect(wrapper.find('.visual-session__demonstration-stage').classes())
+      .toContain('visual-session__media-stage--primary')
+    expect(wrapper.emitted('startRecognition')).toEqual([[5]])
   })
 
-  it('keeps the mounted pose camera alive in the fixed secondary view', async () => {
+  it('keeps the mounted pose camera alive while switching views', async () => {
     vi.useFakeTimers()
     const wrapper = mountPanel(true)
 
     await vi.advanceTimersByTimeAsync(500)
     expect(wrapper.find('.visual-session__pose-view').exists()).toBe(true)
+
+    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
+    await wrapper.get('.visual-session__secondary-switch').trigger('tap')
 
     expect(wrapper.find('.visual-session__pose-view').exists()).toBe(true)
   })
