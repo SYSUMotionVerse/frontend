@@ -1,0 +1,7 @@
+:host,
+.native-tab-host {
+  display: none;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}

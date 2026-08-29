@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import StationNotificationList from '../../../components/notifications/StationNotificationList.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
@@ -8,10 +8,21 @@ import { useStationNotifications } from '../../composables/useStationNotificatio
 
 const stationNotifications = useStationNotifications()
 const notifications = computed(() => stationNotifications.state.value.notifications)
+const isRefreshing = ref(false)
 
 onShow(() => {
   void stationNotifications.refresh()
 })
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await stationNotifications.refresh({ force: true })
+  } finally {
+    isRefreshing.value = false
+  }
+}
 </script>
 
 <template>
@@ -20,9 +31,13 @@ onShow(() => {
     show-decorations
     page-title="训练提醒"
     show-back
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
   >
     <view class="notification-page">
       <UniPageHeading
+        inset
         eyebrow="训练提醒"
         title="提醒中心"
         description="查看午间和晚间提醒，安排今天的训练。"

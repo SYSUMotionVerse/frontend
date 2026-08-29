@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import PhysicalMetricsPanel from '../../../components/growth/PhysicalMetricsPanel.vue'
 import VisualScoreTrendPanel from '../../../components/growth/VisualScoreTrendPanel.vue'
@@ -13,11 +13,30 @@ const { loadState, physicalMetricsState, refresh, scoreTrend } = useGrowthOvervi
 const emptyStateHint = computed(() =>
   physicalMetricsState.value.hasMetrics ? '' : physicalMetricsState.value.message
 )
+const isRefreshing = ref(false)
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await refresh({ force: true })
+  } finally {
+    isRefreshing.value = false
+  }
+}
 </script>
 
 <template>
-  <UniGrowthPageShell :show-dock="false" page-title="体能指标" show-back>
+  <UniGrowthPageShell
+    :show-dock="false"
+    page-title="体能指标"
+    show-back
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <UniPageHeading
+      inset
       eyebrow="成长"
       title="体能指标"
       description="集中查看体测数据与动作表现。"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AchievementBadgeList from '../../../components/growth/AchievementBadgeList.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
@@ -10,12 +10,31 @@ const { achievements, loadState, refresh } = useGrowthOverview({
   sections: ['awards']
 })
 const earnedCount = computed(() => achievements.value.filter(badge => badge.earned).length)
+const isRefreshing = ref(false)
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await refresh({ force: true })
+  } finally {
+    isRefreshing.value = false
+  }
+}
 </script>
 
 <template>
-  <UniGrowthPageShell :show-dock="false" page-title="成长徽章" show-back>
+  <UniGrowthPageShell
+    :show-dock="false"
+    page-title="成长徽章"
+    show-back
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <view class="achievement-page__heading">
       <UniPageHeading
+        inset
         eyebrow="成长"
         title="成就"
         description="基于参与和坚持的激励里程碑。"
@@ -51,6 +70,7 @@ const earnedCount = computed(() => achievements.value.filter(badge => badge.earn
   width: fit-content;
   align-items: center;
   justify-content: center;
+  margin-left: 32rpx;
   padding: 8rpx 16rpx;
   border-radius: 9999px;
   background: rgba(168, 230, 207, 0.22);

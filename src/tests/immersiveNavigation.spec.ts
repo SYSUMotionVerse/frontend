@@ -13,28 +13,31 @@ describe('immersive mini-program navigation', () => {
       resolve('src/uni-app/components/layout/ImmersiveNavigationBar.vue'),
       'utf8'
     )
-
     expect(source).toContain('getMenuButtonBoundingClientRect')
     expect(source).toContain('--immersive-nav-side-clearance')
     expect(source).toContain('left: var(--immersive-nav-side-clearance);')
     expect(source).toContain('right: var(--immersive-nav-side-clearance);')
     expect(source).toContain('background: transparent;')
+    expect(source).toContain('px - 16rpx)`')
+    expect(source).not.toContain("paddingBottom: '16rpx'")
+    expect(source).toContain('bottom: 0;')
     expect(source).not.toContain('--immersive-nav-bottom-gap')
     expect(source).not.toContain('box-shadow:')
   })
 
-  it('keeps the title bar fixed while content scrolls beneath a translucent fade', () => {
-    const source = readFileSync(
-      resolve('src/uni-app/components/layout/ImmersiveNavigationBar.vue'),
-      'utf8'
-    )
+  it('keeps the primary-page refreshers below the restored title-bar treatment', () => {
+    const shells = [
+      'src/uni-app/components/training/UniTrainingPageShell.vue',
+      'src/uni-app/components/growth/UniGrowthPageShell.vue'
+    ]
 
-    expect(source).toContain('class="immersive-nav__fixed"')
-    expect(source).toMatch(/\.immersive-nav__fixed\s*\{[^}]*position: fixed;/)
-    expect(source).toMatch(/\.immersive-nav__fixed\s*\{[^}]*top: 0;/)
-    expect(source).toContain('.immersive-nav__fixed::after')
-    expect(source).toContain('linear-gradient(')
-    expect(source).toContain('rgba(252, 247, 240, 0) 100%')
+    for (const path of shells) {
+      const source = readFileSync(resolve(path), 'utf8')
+      expect(source.indexOf('<ImmersiveNavigationBar')).toBeLessThan(source.indexOf('<scroll-view'))
+      expect(source).toContain('refresher-enabled')
+      expect(source).toContain(':refresher-threshold="140"')
+      expect(source).not.toContain('--immersive-nav-content-clearance')
+    }
   })
 
   it('wires the shared navigation into every page shell and standalone page', () => {

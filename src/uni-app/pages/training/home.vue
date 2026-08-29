@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeProgressOverview from '../../../components/training/TrainingHomeProgressOverview.vue'
+import TrainingReminderAuthorizationCard from '../../../components/training/TrainingReminderAuthorizationCard.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
@@ -14,6 +15,7 @@ import { useStationNotifications } from '../../composables/useStationNotificatio
 import { useReminderReturn } from '../../composables/useReminderReturn'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import { prefetchGrowthOverview } from '../../composables/useGrowthOverview'
 import {
   continueRequiredQuestionnaire,
   ensureProtectedStudentAccess,
@@ -27,6 +29,9 @@ const reminderReturn = useReminderReturn()
 const trainingProgress = useTrainingProgress()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
+const isRefreshing = ref(false)
+const hasLoadedReminderStatus = ref(false)
+let hasStartedPrimaryTabPrefetch = false
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -93,6 +98,13 @@ const nextActionAriaLabel = computed(() => {
     ? `完成问卷以解锁${next.title}`
     : `开始${next.title}`
 })
+const showReminderAuthorizationCard = computed(() => (
+  hasLoadedReminderStatus.value
+  && reminderConsent.syncState.value !== 'failed'
+  && ['not_requested', 'rejected', 'banned', 'unsupported'].includes(
+    reminderConsent.status.value
+  )
+))
 onLoad((query) => {
   const nextQuery = query ?? {}
   reminderReturn.capture({
@@ -111,11 +123,31 @@ onShow(async () => {
     trainingProgress.refresh(),
     stationNotifications.refresh()
   ])
-  void reminderConsent.loadStatus()
+  if (!hasStartedPrimaryTabPrefetch) {
+    hasStartedPrimaryTabPrefetch = true
+    void prefetchGrowthOverview({
+      sections: ['history', 'adherence', 'physicalMetrics', 'awards']
+    })
+  }
+  if (!hasLoadedReminderStatus.value) {
+    await reminderConsent.loadStatus()
+    hasLoadedReminderStatus.value = true
+  }
 })
 
-function handleReminderAuthorizationRetry() {
-  void reminderConsent.authorize()
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await Promise.all([
+      trainingProgress.refresh({ force: true }),
+      stationNotifications.refresh({ force: true }),
+      reminderConsent.loadStatus()
+    ])
+    hasLoadedReminderStatus.value = true
+  } finally {
+    isRefreshing.value = false
+  }
 }
 
 async function startNextTraining() {
@@ -139,10 +171,20 @@ async function startNextTraining() {
     url: `/subpackages/training/visual-session?modality=${next.id}`
   })
 }
+
+function authorizeTrainingReminders() {
+  void reminderConsent.authorize()
+}
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="home" page-title="训练首页">
+  <UniTrainingPageShell
+    dock-tab="home"
+    page-title="训练首页"
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <view class="home-page">
       <TrainingHomeHeader
         :display-name="displayName"
@@ -150,15 +192,10 @@ async function startNextTraining() {
         :unread-count="stationNotifications.unreadCount.value"
         :show-headline="false"
         :show-status="false"
-        :reminder-status="reminderConsent.status.value"
-        :reminder-sync-state="reminderConsent.syncState.value"
-        :reminder-working="reminderConsent.isWorking.value"
         mini-tag="新的一天，加油开始吧！"
         mini-tag-tone="muted"
-        show-reminder-control
         variant="home"
         @open-notifications="stationNotifications.openList"
-        @authorize-reminders="handleReminderAuthorizationRetry"
       />
 
       <QuestionnaireUnlockBanner
@@ -198,6 +235,12 @@ async function startNextTraining() {
         <text class="home-next-action__eyebrow">今日训练已完成</text>
         <text class="home-next-action__complete-copy">三项训练都已记录，按自己的节奏恢复和补水。</text>
       </view>
+
+      <TrainingReminderAuthorizationCard
+        v-if="showReminderAuthorizationCard"
+        :working="reminderConsent.isWorking.value"
+        @authorize="authorizeTrainingReminders"
+      />
 
       <TrainingHomeProgressOverview
         v-if="progress"

@@ -8,7 +8,7 @@ type WindowInfoLike = {
 }
 
 const referenceWindowWidth = 375
-const dockHeightRpx = 98
+const dockHeightRpx = 118
 const dockBaseGapRpx = 16
 const dockContentGapRpx = 18
 const referenceSafeAreaBottomPx = 34

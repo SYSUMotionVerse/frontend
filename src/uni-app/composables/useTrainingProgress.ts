@@ -29,6 +29,9 @@ export function useTrainingProgress() {
 
   async function refresh(options: { force?: boolean } = {}) {
     const hasReadyData = state.value.status === 'ready'
+    if (!options.force && hasReadyData && progressCache.hasValue()) {
+      return
+    }
     if (!hasReadyData) state.value = { status: 'loading' }
     try {
       const progress = await progressCache.get(options)

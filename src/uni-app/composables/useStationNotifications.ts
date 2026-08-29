@@ -42,6 +42,9 @@ const notificationsCache = createRequestCache({
 export function useStationNotifications() {
 
   async function refresh(options: { force?: boolean } = {}) {
+    if (!options.force && state.value.status === 'ready' && notificationsCache.hasValue()) {
+      return
+    }
     const requestGeneration = ++notificationRequestGeneration
     if (state.value.status !== 'ready') {
       state.value = {
@@ -134,9 +137,24 @@ export function useStationNotifications() {
 
     const actionTarget = notification.actionTarget.trim() || '/pages/training/home'
     const separator = actionTarget.includes('?') ? '&' : '?'
-    uni.navigateTo({
-      url: `${actionTarget}${separator}source=reminder`
-    })
+    const targetUrl = `${actionTarget}${separator}source=reminder`
+    const targetPath = actionTarget.split('?')[0]
+    const primaryTabPaths = new Set([
+      '/pages/training/home',
+      '/pages/training/select',
+      '/pages/growth/index'
+    ])
+
+    if (primaryTabPaths.has(targetPath)) {
+      if (actionTarget.includes('?')) {
+        uni.reLaunch({ url: targetUrl })
+        return
+      }
+      uni.switchTab({ url: targetPath })
+      return
+    }
+
+    uni.navigateTo({ url: targetUrl })
   }
 
   function openList() {

@@ -150,7 +150,7 @@ function cellClass(day: GrowthCalendarDay): string {
 
 .adherence-cell--level-0,
 .adherence-legend__swatch--level-0 {
-  background: #f1f5f9;
+  background: #eef7ff;
 }
 
 .adherence-cell--level-1,

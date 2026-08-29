@@ -154,7 +154,7 @@ describe('ui review fixes', () => {
     expect(homePage).not.toContain('url="/pages/training/select"')
     expect(homePage).not.toContain('url="/pages/growth/index"')
     expect(selectionPage).toContain('uni.navigateTo')
-    expect(feedbackPage).toContain('uni.redirectTo')
+    expect(feedbackPage).toContain('uni.switchTab')
   })
 
   it('uses unified, stateful training rows in the playground', () => {
@@ -184,6 +184,8 @@ describe('ui review fixes', () => {
     expect(selectionPage).not.toContain('width: 112rpx;')
     expect(selectionPage).not.toContain('TrainingModeCard')
     expect(selectionPage).toContain('select-page__streak-note')
+    expect(selectionPage).toContain('<uni-icons type="info"')
+    expect(selectionPage).not.toContain('<uni-icons type="info-filled"')
   })
 
   it('adds a profile greeting header to the training playground', () => {
@@ -236,7 +238,7 @@ describe('ui review fixes', () => {
 
     expect(trainingShell).toContain('FloatingDock')
     expect(growthShell).toContain('FloatingDock')
-    expect(floatingDock).toContain('open-type="redirect"')
+    expect(floatingDock).toContain('open-type="switchTab"')
     expect(trainingHomePage).toContain('dock-tab="home"')
     expect(trainingSelectPage).toContain('dock-tab="playground"')
     expect(growthIndexPage).toContain('dock-tab="growth"')
@@ -740,7 +742,14 @@ describe('ui review fixes', () => {
 
     expect(homePage).toContain(':show-headline="false"')
     expect(homePage).not.toContain('ReminderAuthorizationStatus')
-    expect(homePage).toContain('show-reminder-control')
+    expect(homePage).not.toContain('show-reminder-control')
+    expect(homePage).toContain('TrainingReminderAuthorizationCard')
+    expect(homePage.indexOf('<TrainingReminderAuthorizationCard')).toBeGreaterThan(
+      homePage.indexOf('home-next-action--complete')
+    )
+    expect(homePage.indexOf('<TrainingReminderAuthorizationCard')).toBeLessThan(
+      homePage.indexOf('<TrainingHomeProgressOverview')
+    )
     expect(headerCard).toContain('showHeadline?: boolean')
     expect(headerCard).toContain('v-if="props.showHeadline"')
     expect(questPanel).not.toContain('quest-panel__item-kicker')
@@ -934,9 +943,11 @@ describe('ui review fixes', () => {
     expect(accessShell).toContain('gap: 56rpx;')
     expect(uniAccessShell).toContain('padding: 0 48rpx 120rpx;')
     expect(uniAccessShell).toContain('gap: 32rpx;')
-    expect(uniTrainingShell).toContain('padding: 0 32rpx var(--floating-dock-content-clearance, 100px);')
+    expect(uniTrainingShell).toContain('padding: 16rpx 32rpx 0;')
+    expect(uniTrainingShell).toContain('class="training-shell__dock-clearance"')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
-    expect(uniGrowthShell).toContain('padding: 0 32rpx var(--floating-dock-content-clearance, 100px);')
+    expect(uniGrowthShell).toContain('padding: 16rpx 32rpx 0;')
+    expect(uniGrowthShell).toContain('class="growth-shell__dock-clearance"')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
     expect(miniappHomePage).toContain('gap: 34rpx;')
     expect(miniappHomePage).toContain('gap: 16rpx;')

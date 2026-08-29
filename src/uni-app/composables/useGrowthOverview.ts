@@ -112,16 +112,30 @@ function resolveRequestedSections(options: UseGrowthOverviewOptions) {
   return [...new Set(options.sections)]
 }
 
+export async function prefetchGrowthOverview(options: UseGrowthOverviewOptions = {}) {
+  if (
+    typeof studentBackendSync.isEnabled !== 'function'
+    || !studentBackendSync.isEnabled()
+  ) return
+
+  const requestedSections = resolveRequestedSections(options)
+  await Promise.allSettled(
+    requestedSections.map(section => growthSectionCaches[section].get())
+  )
+}
+
 export function useGrowthOverview(options: UseGrowthOverviewOptions = {}) {
   const store = useStudentStore()
   const requestedSections = resolveRequestedSections(options)
+  const hasCachedSections = requestedSections.every(
+    section => growthSectionCaches[section].hasValue()
+  )
   const loadState = shallowRef<{
     status: 'loading' | 'ready' | 'partial' | 'error'
     message: string
-  }>({
-    status: 'loading',
-    message: '正在同步成长记录…'
-  })
+  }>(hasCachedSections
+    ? { status: 'ready', message: '' }
+    : { status: 'loading', message: '正在同步成长记录…' })
   const summary = computed(() => buildGrowthSummary(store.getSnapshot()))
 
   const localAssessments = computed<GrowthAssessmentHistoryItem[]>(() =>
@@ -232,11 +246,21 @@ export function useGrowthOverview(options: UseGrowthOverviewOptions = {}) {
 
   async function refresh(refreshOptions: { force?: boolean } = {}) {
     if (!studentBackendSync.isEnabled()) {
+      if (!refreshOptions.force && loadState.value.status === 'ready') {
+        return
+      }
       resetBackendGrowthData()
       loadState.value = { status: 'ready', message: '' }
       return
     }
-    if (refreshOptions.force || loadState.value.status === 'loading') {
+    if (
+      !refreshOptions.force
+      && loadState.value.status === 'ready'
+      && requestedSections.every(section => growthSectionCaches[section].hasValue())
+    ) {
+      return
+    }
+    if (loadState.value.status === 'loading') {
       loadState.value = {
         status: 'loading',
         message: '正在同步成长记录…'

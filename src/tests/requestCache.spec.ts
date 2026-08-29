@@ -24,6 +24,7 @@ describe('request cache', () => {
 
     const firstRequest = cache.get()
     cache.invalidate()
+    expect(cache.hasValue()).toBe(false)
     resolveFirst?.('stale')
     expect(await firstRequest).toBe('stale')
     expect(cache.hasFreshValue()).toBe(false)

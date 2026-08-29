@@ -104,7 +104,9 @@ describe('VisualTrainingPanel mini-program styles', () => {
     )
     expect(pageSource).toContain(':fit-viewport="true"')
     expect(shellSource).toContain("'training-shell--fit-viewport': props.fitViewport")
-    expect(shellSource).toContain('<view v-if="props.fitViewport" class="training-shell__content">')
+    expect(shellSource).toMatch(
+      /<view[\s\S]*?v-if="props\.fitViewport" class="training-shell__content"/
+    )
     expect(shellSource).toContain('<transition v-else name="shell-enter" appear>')
     expect(pageSource).toContain('class="visual-session-page"')
     expect(pageSource).toContain('class="visual-session-page__panel"')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
@@ -18,12 +18,31 @@ const complianceRatePercent = computed(() =>
   Math.round((adherenceData.value?.complianceRate ?? 0) * 100)
 )
 const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [])
+const isRefreshing = ref(false)
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await refresh({ force: true })
+  } finally {
+    isRefreshing.value = false
+  }
+}
 
 </script>
 
 <template>
-  <UniGrowthPageShell :show-dock="false" page-title="坚持情况" show-back>
+  <UniGrowthPageShell
+    :show-dock="false"
+    page-title="坚持情况"
+    show-back
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <UniPageHeading
+      inset
       eyebrow="成长"
       title="达标记录"
       description="训练坚持记录与依从性分析。"

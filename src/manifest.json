@@ -13,6 +13,7 @@
     "setting": {
       "urlCheck": true,
       "lazyCodeLoading": "requiredComponents",
+      "ignoreDevUnusedFiles": false,
       "minified": true,
       "minifyWXSS": true,
       "minifyWXML": true,

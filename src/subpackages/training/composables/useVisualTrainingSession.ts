@@ -1556,7 +1556,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     invalidateModuleTransition()
     ttsPlayer.reset()
     await stopRecording()
-    void uni.redirectTo({ url: '/pages/training/select' })
+    void uni.switchTab({ url: '/pages/training/select' })
   }
 
   watch(options.modality, () => {

@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const loadStationNotifications = vi.fn()
 const markStationNotificationRead = vi.fn()
 const navigateTo = vi.fn()
+const switchTab = vi.fn()
+const reLaunch = vi.fn()
 const reportBackendSyncError = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
+  onPullDownRefresh: vi.fn(),
   onShow: vi.fn((callback: () => unknown) => callback())
 }))
 
@@ -67,8 +70,10 @@ describe('station notifications', () => {
     })
     markStationNotificationRead.mockReset().mockResolvedValue(undefined)
     navigateTo.mockReset()
+    switchTab.mockReset()
+    reLaunch.mockReset()
     reportBackendSyncError.mockReset()
-    ;(globalThis as { uni?: unknown }).uni = { navigateTo }
+    ;(globalThis as { uni?: unknown }).uni = { navigateTo, reLaunch, switchTab }
   })
 
   it('loads unread count for the training-home entry', async () => {
@@ -83,6 +88,20 @@ describe('station notifications', () => {
       createdAtLabel: '7月16日 18:00',
       readSyncFailed: false
     })
+  })
+
+  it('keeps the ready notification state stable while its request cache is fresh', async () => {
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    const notifications = useStationNotifications()
+    notifications.invalidate()
+    loadStationNotifications.mockClear()
+
+    await notifications.refresh()
+    const readyState = notifications.state.value
+    await notifications.refresh()
+
+    expect(loadStationNotifications).toHaveBeenCalledTimes(1)
+    expect(notifications.state.value).toBe(readyState)
   })
 
   it('loads more notifications only after the user requests the next page', async () => {
@@ -169,8 +188,8 @@ describe('station notifications', () => {
     await flushPromises()
 
     expect(markStationNotificationRead).toHaveBeenCalledWith(17)
-    expect(navigateTo).toHaveBeenCalledWith({
-      url: '/pages/training/home?source=reminder'
+    expect(switchTab).toHaveBeenCalledWith({
+      url: '/pages/training/home'
     })
   })
 
@@ -193,8 +212,8 @@ describe('station notifications', () => {
       '提醒已读状态同步',
       expect.any(Error)
     )
-    expect(navigateTo).toHaveBeenCalledWith({
-      url: '/pages/training/home?source=reminder'
+    expect(switchTab).toHaveBeenCalledWith({
+      url: '/pages/training/home'
     })
     expect(wrapper.text()).toContain('未读状态同步失败，点击可重试')
 
@@ -220,12 +239,13 @@ describe('station notifications', () => {
     })
     const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
     const notifications = useStationNotifications()
-    await notifications.refresh()
+    notifications.invalidate()
+    await notifications.refresh({ force: true })
 
     await notifications.open(notifications.state.value.notifications[0])
 
     expect(markStationNotificationRead).not.toHaveBeenCalled()
-    expect(navigateTo).toHaveBeenCalledWith({
+    expect(reLaunch).toHaveBeenCalledWith({
       url: '/pages/training/home?tracking=bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26&slot=18%3A00&date=2026-07-16&source=reminder'
     })
   })

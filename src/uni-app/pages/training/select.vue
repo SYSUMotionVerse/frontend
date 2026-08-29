@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
@@ -53,7 +53,7 @@ const modeActionLabels: Record<TrainingModeStatus, string> = {
 const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'wushu',
-    title: '武术（Wushu）',
+    title: '武术',
     actionHint: '跟镜头出招',
     routeLabel: '镜头跟练',
     icon: 'camera-filled',
@@ -71,7 +71,7 @@ const trainingModes: TrainingModeSummary[] = [
   },
   {
     modality: 'stair',
-    title: '跑楼梯（Stairs）',
+    title: '跑楼梯',
     actionHint: '拿起手机登阶',
     routeLabel: '传感器记录',
     icon: 'navigate-filled',
@@ -85,6 +85,7 @@ const trainingProgress = useTrainingProgress()
 const stationNotifications = useStationNotifications()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
+const isRefreshing = ref(false)
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -101,6 +102,19 @@ onShow(() => {
     stationNotifications.refresh()
   ])
 })
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await Promise.all([
+      trainingProgress.refresh({ force: true }),
+      stationNotifications.refresh({ force: true })
+    ])
+  } finally {
+    isRefreshing.value = false
+  }
+}
 
 const launchModes = computed(() => {
   const completionByModality = new Map(
@@ -174,7 +188,13 @@ async function chooseMode(modality: TrainingModality) {
 </script>
 
 <template>
-  <UniTrainingPageShell dock-tab="playground" page-title="选择训练">
+  <UniTrainingPageShell
+    dock-tab="playground"
+    page-title="选择训练"
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <view class="select-page">
       <TrainingHomeHeader
         :display-name="displayName"
@@ -247,7 +267,7 @@ async function chooseMode(modality: TrainingModality) {
       </view>
 
       <view class="select-page__streak-note">
-        <uni-icons type="info-filled" size="14" color="#9aa6b5" />
+        <uni-icons type="info" size="16" color="#8795a8" />
         <text>完成任一训练后，将更新今日达标状态。</text>
       </view>
     </view>
@@ -260,7 +280,6 @@ async function chooseMode(modality: TrainingModality) {
   display: flex;
   flex-direction: column;
   gap: 30rpx;
-  min-height: 100%;
   padding-bottom: 0;
 }
 

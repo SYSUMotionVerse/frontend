@@ -117,7 +117,7 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
   max-width: 720px;
   flex-direction: column;
   gap: 32rpx;
-  padding-top: 24rpx;
+  padding-top: 40rpx;
   animation: access-entry-reveal 180ms ease-out both;
 }
 

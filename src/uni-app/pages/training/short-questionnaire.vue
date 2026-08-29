@@ -156,7 +156,7 @@ function redirectToFeedback(sessionId: string) {
 }
 
 function goHome() {
-  void uni.redirectTo({
+  void uni.switchTab({
     url: '/pages/training/home'
   })
 }

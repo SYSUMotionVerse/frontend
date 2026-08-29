@@ -353,7 +353,7 @@ function markQuestionnaireComplete(scaleId: number, nextScaleId: number) {
 
 function previewTrainingContent() {
   void uni.navigateTo({
-    url: '/pages/training/home?preview=questionnaire'
+    url: '/pages/training/home-preview?preview=questionnaire'
   })
 }
 </script>

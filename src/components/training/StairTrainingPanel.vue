@@ -181,6 +181,8 @@ const sensorStatusClass = computed(() => `stair-panel__sensor-chip--${props.sens
   align-items: flex-start;
   justify-content: space-between;
   gap: 24rpx;
+  margin-top: 24rpx;
+  margin-left: 32rpx;
 }
 
 .stair-panel__hero-copy {

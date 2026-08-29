@@ -34,20 +34,30 @@
       "path": "pages/training/home",
       "style": {
         "navigationBarTitleText": "训练首页",
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
+      }
+    },
+    {
+      "path": "pages/training/home-preview",
+      "style": {
+        "navigationBarTitleText": "训练首页预览",
         "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/notifications/index",
       "style": {
-        "navigationBarTitleText": "训练提醒"
+        "navigationBarTitleText": "训练提醒",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/training/select",
       "style": {
         "navigationBarTitleText": "选择训练",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
@@ -72,31 +82,36 @@
       "path": "pages/growth/index",
       "style": {
         "navigationBarTitleText": "成长记录",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/growth/adherence",
       "style": {
-        "navigationBarTitleText": "坚持情况"
+        "navigationBarTitleText": "坚持情况",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/growth/achievements",
       "style": {
-        "navigationBarTitleText": "成长徽章"
+        "navigationBarTitleText": "成长徽章",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/growth/metrics",
       "style": {
-        "navigationBarTitleText": "体能指标"
+        "navigationBarTitleText": "体能指标",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/growth/history",
       "style": {
-        "navigationBarTitleText": "历史记录"
+        "navigationBarTitleText": "历史记录",
+        "backgroundColor": "#FCF7F0"
       }
     }
   ],
@@ -115,6 +130,26 @@
       ]
     }
   ],
+  "tabBar": {
+    "custom": true,
+    "color": "#90A0BA",
+    "selectedColor": "#FFFFFF",
+    "backgroundColor": "#FCF7F0",
+    "list": [
+      {
+        "pagePath": "pages/training/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/training/select",
+        "text": "运动"
+      },
+      {
+        "pagePath": "pages/growth/index",
+        "text": "成长"
+      }
+    ]
+  },
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",

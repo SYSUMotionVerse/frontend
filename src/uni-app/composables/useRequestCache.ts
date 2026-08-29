@@ -1,6 +1,7 @@
 export interface RequestCache<T> {
   get: (options?: { force?: boolean }) => Promise<T>
   invalidate: () => void
+  hasValue: () => boolean
   hasFreshValue: () => boolean
 }
 
@@ -17,6 +18,10 @@ export function createRequestCache<T>(options: CreateRequestCacheOptions<T>): Re
 
   function hasFreshValue() {
     return value !== undefined && Date.now() - updatedAt < options.ttlMs
+  }
+
+  function hasValue() {
+    return value !== undefined
   }
 
   async function get({ force = false }: { force?: boolean } = {}) {
@@ -41,12 +46,14 @@ export function createRequestCache<T>(options: CreateRequestCacheOptions<T>): Re
 
   function invalidate() {
     generation += 1
+    value = undefined
     updatedAt = 0
   }
 
   return {
     get,
     invalidate,
+    hasValue,
     hasFreshValue
   }
 }

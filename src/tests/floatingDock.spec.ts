@@ -49,17 +49,19 @@ describe('floating dock', () => {
     expect(source).toContain("icon: 'home-filled'")
     expect(source).toContain("icon: 'fire-filled'")
     expect(source).toContain("icon: 'medal-filled'")
+    expect(source).toContain('open-type="switchTab"')
+    expect(source).not.toContain('open-type="redirect"')
     expect(source).not.toContain('shortLabel')
-    expect(source).toContain('height: 98rpx;')
-    expect(source).toContain('padding: 19rpx 2rpx;')
-    expect(source).toContain('left: 104rpx;')
-    expect(source).toContain('right: 104rpx;')
+    expect(source).toContain('height: 118rpx;')
+    expect(source).toContain('padding: 23rpx 3rpx;')
+    expect(source).toContain('left: 52rpx;')
+    expect(source).toContain('right: 52rpx;')
     expect(layoutSource).toContain('safeAreaInsets?.bottom')
     expect(layoutSource).toContain('windowHeight - windowInfo.safeArea.bottom')
     expect(layoutSource).toContain('const targetTotalBottomPx = baseGapPx + referenceSafeAreaBottomPx')
     expect(layoutSource).toContain('targetTotalBottomPx - safeAreaBottom')
     expect(source).toContain('bottom: calc(var(--floating-dock-bottom-gap, 42px) + env(safe-area-inset-bottom));')
-    expect(source).toContain('0 18rpx 38rpx rgba(37, 47, 61, 0.15)')
+    expect(source).toContain('0 22rpx 46rpx rgba(37, 47, 61, 0.15)')
     expect(source).toContain('background: #ff6f6f;')
     expect(source).toContain('width: 144rpx;')
     expect(source).toContain('height: 56rpx;')
@@ -67,8 +69,9 @@ describe('floating dock', () => {
     expect(source).toContain('class="floating-dock__glyph"')
     expect(source).toMatch(/\.floating-dock__glyph\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*line-height:\s*1;/)
     expect(source).toContain("'floating-dock__cell'")
-    expect(source).toMatch(/\.floating-dock__item\s*\{[\s\S]*align-items:\s*center;[\s\S]*gap:\s*16rpx;/)
-    expect(source).toMatch(/\.floating-dock__item--active\s*\{[\s\S]*width:\s*144rpx;[\s\S]*height:\s*56rpx;[\s\S]*justify-content:\s*center;[\s\S]*gap:\s*8rpx;[\s\S]*padding:\s*0;[\s\S]*border-radius:\s*28rpx;[\s\S]*background:\s*#ff6f6f;/)
+    expect(source).toMatch(/\.floating-dock__item\s*\{[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;/)
+    expect(source).toMatch(/\.floating-dock__visual\s*\{[\s\S]*gap:\s*16rpx;[\s\S]*transform:\s*scale\(1\.2\);[\s\S]*transform-origin:\s*center;/)
+    expect(source).toMatch(/\.floating-dock__visual--active\s*\{[\s\S]*width:\s*144rpx;[\s\S]*gap:\s*8rpx;[\s\S]*border-radius:\s*28rpx;[\s\S]*background:\s*#ff6f6f;/)
     expect(source).toMatch(/\.floating-dock__icon--active\s*\{[\s\S]*width:\s*40rpx;[\s\S]*height:\s*56rpx;[\s\S]*background:\s*transparent;/)
     expect(source).not.toContain('.floating-dock__cell:first-child')
     expect(source).not.toContain('.floating-dock__cell:last-child')
@@ -90,6 +93,20 @@ describe('floating dock', () => {
     }
   })
 
+  it('keeps the dock clearance inside scroll content instead of painting an opaque footer band', () => {
+    const shells = [
+      'src/uni-app/components/training/UniTrainingPageShell.vue',
+      'src/uni-app/components/growth/UniGrowthPageShell.vue'
+    ]
+
+    for (const shell of shells) {
+      const source = readFileSync(resolve(process.cwd(), shell), 'utf8')
+      expect(source).toContain('__dock-clearance')
+      expect(source).not.toMatch(/\.(?:training|growth)-shell\s*\{[^}]*padding:[^;]*var\(--floating-dock-content-clearance/)
+      expect(source).toMatch(/__dock-clearance\s*\{[\s\S]*flex:\s*0 0 var\(--floating-dock-content-clearance, 100px\);/)
+    }
+  })
+
   it('compensates the runtime safe-area inset to keep the same total bottom clearance', async () => {
     const androidLayout = resolveFloatingDockLayout({
       windowWidth: 375,
@@ -101,8 +118,8 @@ describe('floating dock', () => {
       windowHeight: 800,
       safeAreaInsets: { bottom: 34 }
     })
-    expect(androidLayout.contentClearancePx).toBe(100)
-    expect(iosLayout.contentClearancePx).toBe(100)
+    expect(androidLayout.contentClearancePx).toBe(110)
+    expect(iosLayout.contentClearancePx).toBe(110)
 
     vi.stubGlobal('uni', {
       getWindowInfo: () => ({

@@ -12,12 +12,20 @@ const props = withDefaults(defineProps<{
   showDock?: boolean
   pageTitle?: string
   showBack?: boolean
+  refreshEnabled?: boolean
+  refreshing?: boolean
 }>(), {
   dockTab: 'growth',
   showDock: true,
   pageTitle: '',
-  showBack: false
+  showBack: false,
+  refreshEnabled: false,
+  refreshing: false
 })
+
+const emit = defineEmits<{
+  refresh: []
+}>()
 
 const { contentClearancePx } = useFloatingDockLayout()
 const shellStyle = computed(() => ({
@@ -32,7 +40,10 @@ onMounted(() => {
 <template>
   <view
     class="growth-shell"
-    :class="{ 'growth-shell--no-dock': !props.showDock }"
+    :class="{
+      'growth-shell--no-dock': !props.showDock,
+      'growth-shell--refreshable': props.refreshEnabled
+    }"
     :style="shellStyle"
   >
     <view class="growth-shell__halo growth-shell__halo--coral" />
@@ -45,10 +56,39 @@ onMounted(() => {
       :title="props.pageTitle"
       :show-back="props.showBack"
     />
-    <view class="growth-shell__inner">
+    <view
+      v-if="props.refreshEnabled"
+      class="growth-shell__scroll-frame"
+    >
+      <scroll-view
+        class="growth-shell__inner growth-shell__inner--refreshable"
+        scroll-y
+        enable-flex
+        refresher-enabled
+        :refresher-threshold="140"
+        refresher-background="transparent"
+        :refresher-triggered="props.refreshing"
+        @refresherrefresh="emit('refresh')"
+      >
+        <view class="growth-shell__content">
+          <slot />
+          <view
+            v-if="props.showDock"
+            class="growth-shell__dock-clearance"
+            aria-hidden="true"
+          />
+        </view>
+      </scroll-view>
+    </view>
+    <view v-else class="growth-shell__inner">
       <transition name="shell-enter" appear>
         <view class="growth-shell__content">
           <slot />
+          <view
+            v-if="props.showDock"
+            class="growth-shell__dock-clearance"
+            aria-hidden="true"
+          />
         </view>
       </transition>
     </view>
@@ -65,11 +105,17 @@ onMounted(() => {
   min-height: 100vh;
   box-sizing: border-box;
   background: #FCF7F0;
-  padding: 0 32rpx var(--floating-dock-content-clearance, 100px);
+  padding: 0;
 }
 
 .growth-shell--no-dock {
   padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+}
+
+.growth-shell--refreshable {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
 }
 
 .growth-shell__halo {
@@ -123,8 +169,8 @@ onMounted(() => {
 .growth-shell__inner {
   position: relative;
   z-index: 1;
-  margin: 0 auto;
-  width: min(880px, 100%);
+  margin: 0;
+  width: 100%;
   min-height: 0;
   flex: 1;
   display: flex;
@@ -135,9 +181,49 @@ onMounted(() => {
 
 .growth-shell__content {
   display: flex;
-  width: 100%;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 16rpx 32rpx 0;
+  box-sizing: border-box;
   flex-direction: column;
   gap: 32rpx;
+}
+
+.growth-shell__dock-clearance {
+  width: 100%;
+  height: var(--floating-dock-content-clearance, 100px);
+  min-height: var(--floating-dock-content-clearance, 100px);
+  flex: 0 0 var(--floating-dock-content-clearance, 100px);
+  pointer-events: none;
+}
+
+.growth-shell__inner--refreshable {
+  height: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.growth-shell__scroll-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
 }
 
 .shell-enter-enter-active {

@@ -193,7 +193,7 @@ function interruptSession() {
     })
   }
 
-  void uni.redirectTo({
+  void uni.switchTab({
     url: '/pages/training/select'
   })
 }

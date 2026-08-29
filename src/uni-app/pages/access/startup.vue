@@ -165,7 +165,7 @@ function handleRetry() {
   flex-direction: column;
   justify-content: space-between;
   gap: 80rpx;
-  padding: 112rpx 48rpx calc(104rpx + env(safe-area-inset-bottom));
+  padding: 128rpx 48rpx calc(104rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

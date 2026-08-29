@@ -3,14 +3,16 @@ withDefaults(defineProps<{
   eyebrow?: string
   title: string
   description?: string
+  inset?: boolean
 }>(), {
   eyebrow: '',
-  description: ''
+  description: '',
+  inset: false
 })
 </script>
 
 <template>
-  <view class="page-heading">
+  <view class="page-heading" :class="{ 'page-heading--inset': inset }">
     <text v-if="eyebrow" class="page-heading__eyebrow">{{ eyebrow }}</text>
     <text class="page-heading__title">{{ title }}</text>
     <text v-if="description" class="page-heading__description">{{ description }}</text>
@@ -22,6 +24,11 @@ withDefaults(defineProps<{
   display: flex;
   flex-direction: column;
   gap: 10rpx;
+}
+
+.page-heading--inset {
+  margin-top: 24rpx;
+  margin-left: 32rpx;
 }
 
 .page-heading__eyebrow {

@@ -56,23 +56,27 @@ const dockItems: Array<{
         v-if="item.key === props.activeTab"
         class="floating-dock__item floating-dock__item--active"
       >
-        <view class="floating-dock__icon floating-dock__icon--active">
-          <uni-icons class="floating-dock__glyph" :type="item.icon" size="20" color="#ffffff" />
+        <view class="floating-dock__visual floating-dock__visual--active">
+          <view class="floating-dock__icon floating-dock__icon--active">
+            <uni-icons class="floating-dock__glyph" :type="item.icon" size="20" color="#ffffff" />
+          </view>
+          <text class="floating-dock__label floating-dock__label--active">{{ item.label }}</text>
         </view>
-        <text class="floating-dock__label floating-dock__label--active">{{ item.label }}</text>
       </view>
 
       <navigator
         v-else
         class="floating-dock__item"
         hover-class="floating-dock__item--pressed"
-        open-type="redirect"
+        open-type="switchTab"
         :url="item.url"
       >
-        <view class="floating-dock__icon">
-          <uni-icons class="floating-dock__glyph" :type="item.icon" size="16" color="#7f95b2" />
+        <view class="floating-dock__visual">
+          <view class="floating-dock__icon">
+            <uni-icons class="floating-dock__glyph" :type="item.icon" size="16" color="#7f95b2" />
+          </view>
+          <text class="floating-dock__label">{{ item.label }}</text>
         </view>
-        <text class="floating-dock__label">{{ item.label }}</text>
       </navigator>
     </view>
   </view>
@@ -81,24 +85,24 @@ const dockItems: Array<{
 <style scoped>
 .floating-dock {
   position: fixed;
-  left: 104rpx;
-  right: 104rpx;
+  left: 52rpx;
+  right: 52rpx;
   bottom: calc(var(--floating-dock-bottom-gap, 42px) + env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
-  height: 98rpx;
+  height: 118rpx;
   align-items: center;
   justify-content: space-between;
   gap: 0;
   box-sizing: border-box;
-  padding: 19rpx 2rpx;
+  padding: 23rpx 3rpx;
   border: 2rpx solid rgba(234, 216, 190, 0.82);
   border-radius: 9999px;
   background: rgba(255, 252, 248, 0.97);
   box-shadow:
-    0 18rpx 38rpx rgba(37, 47, 61, 0.15),
-    0 6rpx 12rpx rgba(90, 72, 52, 0.08),
-    0 4rpx 0 rgba(244, 231, 208, 0.68);
+    0 22rpx 46rpx rgba(37, 47, 61, 0.15),
+    0 7rpx 14rpx rgba(90, 72, 52, 0.08),
+    0 5rpx 0 rgba(244, 231, 208, 0.68);
 }
 
 .floating-dock__cell {
@@ -119,7 +123,6 @@ const dockItems: Array<{
   flex: none;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
   box-sizing: border-box;
   padding: 0 4rpx;
   border-radius: 9999px;
@@ -127,15 +130,7 @@ const dockItems: Array<{
 }
 
 .floating-dock__item--active {
-  width: 144rpx;
-  height: 56rpx;
-  max-width: calc(100% - 8rpx);
-  justify-content: center;
-  gap: 8rpx;
-  padding: 0;
-  border-radius: 28rpx;
-  background: #ff6f6f;
-  box-shadow: 0 3rpx 8rpx rgba(222, 92, 92, 0.16);
+  padding: 0 4rpx;
 }
 
 .floating-dock__cell--divided::before {
@@ -152,6 +147,25 @@ const dockItems: Array<{
 
 .floating-dock__item--pressed {
   opacity: 0.78;
+}
+
+.floating-dock__visual {
+  display: inline-flex;
+  height: 56rpx;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  transform: scale(1.2);
+  transform-origin: center;
+}
+
+.floating-dock__visual--active {
+  width: 144rpx;
+  max-width: calc(100% - 8rpx);
+  gap: 8rpx;
+  border-radius: 28rpx;
+  background: #ff6f6f;
+  box-shadow: 0 3rpx 8rpx rgba(222, 92, 92, 0.16);
 }
 
 .floating-dock__icon {

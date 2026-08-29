@@ -180,11 +180,11 @@ const reminderActionLabel = computed(() => {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 10rpx;
 }
 
 .home-header--compact .home-header__copy {
-  gap: 2rpx;
+  gap: 8rpx;
 }
 
 .home-header__name {

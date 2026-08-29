@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<{
   pageTitle?: string
   showBack?: boolean
   showNavigation?: boolean
+  refreshEnabled?: boolean
+  refreshing?: boolean
 }>(), {
   dockTab: 'playground',
   showDock: true,
@@ -27,8 +29,14 @@ const props = withDefaults(defineProps<{
   accessMode: 'browse',
   pageTitle: '',
   showBack: false,
-  showNavigation: true
+  showNavigation: true,
+  refreshEnabled: false,
+  refreshing: false
 })
+
+const emit = defineEmits<{
+  refresh: []
+}>()
 
 const { contentClearancePx } = useFloatingDockLayout()
 const shellStyle = computed(() => ({
@@ -46,7 +54,8 @@ onMounted(() => {
     :style="shellStyle"
     :class="{
       'training-shell--no-dock': !props.showDock,
-      'training-shell--fit-viewport': props.fitViewport
+      'training-shell--fit-viewport': props.fitViewport,
+      'training-shell--refreshable': props.refreshEnabled
     }"
   >
     <view v-if="props.showDock || props.showDecorations" class="training-shell__halo training-shell__halo--coral" />
@@ -60,18 +69,63 @@ onMounted(() => {
       :show-back="props.showBack"
     />
     <view
+      v-if="props.refreshEnabled"
+      class="training-shell__scroll-frame"
+    >
+      <scroll-view
+        class="training-shell__inner training-shell__inner--refreshable"
+        :class="{ 'training-shell__inner--no-dock': !props.showDock }"
+        scroll-y
+        enable-flex
+        refresher-enabled
+        :refresher-threshold="140"
+        refresher-background="transparent"
+        :refresher-triggered="props.refreshing"
+        @refresherrefresh="emit('refresh')"
+      >
+        <view
+          class="training-shell__content"
+          :class="{ 'training-shell__content--padded': props.showDock }"
+        >
+          <slot />
+          <view
+            v-if="props.showDock"
+            class="training-shell__dock-clearance"
+            aria-hidden="true"
+          />
+        </view>
+      </scroll-view>
+    </view>
+    <view
+      v-else
       class="training-shell__inner"
       :class="{
         'training-shell__inner--no-dock': !props.showDock,
         'training-shell__inner--fit-viewport': props.fitViewport
       }"
     >
-      <view v-if="props.fitViewport" class="training-shell__content">
+      <view
+        v-if="props.fitViewport" class="training-shell__content"
+        :class="{ 'training-shell__content--padded': props.showDock }"
+      >
         <slot />
+        <view
+          v-if="props.showDock"
+          class="training-shell__dock-clearance"
+          aria-hidden="true"
+        />
       </view>
       <transition v-else name="shell-enter" appear>
-        <view class="training-shell__content">
+        <view
+          class="training-shell__content"
+          :class="{ 'training-shell__content--padded': props.showDock }"
+        >
           <slot />
+          <view
+            v-if="props.showDock"
+            class="training-shell__dock-clearance"
+            aria-hidden="true"
+          />
         </view>
       </transition>
     </view>
@@ -88,7 +142,7 @@ onMounted(() => {
   box-sizing: border-box;
   overflow: hidden;
   background: #FCF7F0;
-  padding: 0 32rpx var(--floating-dock-content-clearance, 100px);
+  padding: 0;
 }
 
 .training-shell--no-dock {
@@ -103,6 +157,13 @@ onMounted(() => {
 
 .training-shell--no-dock.training-shell--fit-viewport {
   padding: 0;
+}
+
+.training-shell--refreshable,
+.training-shell--no-dock.training-shell--refreshable {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
 }
 
 .training-shell__halo {
@@ -156,8 +217,8 @@ onMounted(() => {
 .training-shell__inner {
   position: relative;
   z-index: 1;
-  margin: 0 auto;
-  width: min(880px, 100%);
+  margin: 0;
+  width: 100%;
   min-height: 0;
   flex: 1;
   display: flex;
@@ -185,6 +246,29 @@ onMounted(() => {
   min-height: 0;
 }
 
+.training-shell__inner--refreshable,
+.training-shell__inner--no-dock.training-shell__inner--refreshable {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
 .training-shell__content {
   display: flex;
   width: 100%;
@@ -192,6 +276,31 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   flex-direction: column;
+  padding-top: 16rpx;
+  box-sizing: border-box;
+}
+
+.training-shell__content--padded {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 16rpx 32rpx 0;
+  box-sizing: border-box;
+}
+
+.training-shell__scroll-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.training-shell__dock-clearance {
+  width: 100%;
+  height: var(--floating-dock-content-clearance, 100px);
+  min-height: var(--floating-dock-content-clearance, 100px);
+  flex: 0 0 var(--floating-dock-content-clearance, 100px);
+  pointer-events: none;
 }
 
 .shell-enter-enter-active {

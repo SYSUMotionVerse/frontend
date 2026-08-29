@@ -23,6 +23,7 @@ const loadStationNotifications = vi.fn().mockResolvedValue({ count: 0, notificat
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
+  onPullDownRefresh: vi.fn(),
   onShow: vi.fn((callback: () => unknown) => callback())
 }))
 
@@ -100,9 +101,11 @@ describe('authoritative training progress', () => {
     loadTrainingProgress.mockClear()
 
     await progress.refresh()
+    const readyState = progress.state.value
     await progress.refresh()
 
     expect(loadTrainingProgress).toHaveBeenCalledTimes(1)
+    expect(progress.state.value).toBe(readyState)
   })
 
   it('drops stale ready data when a later progress refresh fails', async () => {
@@ -145,9 +148,11 @@ describe('authoritative training progress', () => {
     expect(launchRows).toHaveLength(3)
     expect(launchRows[0].text()).toContain('HIIT Blast')
     expect(launchRows[0].text()).toContain('推荐')
-    expect(launchRows[1].text()).toContain('武术（Wushu）')
+    expect(launchRows[1].text()).toContain('武术')
+    expect(launchRows[1].text()).not.toContain('Wushu')
     expect(launchRows[1].text()).toContain('已完成')
-    expect(launchRows[2].text()).toContain('跑楼梯（Stairs）')
+    expect(launchRows[2].text()).toContain('跑楼梯')
+    expect(launchRows[2].text()).not.toContain('Stairs')
     expect(launchRows[2].text()).toContain('待完成')
   }, 15000)
 })

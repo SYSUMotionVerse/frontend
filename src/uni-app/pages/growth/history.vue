@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import AssessmentHistoryList from '../../../components/growth/AssessmentHistoryList.vue'
 import GrowthHistoryTrendPanel from '../../../components/growth/GrowthHistoryTrendPanel.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
@@ -10,11 +11,30 @@ import { useGrowthOverview } from '../../composables/useGrowthOverview'
 const { assessments, loadState, refresh, sessions } = useGrowthOverview({
   sections: ['history']
 })
+const isRefreshing = ref(false)
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await refresh({ force: true })
+  } finally {
+    isRefreshing.value = false
+  }
+}
 </script>
 
 <template>
-  <UniGrowthPageShell :show-dock="false" page-title="历史记录" show-back>
+  <UniGrowthPageShell
+    :show-dock="false"
+    page-title="历史记录"
+    show-back
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <UniPageHeading
+      inset
       eyebrow="成长"
       title="训练与评估历史"
       description="集中查看训练记录与长问卷评估。"

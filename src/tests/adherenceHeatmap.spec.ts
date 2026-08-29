@@ -53,5 +53,7 @@ describe('AdherenceHeatmap', () => {
 
     const componentSource = readFileSync(resolve('src/components/growth/AdherenceHeatmap.vue'), 'utf8')
     expect(componentSource).toContain('gap: 88rpx;')
+    expect(componentSource).toContain('background: #eef7ff;')
+    expect(componentSource).not.toContain('background: #f1f5f9;')
   })
 })

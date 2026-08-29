@@ -804,7 +804,7 @@ defineExpose({ startRecord, stopRecord })
   display: flex;
   flex-direction: column;
   gap: 18rpx;
-  margin: 0 8rpx 18rpx;
+  margin: 24rpx 8rpx 18rpx 32rpx;
 }
 
 .visual-session__tutorial-progress {

@@ -163,13 +163,13 @@ const scoreDescription = computed(() => {
 })
 
 function goHome() {
-  void uni.redirectTo({
+  void uni.switchTab({
     url: '/pages/training/home'
   })
 }
 
 function goGrowthCenter() {
-  void uni.redirectTo({
+  void uni.switchTab({
     url: '/pages/growth/index'
   })
 }
@@ -324,7 +324,7 @@ onShareAppMessage((options) => {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  padding: 32rpx 40rpx calc(56rpx + env(safe-area-inset-bottom));
+  padding: 48rpx 40rpx calc(56rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

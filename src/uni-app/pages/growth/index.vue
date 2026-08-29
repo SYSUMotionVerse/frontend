@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
@@ -14,6 +14,7 @@ import { useStudentStore } from '../../composables/useStudentStore'
 const store = useStudentStore()
 const stationNotifications = useStationNotifications()
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
+const isRefreshing = ref(false)
 
 const {
   achievements,
@@ -84,8 +85,24 @@ const explorationLinks = computed(() => [
 ])
 
 onShow(() => {
-  void stationNotifications.refresh()
+  void Promise.all([
+    refresh(),
+    stationNotifications.refresh()
+  ])
 })
+
+async function handlePullDownRefresh() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await Promise.all([
+      refresh({ force: true }),
+      stationNotifications.refresh({ force: true })
+    ])
+  } finally {
+    isRefreshing.value = false
+  }
+}
 
 onShareAppMessage((options) => {
   const targetDataset = options.target?.dataset as {
@@ -101,7 +118,13 @@ onShareAppMessage((options) => {
 </script>
 
 <template>
-  <UniGrowthPageShell dock-tab="growth" page-title="成长记录">
+  <UniGrowthPageShell
+    dock-tab="growth"
+    page-title="成长记录"
+    refresh-enabled
+    :refreshing="isRefreshing"
+    @refresh="handlePullDownRefresh"
+  >
     <view class="growth-page">
       <TrainingHomeHeader
         :display-name="displayName"
