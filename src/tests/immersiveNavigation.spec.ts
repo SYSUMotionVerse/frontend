@@ -23,6 +23,20 @@ describe('immersive mini-program navigation', () => {
     expect(source).not.toContain('box-shadow:')
   })
 
+  it('keeps the title bar fixed while content scrolls beneath a translucent fade', () => {
+    const source = readFileSync(
+      resolve('src/uni-app/components/layout/ImmersiveNavigationBar.vue'),
+      'utf8'
+    )
+
+    expect(source).toContain('class="immersive-nav__fixed"')
+    expect(source).toMatch(/\.immersive-nav__fixed\s*\{[^}]*position: fixed;/)
+    expect(source).toMatch(/\.immersive-nav__fixed\s*\{[^}]*top: 0;/)
+    expect(source).toContain('.immersive-nav__fixed::after')
+    expect(source).toContain('linear-gradient(')
+    expect(source).toContain('rgba(252, 247, 240, 0) 100%')
+  })
+
   it('wires the shared navigation into every page shell and standalone page', () => {
     const accessShell = readFileSync(resolve('src/uni-app/components/access/UniAccessPageShell.vue'), 'utf8')
     const trainingShell = readFileSync(resolve('src/uni-app/components/training/UniTrainingPageShell.vue'), 'utf8')

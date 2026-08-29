@@ -23,9 +23,16 @@ const metrics = shallowRef({
   sideClearance: 56
 })
 
-const navigationStyle = computed(() => ({
+const fadeHeight = 15
+
+const fixedNavigationStyle = computed(() => ({
   height: `${metrics.value.statusBarHeight + metrics.value.barHeight}px`,
   paddingTop: `${metrics.value.statusBarHeight}px`,
+  '--immersive-nav-side-clearance': `${metrics.value.sideClearance}px`
+}))
+
+const navigationSpacerStyle = computed(() => ({
+  height: `${metrics.value.statusBarHeight + metrics.value.barHeight + fadeHeight}px`,
   '--immersive-nav-side-clearance': `${metrics.value.sideClearance}px`
 }))
 
@@ -77,32 +84,61 @@ onMounted(updateMetrics)
 </script>
 
 <template>
-  <view class="immersive-nav" :style="navigationStyle">
-    <button
-      v-if="props.showBack"
-      class="immersive-nav__back"
-      type="button"
-      aria-label="返回上一页"
-      @click="goBack"
-    >
-      <uni-icons type="left" size="28" color="#173553" />
-    </button>
-    <text class="immersive-nav__title">{{ props.title }}</text>
+  <view class="immersive-nav" :style="navigationSpacerStyle">
+    <view class="immersive-nav__fixed" :style="fixedNavigationStyle">
+      <button
+        v-if="props.showBack"
+        class="immersive-nav__back"
+        type="button"
+        aria-label="返回上一页"
+        @click="goBack"
+      >
+        <uni-icons type="left" size="28" color="#173553" />
+      </button>
+      <text class="immersive-nav__title">{{ props.title }}</text>
+    </view>
   </view>
 </template>
 
 <style scoped>
 .immersive-nav {
   position: relative;
-  z-index: 12;
-  display: flex;
   width: 100%;
   flex: none;
-  align-items: center;
-  justify-content: center;
   box-sizing: border-box;
   background: transparent;
   color: #173553;
+}
+
+.immersive-nav__fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: rgba(252, 247, 240, 0.94);
+  color: #173553;
+}
+
+.immersive-nav__fixed::after {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 30rpx;
+  background: linear-gradient(
+    180deg,
+    rgba(252, 247, 240, 0.82) 0%,
+    rgba(252, 247, 240, 0.42) 52%,
+    rgba(252, 247, 240, 0) 100%
+  );
+  content: '';
+  pointer-events: none;
 }
 
 .immersive-nav__title {
