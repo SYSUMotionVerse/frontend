@@ -109,7 +109,7 @@ onMounted(updateMetrics)
   position: absolute;
   left: var(--immersive-nav-side-clearance);
   right: var(--immersive-nav-side-clearance);
-  bottom: 0;
+  bottom: -16rpx;
   display: flex;
   height: 44px;
   align-items: center;
@@ -127,7 +127,7 @@ onMounted(updateMetrics)
 .immersive-nav__back {
   position: absolute;
   left: 24rpx;
-  bottom: 0;
+  bottom: -16rpx;
   z-index: 1;
   display: inline-flex;
   width: 80rpx;

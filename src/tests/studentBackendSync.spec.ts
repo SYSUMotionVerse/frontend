@@ -393,6 +393,72 @@ describe('student backend sync orchestration', () => {
     vi.unstubAllEnvs()
   })
 
+  it('lists published visual arrangements in display order and loads the selected set', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const listExerciseArrangements = vi.fn().mockResolvedValue([
+      {
+        id: 8,
+        title: '进阶自重抗阻',
+        exercise_type: 'HIIT',
+        item_count: 3,
+        total_duration: 120,
+        is_active: true,
+        order: 2
+      },
+      {
+        id: 4,
+        title: '基础自重抗阻',
+        exercise_type: 'HIIT',
+        item_count: 2,
+        total_duration: 80,
+        is_active: true,
+        order: 1
+      }
+    ])
+    const getExerciseArrangement = vi.fn().mockResolvedValue({
+      id: 8,
+      title: '进阶自重抗阻',
+      exercise_type: 'HIIT',
+      item_count: 1,
+      total_duration: 40,
+      is_active: true,
+      order: 2,
+      configuration_fingerprint: 'a'.repeat(64),
+      items: [{
+        id: 81,
+        video_id: 18,
+        video: {
+          id: 18,
+          title: '开合跳',
+          exercise_type: 'HIIT',
+          video_file: 'https://cdn.example.com/jump.mp4',
+          standard_data_url: 'https://cdn.example.com/jump.json'
+        },
+        pretraining_mode: 'FULL',
+        pretraining_countdown_duration: 0,
+        expected_duration: 40,
+        formal_countdown_duration: 3,
+        order: 1
+      }]
+    })
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession,
+      listExerciseArrangements,
+      getExerciseArrangement
+    })
+
+    const summaries = await sync.listVisualExerciseArrangements('hiit')
+    const selected = await sync.loadVisualExerciseArrangement('hiit', 8)
+
+    expect(summaries.map(item => item.id)).toEqual([4, 8])
+    expect(selected?.id).toBe(8)
+    expect(getExerciseArrangement).toHaveBeenCalledTimes(1)
+    expect(getExerciseArrangement).toHaveBeenCalledWith(8)
+    expect(listExerciseArrangements).toHaveBeenCalledWith('HIIT')
+  })
+
   it('syncs a stair session through the stairs endpoint', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 

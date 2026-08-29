@@ -61,6 +61,14 @@
       }
     },
     {
+      "path": "pages/training/exercise-sets",
+      "style": {
+        "navigationBarTitleText": "选择训练套组",
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
+      }
+    },
+    {
       "path": "pages/training/stair-session",
       "style": {
         "navigationBarTitleText": "阶梯训练"

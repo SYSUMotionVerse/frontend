@@ -20,7 +20,7 @@ describe('immersive mini-program navigation', () => {
     expect(source).toContain('background: transparent;')
     expect(source).toContain('px - 16rpx)`')
     expect(source).not.toContain("paddingBottom: '16rpx'")
-    expect(source).toContain('bottom: 0;')
+    expect(source).toContain('bottom: -16rpx;')
     expect(source).not.toContain('--immersive-nav-bottom-gap')
     expect(source).not.toContain('box-shadow:')
   })

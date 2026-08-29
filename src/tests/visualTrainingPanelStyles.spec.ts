@@ -69,7 +69,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('下一训练步骤：{{ restNextTitle }}')
     expect(source).toContain('动作剩余')
     expect(source).toContain('visual-session__start-overlay')
-    expect(source).toContain("'visual-session__start-overlay--ready'")
+    expect(source).not.toContain("'visual-session__start-overlay--ready'")
     expect(source).toContain('border-radius: 30rpx;')
     expect(source).toContain('font-size: 30rpx;')
     expect(source).toContain("phaseSlot === 'pretraining-countdown'")
@@ -150,7 +150,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
       'utf8'
     )
 
-    expect(source).toContain('v-if="showStartAction && !comparisonMode"')
+    expect(source).toContain('v-if="showStartAction && !comparisonMode && (startActionDisabled || recognitionStatus === \'failed\')"')
     expect(source).toContain("'visual-session--comparison': comparisonMode")
     expect(source).toContain("'visual-session--tutorial': tutorialMode && !comparisonMode")
     expect(source).not.toContain('@media (orientation: landscape)')

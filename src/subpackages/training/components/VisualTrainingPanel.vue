@@ -84,6 +84,7 @@ const activeMedia = shallowRef<ActiveMedia>('demonstration')
 const demonstrationPlaybackRate = shallowRef(1)
 const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
+const automaticTrainingStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
 const POSE_MOUNT_DELAY_MS = 500
 const poseMountReady = shallowRef(false)
@@ -222,10 +223,22 @@ function requestCameraStart() {
   emit('startRecognition', 5)
 }
 
-function handlePortraitStart() {
-  if (startActionDisabled.value || props.recognitionStatus === 'failed') return
-  emit('startTraining')
-}
+watch(
+  () => !props.tutorialMode
+    && showStartAction.value
+    && props.recognitionReady
+    && props.recognitionStatus !== 'failed',
+  (readyToStart) => {
+    if (!readyToStart) {
+      if (props.trainingStarted) automaticTrainingStartRequested.value = false
+      return
+    }
+    if (automaticTrainingStartRequested.value) return
+    automaticTrainingStartRequested.value = true
+    emit('startTraining')
+  },
+  { immediate: true }
+)
 
 watch(
   () => props.recognitionEnabled,
@@ -671,15 +684,13 @@ defineExpose({ startRecord, stopRecord })
         <cover-view>语音讲解与示范视频同步播放</cover-view>
       </cover-view>
       <cover-view
-        v-if="showStartAction && !comparisonMode"
+        v-if="showStartAction && !comparisonMode && (startActionDisabled || recognitionStatus === 'failed')"
         class="visual-session__start-overlay"
-        :class="{ 'visual-session__start-overlay--ready': !startActionDisabled && recognitionStatus !== 'failed' }"
-        @tap="handlePortraitStart"
       >
         <cover-view class="visual-session__start-hint">
           {{ recognitionStatus === 'failed'
             ? '相机未就绪，请退出训练后重试'
-            : startActionDisabled ? '正在准备摄像头…' : '摄像头已就绪，轻触画面开始训练' }}
+            : '正在准备摄像头…' }}
         </cover-view>
       </cover-view>
       <cover-view

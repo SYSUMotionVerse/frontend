@@ -168,7 +168,7 @@ async function startNextTraining() {
   }
 
   void uni.navigateTo({
-    url: `/subpackages/training/visual-session?modality=${next.id}`
+    url: `/pages/training/exercise-sets?modality=${next.id}`
   })
 }
 

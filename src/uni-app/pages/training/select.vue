@@ -62,7 +62,7 @@ const trainingModes: TrainingModeSummary[] = [
   },
   {
     modality: 'hiit',
-    title: 'HIIT Blast',
+    title: '自重抗阻',
     actionHint: '开始间歇冲刺',
     routeLabel: '镜头跟练',
     icon: 'fire-filled',
@@ -182,7 +182,7 @@ async function chooseMode(modality: TrainingModality) {
   }
 
   void uni.navigateTo({
-    url: `/subpackages/training/visual-session?modality=${modality}`
+    url: `/pages/training/exercise-sets?modality=${modality}`
   })
 }
 </script>

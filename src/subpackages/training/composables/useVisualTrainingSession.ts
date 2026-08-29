@@ -61,6 +61,7 @@ export interface VisualTrainingCaptureApi {
 
 interface UseVisualTrainingSessionOptions {
   modality: ShallowRef<Exclude<TrainingModality, 'stair'>>
+  arrangementId: ShallowRef<number | null>
 }
 
 type PoseRecognitionStatus = 'idle' | 'preparing' | 'ready' | 'failed'
@@ -1085,7 +1086,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     arrangement.value = null
 
     try {
-      const nextArrangement = await studentBackendSync.loadVisualExerciseArrangement(options.modality.value)
+      const nextArrangement = await studentBackendSync.loadVisualExerciseArrangement(
+        options.modality.value,
+        options.arrangementId.value ?? undefined
+      )
       if (requestId !== videoRequestId) return
 
       arrangement.value = nextArrangement
@@ -1559,7 +1563,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     void uni.switchTab({ url: '/pages/training/select' })
   }
 
-  watch(options.modality, () => {
+  watch([options.modality, options.arrangementId], () => {
     invalidateModuleTransition()
     void stopRecording()
     recognitionEnabled.value = false

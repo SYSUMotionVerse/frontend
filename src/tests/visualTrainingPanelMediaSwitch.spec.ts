@@ -211,21 +211,19 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.find('.visual-session__actions').exists()).toBe(false)
   })
 
-  it('uses the rounded portrait readiness overlay as the start action without a center button', async () => {
+  it('starts automatically when the portrait camera becomes ready', async () => {
     const wrapper = mountPanel(true)
+
+    expect(wrapper.get('.visual-session__start-overlay').text()).toContain('正在准备摄像头')
 
     await wrapper.setProps({
       recognitionReady: true,
       recognitionStatus: 'ready'
     })
 
-    const startAction = wrapper.get('.visual-session__start-overlay')
-    expect(startAction.element.tagName.toLowerCase()).toBe('cover-view')
+    expect(wrapper.find('.visual-session__start-overlay').exists()).toBe(false)
     expect(wrapper.find('.visual-session__start-button').exists()).toBe(false)
-    expect(wrapper.text()).toContain('摄像头已就绪，轻触画面开始训练')
-
-    await startAction.trigger('tap')
-
+    expect(wrapper.text()).not.toContain('摄像头已就绪，轻触画面开始训练')
     expect(wrapper.emitted('startTraining')).toHaveLength(1)
   })
 

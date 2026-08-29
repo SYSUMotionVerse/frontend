@@ -169,6 +169,8 @@ describe('ui review fixes', () => {
     expect(selectionPage).toContain('进度同步中')
     expect(selectionPage).toContain('完成任一训练后，将更新今日达标状态。')
     expect(selectionPage).toContain('trainingModes')
+    expect(selectionPage).toContain("title: '自重抗阻'")
+    expect(selectionPage).toContain('/pages/training/exercise-sets?modality=${modality}')
     expect(selectionPage).toContain('select-page__launch-list')
     expect(selectionPage).toContain('@click="chooseMode(mode.modality)"')
     expect(selectionPage).toContain(':type="mode.icon"')

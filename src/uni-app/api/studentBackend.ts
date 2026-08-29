@@ -22,6 +22,7 @@ import type {
   BackendPsychologyRecord,
   BackendSyncResult,
   ExerciseArrangementDetail,
+  ExerciseArrangementSummary,
   TutorialResponse,
   ExerciseVideoSummary,
   LongQuestionnaireSyncResult,
@@ -942,7 +943,8 @@ export function createStudentBackendSync(
       return video ? resolveExerciseVideoUrl(video) : null
     },
     async loadVisualExerciseArrangement(
-      modality: VisualSessionSyncInput['modality']
+      modality: VisualSessionSyncInput['modality'],
+      arrangementId?: number
     ): Promise<ExerciseArrangementDetail | null> {
       if (!dependencies.isEnabled()) {
         return null
@@ -954,6 +956,7 @@ export function createStudentBackendSync(
       )
       const candidates = [...arrangements]
         .filter(item => item.is_active !== false)
+        .filter(item => arrangementId === undefined || item.id === arrangementId)
         .sort((left, right) => left.order - right.order)
 
       for (const candidate of candidates) {
@@ -969,6 +972,21 @@ export function createStudentBackendSync(
       }
 
       return null
+    },
+    async listVisualExerciseArrangements(
+      modality: VisualSessionSyncInput['modality']
+    ): Promise<ExerciseArrangementSummary[]> {
+      if (!dependencies.isEnabled()) {
+        return []
+      }
+
+      await dependencies.ensureSession()
+      const arrangements = await dependencies.listExerciseArrangements(
+        resolveBackendExerciseType(modality)
+      )
+      return [...arrangements]
+        .filter(item => item.is_active !== false)
+        .sort((left, right) => left.order - right.order || left.id - right.id)
     },
     async loadExerciseVideoTutorial(
       videoId: number

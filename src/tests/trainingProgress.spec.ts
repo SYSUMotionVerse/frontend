@@ -146,7 +146,7 @@ describe('authoritative training progress', () => {
     const launchRows = wrapper.findAll('.select-page__launch-action')
 
     expect(launchRows).toHaveLength(3)
-    expect(launchRows[0].text()).toContain('HIIT Blast')
+    expect(launchRows[0].text()).toContain('自重抗阻')
     expect(launchRows[0].text()).toContain('推荐')
     expect(launchRows[1].text()).toContain('武术')
     expect(launchRows[1].text()).not.toContain('Wushu')

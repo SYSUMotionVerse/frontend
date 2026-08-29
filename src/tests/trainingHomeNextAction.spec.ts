@@ -131,7 +131,7 @@ describe('training home next action', () => {
 
     expect(controls.ensureProtectedStudentAccess).toHaveBeenCalledWith('execute')
     expect(controls.navigateTo).toHaveBeenCalledWith({
-      url: '/subpackages/training/visual-session?modality=hiit'
+      url: '/pages/training/exercise-sets?modality=hiit'
     })
   }, 15000)
 

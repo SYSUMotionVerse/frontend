@@ -15,6 +15,7 @@ describe('student miniapp route map', () => {
         'pages/access/questionnaire-result',
         'pages/training/home',
         'pages/training/select',
+        'pages/training/exercise-sets',
         'subpackages/training/visual-session',
         'pages/training/stair-session',
         'pages/training/short-questionnaire',

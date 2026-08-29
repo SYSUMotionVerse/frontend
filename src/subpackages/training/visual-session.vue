@@ -14,6 +14,7 @@ import {
 } from './composables/useVisualTrainingSession'
 
 const modality = shallowRef<Exclude<TrainingModality, 'stair'>>('wushu')
+const arrangementId = shallowRef<number | null>(null)
 const comparisonMode = shallowRef(false)
 const emptySafeAreaInsets: VisualSessionSafeAreaInsets = {
   top: 0,
@@ -27,8 +28,11 @@ const viewport = shallowRef({
   safeAreaInsets: emptySafeAreaInsets
 })
 const orientationReady = shallowRef(false)
-const session = useVisualTrainingSession({ modality })
-const navigationTitle = computed(() => session.tutorialMode.value ? '动作讲解' : '武术跟练')
+const session = useVisualTrainingSession({ modality, arrangementId })
+const navigationTitle = computed(() => {
+  if (session.tutorialMode.value) return '动作讲解'
+  return modality.value === 'hiit' ? '自重抗阻跟练' : '武术跟练'
+})
 
 const comparisonMediaSize = computed(() => {
   if (!comparisonMode.value || !viewport.value.width || !viewport.value.height) return undefined
@@ -152,6 +156,10 @@ updateOrientationFromRuntime()
 
 onLoad((query) => {
   modality.value = query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
+  const parsedArrangementId = Number(query?.arrangementId)
+  arrangementId.value = Number.isInteger(parsedArrangementId) && parsedArrangementId > 0
+    ? parsedArrangementId
+    : null
   updateOrientationFromRuntime()
 })
 
