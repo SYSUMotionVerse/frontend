@@ -75,7 +75,7 @@ defineProps<{
 .session-badges__hint {
   display: block;
   color: #2B7CB8;
-  font-size: 19rpx;
+  font-size: 22rpx;
   font-weight: 900;
   letter-spacing: 0.14em;
 }
@@ -84,13 +84,13 @@ defineProps<{
   display: block;
   margin-top: 6rpx;
   color: #1A202C;
-  font-size: 29rpx;
+  font-size: 32rpx;
   font-weight: 900;
 }
 
 .session-badges__hint {
   color: #64748B;
-  font-size: 18rpx;
+  font-size: 21rpx;
   letter-spacing: 0;
   text-align: right;
 }
@@ -226,7 +226,7 @@ defineProps<{
 
 .session-badges__empty-title {
   color: #1A202C;
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 900;
 }
 </style>

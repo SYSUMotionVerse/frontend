@@ -13,7 +13,7 @@ const { assessments, loadState, refresh, sessions } = useGrowthOverview({
 </script>
 
 <template>
-  <UniGrowthPageShell dock-tab="growth" page-title="历史记录" show-back>
+  <UniGrowthPageShell :show-dock="false" page-title="历史记录" show-back>
     <UniPageHeading
       eyebrow="成长"
       title="训练与评估历史"

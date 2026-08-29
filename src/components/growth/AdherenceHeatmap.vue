@@ -116,7 +116,7 @@ function cellClass(day: GrowthCalendarDay): string {
   width: 32rpx;
   height: 32rpx;
   color: #718096;
-  font-size: 22rpx;
+  font-size: 24rpx;
   line-height: 32rpx;
   text-align: center;
 }
@@ -180,8 +180,8 @@ function cellClass(day: GrowthCalendarDay): string {
 
 .adherence-legend__label {
   color: #8899b4;
-  font-size: 18rpx;
-  line-height: 24rpx;
+  font-size: 22rpx;
+  line-height: 28rpx;
 }
 
 .adherence-legend__swatch {

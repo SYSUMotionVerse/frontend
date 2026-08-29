@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import FloatingDock from '../navigation/FloatingDock.vue'
 import ImmersiveNavigationBar from '../layout/ImmersiveNavigationBar.vue'
+import { useFloatingDockLayout } from '../../composables/useFloatingDockLayout'
 import { ensureProtectedStudentAccess } from '../../composables/useNavigationGuard'
 
 type DockTab = 'home' | 'playground' | 'growth'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   dockTab?: DockTab
   showDock?: boolean
   pageTitle?: string
@@ -18,19 +19,32 @@ withDefaults(defineProps<{
   showBack: false
 })
 
+const { contentClearancePx } = useFloatingDockLayout()
+const shellStyle = computed(() => ({
+  '--floating-dock-content-clearance': `${contentClearancePx.value}px`
+}))
+
 onMounted(() => {
   void ensureProtectedStudentAccess('browse')
 })
 </script>
 
 <template>
-  <view class="growth-shell">
+  <view
+    class="growth-shell"
+    :class="{ 'growth-shell--no-dock': !props.showDock }"
+    :style="shellStyle"
+  >
     <view class="growth-shell__halo growth-shell__halo--coral" />
     <view class="growth-shell__halo growth-shell__halo--gold" />
     <view class="growth-shell__halo growth-shell__halo--teal" />
     <view class="growth-shell__halo growth-shell__halo--coral-soft" />
     <view class="growth-shell__halo growth-shell__halo--gold-soft" />
-    <ImmersiveNavigationBar v-if="pageTitle" :title="pageTitle" :show-back="showBack" />
+    <ImmersiveNavigationBar
+      v-if="props.pageTitle"
+      :title="props.pageTitle"
+      :show-back="props.showBack"
+    />
     <view class="growth-shell__inner">
       <transition name="shell-enter" appear>
         <view class="growth-shell__content">
@@ -38,7 +52,7 @@ onMounted(() => {
         </view>
       </transition>
     </view>
-    <FloatingDock v-if="showDock" :active-tab="dockTab" />
+    <FloatingDock v-if="props.showDock" :active-tab="props.dockTab" />
   </view>
 </template>
 
@@ -51,7 +65,11 @@ onMounted(() => {
   min-height: 100vh;
   box-sizing: border-box;
   background: #FCF7F0;
-  padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));
+  padding: 0 32rpx var(--floating-dock-content-clearance, 100px);
+}
+
+.growth-shell--no-dock {
+  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
 }
 
 .growth-shell__halo {

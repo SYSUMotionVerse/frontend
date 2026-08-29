@@ -39,7 +39,7 @@ describe('UniTrainingPageShell no-dock layout', () => {
     expect(source).toContain('showDecorations?: boolean')
     expect(source).toContain('training-shell__halo--coral')
     expect(source).toContain('training-shell__halo--gold')
-    expect(source).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
+    expect(source).toContain('padding: 0 32rpx var(--floating-dock-content-clearance, 100px);')
     expect(source).toContain('ImmersiveNavigationBar')
     expect(source).toContain('training-shell__halo--teal')
   })

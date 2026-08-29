@@ -221,7 +221,7 @@ onShareAppMessage((options) => {
 
 .growth-page__group-title {
   color: #203042;
-  font-size: 26rpx;
+  font-size: 30rpx;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -296,7 +296,7 @@ onShareAppMessage((options) => {
 
 .growth-page__overview-stat-label {
   color: #718096;
-  font-size: 18rpx;
+  font-size: 22rpx;
   font-weight: 700;
 }
 
@@ -308,7 +308,7 @@ onShareAppMessage((options) => {
 
 .growth-page__overview-stat-description {
   color: #8a97a8;
-  font-size: 17rpx;
+  font-size: 21rpx;
   line-height: 1.4;
 }
 
@@ -333,6 +333,10 @@ onShareAppMessage((options) => {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.growth-page__section-shell--explore .growth-page__section-head {
+  margin-bottom: 12rpx;
+}
+
 .growth-page__section-head {
   display: flex;
   align-items: center;
@@ -344,7 +348,7 @@ onShareAppMessage((options) => {
   display: block;
   margin: 0;
   color: #1a202c;
-  font-size: 26rpx;
+  font-size: 30rpx;
   font-weight: 900;
 }
 
@@ -367,7 +371,7 @@ onShareAppMessage((options) => {
   border-radius: 9999px;
   background: transparent;
   color: #ff6f62;
-  font-size: 21rpx;
+  font-size: 24rpx;
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: normal;
@@ -425,13 +429,13 @@ onShareAppMessage((options) => {
 
 .growth-page__exploration-title {
   color: #203042;
-  font-size: 24rpx;
+  font-size: 28rpx;
   font-weight: 800;
 }
 
 .growth-page__exploration-meta {
   color: #c76b5b;
-  font-size: 18rpx;
+  font-size: 22rpx;
   font-weight: 700;
 }
 

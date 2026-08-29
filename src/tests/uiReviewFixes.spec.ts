@@ -255,7 +255,8 @@ describe('ui review fixes', () => {
     expect(homePage).toContain('TrainingHomeHeader')
     expect(homePage).toContain('TrainingHomeCoachCard')
     expect(homePage).toContain('TrainingHomeProgressOverview')
-    expect(homePage).toContain('教练建议')
+    expect(homePage).not.toContain('教练建议')
+    expect(homePage).not.toContain('需要时回看，保持动作和恢复节奏。')
     expect(homePage).toContain('useTrainingProgress')
     expect(homePage).not.toContain('TrainingHomeQuestPanel')
     expect(homePage).not.toContain('选择训练')
@@ -283,6 +284,71 @@ describe('ui review fixes', () => {
     expect(rootPagesManifest).toContain('"path": "pages/growth/achievements"')
     expect(rootPagesManifest).toContain('"path": "pages/growth/metrics"')
     expect(rootPagesManifest).toContain('"path": "pages/growth/history"')
+  })
+
+  it('keeps secondary growth and stair-training pages free of the primary navigator', () => {
+    const secondaryPages = [
+      'src/uni-app/pages/growth/achievements.vue',
+      'src/uni-app/pages/growth/metrics.vue',
+      'src/uni-app/pages/growth/history.vue',
+      'src/uni-app/pages/growth/adherence.vue',
+      'src/uni-app/pages/training/stair-session.vue'
+    ]
+
+    for (const page of secondaryPages) {
+      expect(readFileSync(resolve(page), 'utf8')).toContain(':show-dock="false"')
+    }
+  })
+
+  it('uses the shared ambient decoration treatment on the training reminder shell', () => {
+    const accessShell = readFileSync(
+      resolve('src/uni-app/components/access/UniAccessPageShell.vue'),
+      'utf8'
+    )
+    const reminderPage = readFileSync(
+      resolve('src/uni-app/pages/access/reminder-consent.vue'),
+      'utf8'
+    )
+
+    expect(reminderPage).toContain('UniAccessPageShell')
+    expect(accessShell).toContain('access-entry__halo--coral')
+    expect(accessShell).toContain('access-entry__halo--gold')
+    expect(accessShell).toContain('access-entry__halo--teal')
+    expect(accessShell).toContain('access-entry__halo--coral-soft')
+    expect(accessShell).toContain('access-entry__halo--gold-soft')
+  })
+
+  it('keeps ambient decorations visible on dockless training secondary pages', () => {
+    const notificationsPage = readFileSync(
+      resolve('src/uni-app/pages/notifications/index.vue'),
+      'utf8'
+    )
+    const stairPage = readFileSync(
+      resolve('src/uni-app/pages/training/stair-session.vue'),
+      'utf8'
+    )
+    const stairPanel = readFileSync(
+      resolve('src/components/training/StairTrainingPanel.vue'),
+      'utf8'
+    )
+
+    expect(notificationsPage).toContain('show-decorations')
+    expect(stairPage).toContain('show-decorations')
+    expect(stairPanel).not.toMatch(/\.stair-panel__hero\s*\{[^}]*background:/)
+    expect(stairPanel).not.toMatch(/\.stair-panel__hero\s*\{[^}]*border:/)
+    expect(stairPanel).not.toMatch(/\.stair-panel__hero\s*\{[^}]*border-radius:/)
+  })
+
+  it('uses readable supporting type sizes on the training selection page', () => {
+    const selectPage = readFileSync(
+      resolve('src/uni-app/pages/training/select.vue'),
+      'utf8'
+    )
+
+    expect(selectPage).toMatch(/\.select-page__hero-copy\s*\{[\s\S]*font-size:\s*25rpx;/)
+    expect(selectPage).toMatch(/\.select-page__launch-hint\s*\{[\s\S]*font-size:\s*24rpx;/)
+    expect(selectPage).toMatch(/\.select-page__launch-route\s*\{[\s\S]*font-size:\s*23rpx;/)
+    expect(selectPage).toMatch(/\.select-page__streak-note\s*\{[\s\S]*font-size:\s*24rpx;/)
   })
 
   it('keeps source wrapper pages for registered miniapp growth detail routes', () => {
@@ -868,9 +934,9 @@ describe('ui review fixes', () => {
     expect(accessShell).toContain('gap: 56rpx;')
     expect(uniAccessShell).toContain('padding: 0 48rpx 120rpx;')
     expect(uniAccessShell).toContain('gap: 32rpx;')
-    expect(uniTrainingShell).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
+    expect(uniTrainingShell).toContain('padding: 0 32rpx var(--floating-dock-content-clearance, 100px);')
     expect(uniTrainingShell).toContain('gap: 36rpx;')
-    expect(uniGrowthShell).toContain('padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));')
+    expect(uniGrowthShell).toContain('padding: 0 32rpx var(--floating-dock-content-clearance, 100px);')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
     expect(miniappHomePage).toContain('gap: 34rpx;')
     expect(miniappHomePage).toContain('gap: 16rpx;')

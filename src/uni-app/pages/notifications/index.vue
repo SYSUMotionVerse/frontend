@@ -15,7 +15,12 @@ onShow(() => {
 </script>
 
 <template>
-  <UniTrainingPageShell :show-dock="false" page-title="训练提醒" show-back>
+  <UniTrainingPageShell
+    :show-dock="false"
+    show-decorations
+    page-title="训练提醒"
+    show-back
+  >
     <view class="notification-page">
       <UniPageHeading
         eyebrow="训练提醒"

@@ -22,7 +22,7 @@ const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [
 </script>
 
 <template>
-  <UniGrowthPageShell dock-tab="growth" page-title="坚持情况" show-back>
+  <UniGrowthPageShell :show-dock="false" page-title="坚持情况" show-back>
     <UniPageHeading
       eyebrow="成长"
       title="达标记录"

@@ -173,9 +173,6 @@ const sensorStatusClass = computed(() => `stair-panel__sensor-chip--${props.sens
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
-  border: 2rpx solid #eadfd3;
-  border-radius: 36rpx;
-  background: #fcf7f0;
   padding: 40rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
 }
 

@@ -13,7 +13,7 @@ const earnedCount = computed(() => achievements.value.filter(badge => badge.earn
 </script>
 
 <template>
-  <UniGrowthPageShell dock-tab="growth" page-title="成长徽章" show-back>
+  <UniGrowthPageShell :show-dock="false" page-title="成长徽章" show-back>
     <view class="achievement-page__heading">
       <UniPageHeading
         eyebrow="成长"

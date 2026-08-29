@@ -284,7 +284,7 @@ async function chooseMode(modality: TrainingModality) {
   display: block;
   max-width: 640rpx;
   color: #718096;
-  font-size: 21rpx;
+  font-size: 25rpx;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.5;
@@ -377,7 +377,7 @@ async function chooseMode(modality: TrainingModality) {
 
 .select-page__launch-hint {
   color: #718096;
-  font-size: 20rpx;
+  font-size: 24rpx;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -389,7 +389,7 @@ async function chooseMode(modality: TrainingModality) {
   gap: 0;
   margin-top: 2rpx;
   color: #8a97a8;
-  font-size: 20rpx;
+  font-size: 23rpx;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -419,7 +419,7 @@ async function chooseMode(modality: TrainingModality) {
   justify-content: center;
   gap: 2rpx;
   color: #8a97a8;
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: 800;
   line-height: 1.2;
   white-space: nowrap;
@@ -435,7 +435,7 @@ async function chooseMode(modality: TrainingModality) {
   gap: 10rpx;
   padding: 12rpx 8rpx 0;
   color: #718096;
-  font-size: 21rpx;
+  font-size: 24rpx;
   font-weight: 600;
   line-height: 1.5;
 }

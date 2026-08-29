@@ -214,6 +214,8 @@ onBeforeUnmount(() => {
 <template>
   <UniTrainingPageShell
     dock-tab="playground"
+    :show-dock="false"
+    show-decorations
     :fit-viewport="true"
     page-title="阶梯训练"
     show-back

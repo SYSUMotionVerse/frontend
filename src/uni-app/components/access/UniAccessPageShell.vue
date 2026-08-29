@@ -18,8 +18,11 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
 
 <template>
   <view class="access-entry">
+    <view class="access-entry__halo access-entry__halo--coral" />
     <view class="access-entry__halo access-entry__halo--gold" />
     <view class="access-entry__halo access-entry__halo--teal" />
+    <view class="access-entry__halo access-entry__halo--coral-soft" />
+    <view class="access-entry__halo access-entry__halo--gold-soft" />
     <ImmersiveNavigationBar
       class="access-entry__navigation"
       :title="resolvedNavigationTitle"
@@ -62,19 +65,43 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
 }
 
 .access-entry__halo--gold {
-  top: -72rpx;
-  right: -24rpx;
-  width: 220rpx;
-  height: 220rpx;
-  background: rgba(255, 211, 132, 0.28);
+  top: 404rpx;
+  left: -92rpx;
+  width: 210rpx;
+  height: 210rpx;
+  background: rgba(255, 211, 132, 0.2);
 }
 
 .access-entry__halo--teal {
-  top: 260rpx;
-  left: -64rpx;
+  top: 720rpx;
+  right: -112rpx;
   width: 184rpx;
   height: 184rpx;
-  background: rgba(137, 207, 255, 0.2);
+  background: rgba(137, 207, 255, 0.1);
+}
+
+.access-entry__halo--coral {
+  top: -102rpx;
+  right: -72rpx;
+  width: 300rpx;
+  height: 300rpx;
+  background: rgba(255, 139, 139, 0.18);
+}
+
+.access-entry__halo--coral-soft {
+  top: 66vh;
+  left: -54rpx;
+  width: 116rpx;
+  height: 116rpx;
+  background: rgba(255, 139, 139, 0.07);
+}
+
+.access-entry__halo--gold-soft {
+  right: -44rpx;
+  bottom: calc(72rpx + env(safe-area-inset-bottom));
+  width: 104rpx;
+  height: 104rpx;
+  background: rgba(255, 211, 132, 0.09);
 }
 
 .access-entry__navigation {

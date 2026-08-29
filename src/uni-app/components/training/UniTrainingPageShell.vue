@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import FloatingDock from '../navigation/FloatingDock.vue'
 import ImmersiveNavigationBar from '../layout/ImmersiveNavigationBar.vue'
+import { useFloatingDockLayout } from '../../composables/useFloatingDockLayout'
 import {
   ensureProtectedStudentAccess,
   type ProtectedAccessMode
@@ -29,6 +30,11 @@ const props = withDefaults(defineProps<{
   showNavigation: true
 })
 
+const { contentClearancePx } = useFloatingDockLayout()
+const shellStyle = computed(() => ({
+  '--floating-dock-content-clearance': `${contentClearancePx.value}px`
+}))
+
 onMounted(() => {
   void ensureProtectedStudentAccess(props.accessMode)
 })
@@ -37,6 +43,7 @@ onMounted(() => {
 <template>
   <view
     class="training-shell"
+    :style="shellStyle"
     :class="{
       'training-shell--no-dock': !props.showDock,
       'training-shell--fit-viewport': props.fitViewport
@@ -81,7 +88,7 @@ onMounted(() => {
   box-sizing: border-box;
   overflow: hidden;
   background: #FCF7F0;
-  padding: 0 32rpx calc(132rpx + env(safe-area-inset-bottom));
+  padding: 0 32rpx var(--floating-dock-content-clearance, 100px);
 }
 
 .training-shell--no-dock {

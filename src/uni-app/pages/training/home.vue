@@ -213,11 +213,6 @@ async function startNextTraining() {
       </view>
 
       <view class="home-page__section">
-        <view class="home-page__section-copy">
-          <text class="home-page__section-title">教练建议</text>
-          <text class="home-page__section-subtitle">需要时回看，保持动作和恢复节奏。</text>
-        </view>
-
         <view class="home-page__feed">
           <TrainingHomeCoachCard
             v-for="card in coachCards"

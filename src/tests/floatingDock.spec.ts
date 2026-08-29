@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import FloatingDock from '../uni-app/components/navigation/FloatingDock.vue'
+import { resolveFloatingDockLayout } from '../uni-app/composables/useFloatingDockLayout'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -40,6 +41,10 @@ describe('floating dock', () => {
       resolve(process.cwd(), 'src/uni-app/components/navigation/FloatingDock.vue'),
       'utf8'
     )
+    const layoutSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/composables/useFloatingDockLayout.ts'),
+      'utf8'
+    )
 
     expect(source).toContain("icon: 'home-filled'")
     expect(source).toContain("icon: 'fire-filled'")
@@ -49,10 +54,10 @@ describe('floating dock', () => {
     expect(source).toContain('padding: 19rpx 2rpx;')
     expect(source).toContain('left: 104rpx;')
     expect(source).toContain('right: 104rpx;')
-    expect(source).toContain('safeAreaInsets?.bottom')
-    expect(source).toContain('windowHeight - safeArea.bottom')
-    expect(source).toContain('const targetTotalBottomPx = baseGapPx + 34')
-    expect(source).toContain('targetTotalBottomPx - safeAreaBottom')
+    expect(layoutSource).toContain('safeAreaInsets?.bottom')
+    expect(layoutSource).toContain('windowHeight - windowInfo.safeArea.bottom')
+    expect(layoutSource).toContain('const targetTotalBottomPx = baseGapPx + referenceSafeAreaBottomPx')
+    expect(layoutSource).toContain('targetTotalBottomPx - safeAreaBottom')
     expect(source).toContain('bottom: calc(var(--floating-dock-bottom-gap, 42px) + env(safe-area-inset-bottom));')
     expect(source).toContain('0 18rpx 38rpx rgba(37, 47, 61, 0.15)')
     expect(source).toContain('background: #ff6f6f;')
@@ -86,6 +91,19 @@ describe('floating dock', () => {
   })
 
   it('compensates the runtime safe-area inset to keep the same total bottom clearance', async () => {
+    const androidLayout = resolveFloatingDockLayout({
+      windowWidth: 375,
+      windowHeight: 800,
+      safeAreaInsets: { bottom: 0 }
+    })
+    const iosLayout = resolveFloatingDockLayout({
+      windowWidth: 375,
+      windowHeight: 800,
+      safeAreaInsets: { bottom: 34 }
+    })
+    expect(androidLayout.contentClearancePx).toBe(100)
+    expect(iosLayout.contentClearancePx).toBe(100)
+
     vi.stubGlobal('uni', {
       getWindowInfo: () => ({
         windowWidth: 375,

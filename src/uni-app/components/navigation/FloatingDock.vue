@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed, onMounted, shallowRef } from 'vue'
+import { computed } from 'vue'
+import { useFloatingDockLayout } from '../../composables/useFloatingDockLayout'
 
 type DockTab = 'home' | 'playground' | 'growth'
 type DockIcon = 'home-filled' | 'fire-filled' | 'medal-filled'
@@ -9,41 +10,10 @@ const props = defineProps<{
   activeTab: DockTab
 }>()
 
-const bottomGapPx = shallowRef(42)
+const { bottomGapPx } = useFloatingDockLayout()
 const dockStyle = computed(() => ({
   '--floating-dock-bottom-gap': `${bottomGapPx.value}px`
 }))
-
-onMounted(() => {
-  if (typeof uni === 'undefined') {
-    return
-  }
-
-  const windowInfo = typeof uni.getWindowInfo === 'function'
-    ? uni.getWindowInfo()
-    : typeof uni.getSystemInfoSync === 'function'
-      ? uni.getSystemInfoSync()
-      : undefined
-  if (!windowInfo) return
-
-  const safeAreaInsets = (windowInfo as { safeAreaInsets?: { bottom?: number } }).safeAreaInsets
-  const safeArea = (windowInfo as {
-    safeArea?: { bottom?: number }
-    windowHeight?: number
-    windowWidth?: number
-  }).safeArea
-  const windowHeight = windowInfo.windowHeight ?? 0
-  const windowWidth = windowInfo.windowWidth ?? 375
-  const safeAreaBottom = Math.max(
-    0,
-    safeAreaInsets?.bottom
-      ?? (safeArea?.bottom === undefined ? 0 : windowHeight - safeArea.bottom)
-  )
-  const baseGapPx = 16 * windowWidth / 750
-  const targetTotalBottomPx = baseGapPx + 34
-
-  bottomGapPx.value = Math.max(baseGapPx, targetTotalBottomPx - safeAreaBottom)
-})
 
 const dockItems: Array<{
   key: DockTab
