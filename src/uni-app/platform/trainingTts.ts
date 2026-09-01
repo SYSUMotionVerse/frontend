@@ -32,11 +32,12 @@ type WechatAudioFactory = typeof wx & {
 
 const audioDownloadTimeoutMs = 30_000
 const audioPreloadConcurrency = 4
-// The server-generated assets already use the configured natural speech rate
-// (`zh-CN-XiaoxiaoNeural`, -5%). Keep native playback at 1x so the database
+// The server-generated assets already use the configured voice and speech rate.
+// Keep native playback at 1x so the database
 // timing plan can be checked against the actual MP3 duration without an
 // invisible 12% slowdown that truncates cues at phase boundaries.
 export const trainingTtsPlaybackRate = 1
+export const trainingTtsPlaybackTimeoutMs = 45_000
 
 function normalizeCues(cues: readonly ActionTtsCue[]) {
   return cues
@@ -208,6 +209,7 @@ export function createTrainingTtsPlayer(
       }
 
       let settled = false
+      let playbackTimeout: ReturnType<typeof setTimeout> | undefined
       audioContext = nextAudioContext
       const sourceUrl = allowPreloadedSource
         ? preloadedSources.get(normalizedUrl) ?? normalizedUrl
@@ -215,7 +217,14 @@ export function createTrainingTtsPlayer(
       const dispose = (stopFirst = false, complete = true) => {
         if (settled) return
         settled = true
-        if (audioContext === nextAudioContext) audioContext = undefined
+        if (playbackTimeout) clearTimeout(playbackTimeout)
+        if (audioContext === nextAudioContext) {
+          audioContext = undefined
+          // A native end/error/timeout is terminal even if the context had
+          // previously been suspended. Leaving this true makes waitForIdle()
+          // wait forever and can lock the workout at an action boundary.
+          suspended = false
+        }
         if (stopCurrentPlayback === stopPlayback) stopCurrentPlayback = undefined
         if (stopFirst) nextAudioContext.stop?.()
         nextAudioContext.destroy?.()
@@ -246,6 +255,10 @@ export function createTrainingTtsPlayer(
           console.warn('[TrainingTts] playback failed:', error)
           if (!retryWithRemoteSource()) dispose()
         })
+        playbackTimeout = setTimeout(() => {
+          console.warn('[TrainingTts] playback timed out:', normalizedUrl)
+          dispose(true)
+        }, trainingTtsPlaybackTimeoutMs)
         nextAudioContext.play?.()
       } catch (error) {
         console.warn('[TrainingTts] playback setup failed:', error)

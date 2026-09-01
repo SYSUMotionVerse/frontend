@@ -257,11 +257,17 @@ export function buildStairsRecordPayload(input: StairSessionSyncInput): StairsRe
   }
 }
 
+type UploadPoseAngleFrame = PoseAngleFrame & {
+  arrangementItemId?: number
+  videoId?: number
+  actionFrameIndex?: number
+}
+
 export function buildVisualPoseAnalysisPayload(
-  angleFrames: Array<PoseAngleFrame | null | undefined>,
+  angleFrames: Array<UploadPoseAngleFrame | null | undefined>,
   confidenceThreshold = DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD
 ): VisualPoseAnalysisPayload | undefined {
-  const compactFrames = angleFrames.filter((frame): frame is PoseAngleFrame => frame != null)
+  const compactFrames = angleFrames.filter((frame): frame is UploadPoseAngleFrame => frame != null)
 
   if (compactFrames.length === 0) {
     return undefined
@@ -285,7 +291,12 @@ export function buildVisualPoseAnalysisPayload(
     frames: compactFrames.map((frame, index) => ({
       frame_index: index,
       time: Number(((frame.tsMs - firstTsMs) / 1000).toFixed(3)),
-      values: poseAngleValueResolvers.map(resolveValue => resolveValue(frame))
+      values: poseAngleValueResolvers.map(resolveValue => resolveValue(frame)),
+      ...(frame.arrangementItemId ? { arrangement_item_id: frame.arrangementItemId } : {}),
+      ...(frame.videoId ? { video_id: frame.videoId } : {}),
+      ...(frame.actionFrameIndex !== undefined
+        ? { action_frame_index: frame.actionFrameIndex }
+        : {})
     }))
   }
 }
@@ -858,7 +869,20 @@ export function createStudentBackendSync(
         return null
       }
       await dependencies.ensureSession()
-      return questionnairePlanLoader(checkpoint)
+      const plan = await questionnairePlanLoader(checkpoint)
+      try {
+        const scales = await dependencies.listPsychologyScales()
+        const scalesById = new Map(scales.map(scale => [scale.id, scale]))
+        return {
+          ...plan,
+          questionnaires: plan.questionnaires.map(item => ({
+            ...item,
+            description: scalesById.get(item.id)?.description ?? ''
+          }))
+        }
+      } catch {
+        return plan
+      }
     },
     async syncRegistration(profile: RegistrationSyncInput) {
       return runIfEnabled(dependencies.isEnabled(), async () => {
@@ -1056,9 +1080,20 @@ export function createStudentBackendSync(
         ...(input.clientVersion ? { clientVersion: input.clientVersion } : {}),
         queuedAt: new Date().toISOString()
       }
-      submissionOptions.pendingSubmissions.save(submission)
+      let submissionPersisted = true
+      try {
+        submissionOptions.pendingSubmissions.save(submission)
+      } catch (error) {
+        // A large pose sequence can exceed synchronous mini-program storage.
+        // Still attempt the live request; the in-memory session snapshot keeps
+        // the explicit retry button idempotent while this page remains open.
+        submissionPersisted = false
+        console.warn('[StudentBackend] unable to persist visual submission:', error)
+      }
       const record = await submitPendingTrainingJob(submission)
-      submissionOptions.pendingSubmissions.remove(input.sessionId)
+      if (submissionPersisted) {
+        submissionOptions.pendingSubmissions.remove(input.sessionId)
+      }
 
       return {
         synced: true,

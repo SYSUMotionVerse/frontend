@@ -148,6 +148,7 @@ export function completeStudentTrainingSession(
     qualityScore: number | null
     summary: string
     capturedBy: SessionAnalysis['capturedBy']
+    scoreDetails?: SessionAnalysis['scoreDetails']
   }
 ): StudentAppState {
   return completeGuidedSession(state, input)

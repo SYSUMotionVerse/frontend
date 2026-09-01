@@ -7,6 +7,7 @@ type VisualTrainingSubmissionInput = Omit<VisualSessionSyncInput, 'sessionId'>
 export function useVisualTrainingSubmission() {
   const sessionId = createTrainingSessionId('visual')
   let trainingCredential: string | undefined
+  let submissionSnapshot: VisualTrainingSubmissionInput | undefined
 
   return {
     sessionId,
@@ -24,10 +25,14 @@ export function useVisualTrainingSubmission() {
       return issued
     },
     sync(input: VisualTrainingSubmissionInput) {
+      // A timed-out request may already have committed on the server. Keep
+      // every retry byte-for-byte identical (especially completedAt) so the
+      // backend can safely return the existing record for this session ID.
+      submissionSnapshot ??= input
       return studentBackendSync.syncVisualSession({
         sessionId,
         ...(trainingCredential ? { trainingCredential } : {}),
-        ...input
+        ...submissionSnapshot
       })
     }
   }

@@ -172,6 +172,50 @@ describe('backend client session handling', () => {
     expect(abort).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves server diagnostics and a request ID for failed requests', async () => {
+    const uniMock = createUniMock([{
+      statusCode: 500,
+      data: {
+        detail: '服务器内部错误，请使用请求编号联系管理员。',
+        request_id: 'server-request-500'
+      },
+      header: { 'X-Request-ID': 'server-request-500' }
+    }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    const error = await client.getCurrentUser().catch(value => value)
+
+    expect(error).toMatchObject({
+      name: 'BackendRequestError',
+      statusCode: 500,
+      requestId: 'server-request-500',
+      method: 'GET',
+      path: '/users/me/',
+      responseData: {
+        detail: '服务器内部错误，请使用请求编号联系管理员。',
+        request_id: 'server-request-500'
+      }
+    })
+  })
+
+  it('surfaces field-level backend validation messages', async () => {
+    const uniMock = createUniMock([{
+      statusCode: 400,
+      data: {
+        actionResults: ['缺少第二个动作结果。'],
+        score: ['总分与动作加权分不一致。'],
+        request_id: 'validation-request'
+      }
+    }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+
+    await expect(client.getCurrentUser()).rejects.toThrow(
+      'actionResults: 缺少第二个动作结果。；score: 总分与动作加权分不一致。'
+    )
+  })
+
   it('sends X-CSRFToken for unsafe requests after session bootstrap', async () => {
     const uniMock = createUniMock([
       {

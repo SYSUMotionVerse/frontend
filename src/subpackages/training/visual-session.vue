@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
-import { onLoad, onResize, onShow } from '@dcloudio/uni-app'
+import { computed, shallowRef, watch } from 'vue'
+import { onBackPress, onHide, onLoad, onResize, onShow, onUnload } from '@dcloudio/uni-app'
 import VisualTrainingPanel from './components/VisualTrainingPanel.vue'
 import type { TrainingModality } from '../../domain/student/types'
 import UniTrainingPageShell from '../../uni-app/components/training/UniTrainingPageShell.vue'
@@ -29,6 +29,63 @@ const viewport = shallowRef({
 })
 const orientationReady = shallowRef(false)
 const session = useVisualTrainingSession({ modality, arrangementId })
+type WeChatExitGuardApi = typeof wx & {
+  enableAlertBeforeUnload?: (options: {
+    message: string
+    fail?: () => void
+  }) => void
+  disableAlertBeforeUnload?: (options?: Record<string, never>) => void
+}
+let nativeExitGuardEnabled = false
+
+function getWeChatExitGuardApi() {
+  return typeof wx === 'undefined' ? null : wx as WeChatExitGuardApi
+}
+
+function enableNativeExitGuard() {
+  if (nativeExitGuardEnabled) return
+  const wechatApi = getWeChatExitGuardApi()
+  if (typeof wechatApi?.enableAlertBeforeUnload !== 'function') return
+
+  nativeExitGuardEnabled = true
+  wechatApi.enableAlertBeforeUnload({
+    message: '当前训练尚未完成，退出后本次进度不会保存。',
+    fail: () => {
+      nativeExitGuardEnabled = false
+    }
+  })
+}
+
+function disableNativeExitGuard() {
+  if (!nativeExitGuardEnabled) return
+  nativeExitGuardEnabled = false
+  const wechatApi = getWeChatExitGuardApi()
+  if (typeof wechatApi?.disableAlertBeforeUnload === 'function') {
+    wechatApi.disableAlertBeforeUnload({})
+  }
+}
+
+function syncNativeExitGuard() {
+  if (session.trainingStarted.value && !session.videoEnded.value) {
+    enableNativeExitGuard()
+    return
+  }
+  disableNativeExitGuard()
+}
+
+async function requestExitSession() {
+  // The custom TitleBar already owns its confirmation dialog. Temporarily
+  // remove the native guard so a confirmed switchTab does not prompt twice.
+  disableNativeExitGuard()
+  await session.requestExitSession()
+  syncNativeExitGuard()
+}
+
+watch(
+  () => [session.trainingStarted.value, session.videoEnded.value] as const,
+  syncNativeExitGuard,
+  { immediate: true }
+)
 const navigationTitle = computed(() => {
   if (session.tutorialMode.value) return '动作讲解'
   return modality.value === 'hiit' ? '自重抗阻跟练' : '武术跟练'
@@ -163,7 +220,25 @@ onLoad((query) => {
   updateOrientationFromRuntime()
 })
 
-onShow(updateOrientationFromRuntime)
+onShow(() => {
+  updateOrientationFromRuntime()
+  session.resumeSession()
+  syncNativeExitGuard()
+})
+
+onHide(() => {
+  session.suspendSession()
+})
+
+onUnload(() => {
+  disableNativeExitGuard()
+  session.disposeSession()
+})
+
+onBackPress(() => {
+  void requestExitSession()
+  return true
+})
 
 onResize(({ size }) => {
   if (size) {
@@ -189,7 +264,9 @@ function setCapture(instance: unknown) {
     :page-title="navigationTitle"
     :show-navigation="!comparisonMode"
     show-back
+    custom-back
     access-mode="execute"
+    @back="requestExitSession"
   >
     <view
       class="visual-session-page"
@@ -205,6 +282,8 @@ function setCapture(instance: unknown) {
         class="visual-session-page__panel"
         :video-title="session.exerciseVideo.value?.title ?? ''"
         :video-url="session.videoUrl.value"
+        :next-video-url="session.nextVideoUrl.value"
+        :video-reset-key="session.videoResetKey.value"
         :video-loading="session.videoLoading.value"
         :video-error="session.videoError.value"
         :video-ended="session.videoEnded.value"
@@ -225,6 +304,7 @@ function setCapture(instance: unknown) {
         :workout-timeline-ready="session.workoutTimelineReady.value"
         :video-autoplay="session.videoAutoplay.value"
         :video-event-token="session.videoEventToken.value"
+        :video-element-id="session.videoElementId.value"
         :training-started="session.trainingStarted.value"
         :start-countdown="session.startCountdown.value"
         :phase-kind="session.phaseKind.value"

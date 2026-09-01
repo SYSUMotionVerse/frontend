@@ -5,9 +5,15 @@ import { computed, onMounted, shallowRef } from 'vue'
 const props = withDefaults(defineProps<{
   title: string
   showBack?: boolean
+  customBack?: boolean
 }>(), {
-  showBack: false
+  showBack: false,
+  customBack: false
 })
+
+const emit = defineEmits<{
+  back: []
+}>()
 
 type MenuButtonRect = {
   top: number
@@ -64,6 +70,11 @@ function updateMetrics() {
 }
 
 function goBack() {
+  if (props.customBack) {
+    emit('back')
+    return
+  }
+
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
   if (pages.length > 1) {
     void uni.navigateBack()

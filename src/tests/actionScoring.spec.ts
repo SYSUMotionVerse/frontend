@@ -52,7 +52,9 @@ describe('scoreAction', () => {
   it('scores a matching sequence at 100', () => {
     const sequence = createSequence()
 
-    const result = scoreAction(createStandard(sequence), createMotion(sequence))
+    const result = scoreAction(createStandard(sequence), createMotion(sequence), {
+      smoothingWindow: 1
+    })
 
     expect(result.score).toBeCloseTo(100, 10)
     expect(result.passed).toBe(true)
@@ -66,7 +68,9 @@ describe('scoreAction', () => {
       index === leftKneeIndex ? value - 0.5 : value
     )))
 
-    const result = scoreAction(createStandard(sequence), createMotion(biased))
+    const result = scoreAction(createStandard(sequence), createMotion(biased), {
+      smoothingWindow: 1
+    })
 
     expect(result.feedback).toContainEqual(expect.objectContaining({
       angle: 'left_knee',
@@ -129,8 +133,16 @@ describe('scoreAction', () => {
     }
     const motion = createMotion(toRows(warpedKnee))
 
-    const resampled = scoreAction(standard, motion, { alignmentMethod: 'resample' })
-    const dtw = scoreAction(standard, motion, { alignmentMethod: 'dtw' })
+    const resampled = scoreAction(standard, motion, {
+      alignmentMethod: 'resample',
+      coarseAlignment: false,
+      smoothingWindow: 1
+    })
+    const dtw = scoreAction(standard, motion, {
+      alignmentMethod: 'dtw',
+      coarseAlignment: false,
+      smoothingWindow: 1
+    })
 
     expect(dtw.score).toBeGreaterThan(resampled.score)
     expect(dtw.score).toBeCloseTo(100, 10)
@@ -147,7 +159,8 @@ describe('scoreAction', () => {
     )
 
     const result = scoreAction(createStandard(sequence), createMotion(sequence), {
-      alignmentMethod: 'dtw'
+      alignmentMethod: 'dtw',
+      smoothingWindow: 1
     })
 
     expect(result.debug.standard_frames).toBe(MAX_ACTION_SCORING_FRAMES)
@@ -165,6 +178,51 @@ describe('scoreAction', () => {
     expect(() => scoreAction(standard, createMotion(sequence))).toThrow(
       '没有可用于评分的已启用且有效角度'
     )
+  })
+
+  it('coarsely aligns independently delayed movement starts before DTW', () => {
+    const active = [0.4, 0.8, 1.2, 1.6, 1.2, 0.8, 0.4]
+    const toRows = (values: number[]) => values.map(value => (
+      ACTION_ANGLE_NAMES.map(name => name === 'left_knee' ? value : 1)
+    ))
+    const standard = createStandard(toRows([0.4, 0.4, ...active]))
+    for (const name of ACTION_ANGLE_NAMES) {
+      standard.angle_rules[name]!.enabled = name === 'left_knee'
+    }
+
+    const result = scoreAction(
+      standard,
+      createMotion(toRows([0.4, 0.4, 0.4, 0.4, 0.4, ...active])),
+      { alignmentMethod: 'dtw', smoothingWindow: 1 }
+    )
+
+    expect(result.debug.user_start_offset).toBeGreaterThan(
+      result.debug.standard_start_offset ?? 0
+    )
+    expect(result.score).toBeCloseTo(100, 10)
+  })
+
+  it('median-smooths isolated recognition spikes before scoring', () => {
+    const standardRows = Array.from({ length: 9 }, () => (
+      ACTION_ANGLE_NAMES.map(() => 1)
+    ))
+    const noisyRows = standardRows.map(row => [...row])
+    noisyRows[4][ACTION_ANGLE_NAMES.indexOf('left_elbow')] = 2.2
+    const standard = createStandard(standardRows)
+    for (const name of ACTION_ANGLE_NAMES) {
+      standard.angle_rules[name]!.enabled = name === 'left_elbow'
+    }
+
+    const raw = scoreAction(standard, createMotion(noisyRows), {
+      alignmentMethod: 'dtw', coarseAlignment: false, smoothingWindow: 1
+    })
+    const smoothed = scoreAction(standard, createMotion(noisyRows), {
+      alignmentMethod: 'dtw', coarseAlignment: false, smoothingWindow: 3
+    })
+
+    expect(smoothed.score).toBeGreaterThan(raw.score)
+    expect(smoothed.score).toBeCloseTo(100, 10)
+    expect(smoothed.debug.smoothing_window).toBe(3)
   })
 })
 

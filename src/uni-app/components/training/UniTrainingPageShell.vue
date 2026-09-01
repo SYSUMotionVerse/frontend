@@ -18,6 +18,7 @@ const props = withDefaults(defineProps<{
   accessMode?: ProtectedAccessMode
   pageTitle?: string
   showBack?: boolean
+  customBack?: boolean
   showNavigation?: boolean
   refreshEnabled?: boolean
   refreshing?: boolean
@@ -29,6 +30,7 @@ const props = withDefaults(defineProps<{
   accessMode: 'browse',
   pageTitle: '',
   showBack: false,
+  customBack: false,
   showNavigation: true,
   refreshEnabled: false,
   refreshing: false
@@ -36,6 +38,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   refresh: []
+  back: []
 }>()
 
 const { contentClearancePx } = useFloatingDockLayout()
@@ -67,6 +70,8 @@ onMounted(() => {
       v-if="props.showNavigation && props.pageTitle"
       :title="props.pageTitle"
       :show-back="props.showBack"
+      :custom-back="props.customBack"
+      @back="emit('back')"
     />
     <view
       v-if="props.refreshEnabled"

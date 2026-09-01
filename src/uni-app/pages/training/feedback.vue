@@ -47,7 +47,8 @@ async function loadSession() {
       analysis: {
         qualityScore: loaded.qualityScore,
         summary: loaded.summary,
-        capturedBy: loaded.modality === 'stair' ? 'sensor' : 'camera'
+        capturedBy: loaded.modality === 'stair' ? 'sensor' : 'camera',
+        scoreDetails: loaded.scoreDetails ?? null
       }
     }
   } catch {
@@ -116,6 +117,22 @@ const scoreChangeTone = computed(() => {
 const feedbackSummary = computed(() => (
   session.value?.analysis.summary?.trim() || '动作完成得很稳定，继续保持这个节奏。'
 ))
+const scoreDimensions = computed(() => (
+  session.value?.analysis.scoreDetails?.dimensions ?? []
+))
+const weakestDimension = computed(() => (
+  [...scoreDimensions.value].sort((left, right) => left.score - right.score)[0] ?? null
+))
+
+function dimensionWidth(score: number) {
+  return `${Math.max(0, Math.min(100, score))}%`
+}
+
+function dimensionTone(score: number) {
+  if (score >= 85) return 'strong'
+  if (score >= 70) return 'steady'
+  return 'focus'
+}
 
 const encouragementTitle = computed(() => {
   if (qualityScore.value === null) {
@@ -257,6 +274,40 @@ onShareAppMessage((options) => {
           <text class="feedback-page__encouragement-kicker">下一步</text>
           <text class="feedback-page__encouragement-title">{{ encouragementTitle }}</text>
           <text class="feedback-page__encouragement-copy">{{ feedbackSummary }}</text>
+        </view>
+
+        <view v-if="scoreDimensions.length > 0" class="feedback-page__breakdown">
+          <view class="feedback-page__breakdown-heading">
+            <view class="feedback-page__breakdown-title-group">
+              <text class="feedback-page__encouragement-kicker">动作分析</text>
+              <text class="feedback-page__breakdown-title">各角度表现</text>
+            </view>
+            <text class="feedback-page__breakdown-scale">0—100</text>
+          </view>
+
+          <view class="feedback-page__dimension-list">
+            <view
+              v-for="dimension in scoreDimensions"
+              :key="dimension.key"
+              class="feedback-page__dimension"
+            >
+              <view class="feedback-page__dimension-meta">
+                <text class="feedback-page__dimension-label">{{ dimension.label }}</text>
+                <text class="feedback-page__dimension-score">{{ Math.round(dimension.score) }}</text>
+              </view>
+              <view class="feedback-page__dimension-track">
+                <view
+                  class="feedback-page__dimension-fill"
+                  :class="`feedback-page__dimension-fill--${dimensionTone(dimension.score)}`"
+                  :style="{ width: dimensionWidth(dimension.score) }"
+                />
+              </view>
+            </view>
+          </view>
+
+          <text v-if="weakestDimension" class="feedback-page__breakdown-tip">
+            下次可以优先关注{{ weakestDimension.label }}，放慢动作会更容易控制到位。
+          </text>
         </view>
 
         <view v-if="sessionBadge" class="feedback-page__badge-card">
@@ -517,6 +568,98 @@ onShareAppMessage((options) => {
   font-size: 26rpx;
   font-weight: 700;
   line-height: 1.6;
+}
+
+.feedback-page__breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  margin-top: 32rpx;
+  padding: 28rpx;
+  border: 2rpx solid var(--feedback-line);
+  border-radius: 28rpx;
+  background: var(--feedback-surface);
+}
+
+.feedback-page__breakdown-heading,
+.feedback-page__dimension-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.feedback-page__breakdown-title-group,
+.feedback-page__dimension-list,
+.feedback-page__dimension {
+  display: flex;
+  flex-direction: column;
+}
+
+.feedback-page__breakdown-title-group {
+  gap: 6rpx;
+}
+
+.feedback-page__breakdown-title {
+  color: var(--feedback-ink);
+  font-size: 31rpx;
+  font-weight: 800;
+}
+
+.feedback-page__breakdown-scale {
+  color: var(--feedback-muted);
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.feedback-page__dimension-list {
+  gap: 22rpx;
+}
+
+.feedback-page__dimension {
+  gap: 10rpx;
+}
+
+.feedback-page__dimension-label,
+.feedback-page__dimension-score {
+  color: #465563;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.feedback-page__dimension-score {
+  color: var(--feedback-ink);
+}
+
+.feedback-page__dimension-track {
+  width: 100%;
+  height: 14rpx;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #e8e0d7;
+}
+
+.feedback-page__dimension-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #a76552;
+}
+
+.feedback-page__dimension-fill--strong {
+  background: #477765;
+}
+
+.feedback-page__dimension-fill--steady {
+  background: #bf873f;
+}
+
+.feedback-page__breakdown-tip {
+  padding-top: 20rpx;
+  border-top: 2rpx solid var(--feedback-line);
+  color: var(--feedback-muted);
+  font-size: 23rpx;
+  font-weight: 700;
+  line-height: 1.55;
 }
 
 .feedback-page__badge-card {

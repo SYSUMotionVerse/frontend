@@ -30,7 +30,8 @@ describe('visual session landscape mode', () => {
       'utf8'
     )
 
-    expect(source).toContain("import { onLoad, onResize, onShow } from '@dcloudio/uni-app'")
+    expect(source).toContain('onResize, onShow')
+    expect(source).toContain("from '@dcloudio/uni-app'")
     expect(source).toContain('createVisualComparisonLayout')
     expect(source).toContain('const orientationReady = shallowRef(false)')
     expect(source).toContain('comparisonMode.value = windowWidth > windowHeight')
@@ -50,7 +51,8 @@ describe('visual session landscape mode', () => {
     expect(source).toMatch(/^\s*updateOrientationFromRuntime\(\)\s*\n\s*onLoad/m)
     expect(source).toContain("if (typeof uni === 'undefined')")
     expect(source).toContain('uni.getSystemInfoSync')
-    expect(source).toContain('onShow(updateOrientationFromRuntime)')
+    expect(source).toContain('onShow(() =>')
+    expect(source).toContain('updateOrientationFromRuntime()')
     expect(source).toContain(':comparison-mode="comparisonMode"')
     expect(source).toContain("'visual-session-page--comparison': comparisonMode")
     expect(source).toContain('function updateNavigationBarAppearance()')

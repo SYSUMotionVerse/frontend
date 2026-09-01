@@ -29,6 +29,6 @@ describe('visual session live pose wiring', () => {
     expect(source).toMatch(/visual-session__video[\s\S]*visual-session__camera-stage[\s\S]*visual-session__lower-grid/)
     expect(source).toContain('采样识别中')
     expect(source).toContain('FPS 采样识别')
-    expect(source).toContain('defineExpose({ startRecord, stopRecord })')
+    expect(source).toContain('defineExpose({ startRecord, stopRecord, startDetect, stopDetect })')
   })
 })

@@ -91,6 +91,18 @@ describe('actionStandardLoader', () => {
     expect(requestJson).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps different published ETags in separate cache entries', async () => {
+    const requestJson = vi.fn().mockResolvedValue(validStandard())
+    const loader = createActionStandardLoader({ requestJson })
+    const url = 'https://cdn.example.com/squat.json'
+
+    await loader.load(url, 'etag-v1')
+    await loader.load(url, 'etag-v2')
+
+    expect(requestJson).toHaveBeenNthCalledWith(1, url, 'etag-v1')
+    expect(requestJson).toHaveBeenNthCalledWith(2, url, 'etag-v2')
+  })
+
   it('limits concurrent standard-data work while retaining item order', async () => {
     const completions: Array<() => void> = []
     let active = 0

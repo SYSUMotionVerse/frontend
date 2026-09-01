@@ -30,6 +30,7 @@ type TrainingSessionInput = {
   qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
+  scoreDetails?: SessionAnalysis['scoreDetails']
 }
 
 export type StudentAccessHydrationInput = {

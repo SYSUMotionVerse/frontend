@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createTrainingTtsPlayer,
-  trainingTtsPlaybackRate
+  trainingTtsPlaybackRate,
+  trainingTtsPlaybackTimeoutMs
 } from '../uni-app/platform/trainingTts'
 
 function createAudioContext() {
@@ -380,6 +381,20 @@ describe('trainingTts', () => {
     expect(context.destroy).toHaveBeenCalledOnce()
   })
 
+  it('releases a stalled native audio context after the playback watchdog', async () => {
+    vi.useFakeTimers()
+    const context = createAudioContext()
+    const player = createTrainingTtsPlayer(() => context)
+
+    const completed = player.playUrl('https://cdn.example.com/stalled.mp3')
+    await vi.advanceTimersByTimeAsync(trainingTtsPlaybackTimeoutMs)
+
+    await expect(completed).resolves.toBeUndefined()
+    expect(context.stop).toHaveBeenCalledOnce()
+    expect(context.destroy).toHaveBeenCalledOnce()
+    vi.useRealTimers()
+  })
+
   it('queues short transition audio in order', () => {
     const first = createAudioContext()
     const second = createAudioContext()
@@ -423,6 +438,21 @@ describe('trainingTts', () => {
     second.onEnded.mock.calls[0][0]()
     await expect(idle).resolves.toBeUndefined()
     expect(observed).toHaveBeenCalledOnce()
+  })
+
+  it('becomes idle after a suspended native player reaches its watchdog', async () => {
+    vi.useFakeTimers()
+    const context = createAudioContext()
+    const player = createTrainingTtsPlayer(() => context)
+
+    player.enqueue(['https://cdn.example.com/stalled.mp3'])
+    player.suspend()
+    const idle = player.waitForIdle()
+
+    await vi.advanceTimersByTimeAsync(trainingTtsPlaybackTimeoutMs)
+    await expect(idle).resolves.toBeUndefined()
+    expect(context.destroy).toHaveBeenCalledOnce()
+    vi.useRealTimers()
   })
 
   it('continues from an immediate countdown into end and rest prompts', async () => {

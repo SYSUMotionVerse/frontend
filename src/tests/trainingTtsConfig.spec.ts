@@ -77,7 +77,7 @@ describe('trainingTtsConfig', () => {
       'https://cdn.example.com/pre-start.mp3'
     ])
     expect(resolveTrainingPhaseDelayedTtsCues(cues)).toEqual([
-      expect.objectContaining({ time: 5, audio_url: 'https://cdn.example.com/pre-5.mp3' })
+      expect.objectContaining({ time: 4.9, audio_url: 'https://cdn.example.com/pre-5.mp3' })
     ])
   })
 
@@ -167,9 +167,9 @@ describe('trainingTtsConfig', () => {
     expect(resolveTrainingCountdownAudioUrls([], 3)).toEqual([])
 
     expect(resolveTrainingCountdownTtsCues(countdownCues, 5)).toEqual([
-      expect.objectContaining({ time: 2, audio_url: 'https://cdn.example.com/3.mp3' }),
-      expect.objectContaining({ time: 3, audio_url: 'https://cdn.example.com/2.mp3' }),
-      expect.objectContaining({ time: 4, audio_url: 'https://cdn.example.com/1.mp3' })
+      expect.objectContaining({ time: 1.9, audio_url: 'https://cdn.example.com/3.mp3' }),
+      expect.objectContaining({ time: 2.9, audio_url: 'https://cdn.example.com/2.mp3' }),
+      expect.objectContaining({ time: 3.9, audio_url: 'https://cdn.example.com/1.mp3' })
     ])
   })
 

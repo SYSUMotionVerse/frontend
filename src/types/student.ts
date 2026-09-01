@@ -33,6 +33,18 @@ export interface SessionAnalysis {
   qualityScore: number | null
   summary: string
   capturedBy: 'camera' | 'sensor'
+  scoreDetails?: SessionScoreDetails | null
+}
+
+export interface SessionScoreDetails {
+  overallScore: number
+  summary: string
+  dimensions: Array<{ key: string, label: string, score: number }>
+  highlights: string[]
+  warnings: string[]
+  chartSnapshot?: {
+    radar?: Array<{ key: string, label: string, score: number }>
+  }
 }
 
 export interface SessionRecord {

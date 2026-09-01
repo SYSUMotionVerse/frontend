@@ -1,4 +1,9 @@
-import type { CheckpointKey, StudentProfile, TrainingModality } from '../../types/student'
+import type {
+  CheckpointKey,
+  SessionScoreDetails,
+  StudentProfile,
+  TrainingModality
+} from '../../types/student'
 import type { GrowthCalendarDay } from '../../domain/student/growth'
 import type { PhysicalMetricTrend } from '../../domain/student/types'
 import type { ScoredActionResult } from '../../domain/training/actionScoringTypes'
@@ -105,6 +110,7 @@ export interface BackendQuestionnairePlan {
     estimated_minutes: number
     question_count: number
     completed: boolean
+    description?: string
   }>
 }
 
@@ -174,6 +180,9 @@ export interface VisualPoseAnalysisSequenceFrame {
   frame_index: number
   time: number
   values: Array<number | null>
+  arrangement_item_id?: number
+  video_id?: number
+  action_frame_index?: number
 }
 
 export interface VisualPoseAnalysisPayload {
@@ -257,6 +266,8 @@ export interface ExerciseVideoSummary {
   video_file?: string | null
   /** 标准动作识别数据 URL */
   standard_data_url?: string | null
+  /** 发布配置中标准动作对象的 ETag；非空时客户端下载后必须核对。 */
+  standard_asset_etag?: string
   /** 缩略图 URL */
   thumbnail?: string | null
   /** 视频描述 */
@@ -377,12 +388,8 @@ export interface ExerciseScoreChartSnapshot {
   radar?: ExerciseScoreRadarPoint[]
 }
 
-export interface ExerciseScoreDetails {
-  overallScore: number
-  summary: string
+export interface ExerciseScoreDetails extends SessionScoreDetails {
   dimensions: ExerciseScoreDimension[]
-  highlights: string[]
-  warnings: string[]
   chartSnapshot?: ExerciseScoreChartSnapshot
 }
 

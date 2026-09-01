@@ -393,6 +393,50 @@ describe('student backend sync orchestration', () => {
     vi.unstubAllEnvs()
   })
 
+  it('enriches the questionnaire plan with backend scale descriptions', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const getPsychologyQuestionnairePlan = vi.fn().mockResolvedValue({
+      checkpoint: 'baseline',
+      questionnaire_count: 1,
+      completed_questionnaire_count: 0,
+      estimated_total_minutes: 3,
+      current_questionnaire_id: 5,
+      questionnaires: [{
+        id: 5,
+        code: 'STATE',
+        title: '运动状态问卷',
+        short_title: '状态',
+        order: 1,
+        estimated_minutes: 3,
+        question_count: 8,
+        completed: false
+      }]
+    })
+    const listPsychologyScales = vi.fn().mockResolvedValue([{
+      id: 5,
+      code: 'STATE',
+      title: '运动状态问卷',
+      short_title: '状态',
+      description: '了解最近一段时间的运动感受。',
+      checkpoint: 'baseline',
+      estimated_minutes: 3,
+      order: 1,
+      created_at: '2026-08-30T00:00:00Z',
+      questions: []
+    }])
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession: vi.fn().mockResolvedValue(undefined),
+      getPsychologyQuestionnairePlan,
+      listPsychologyScales
+    })
+
+    const plan = await sync.loadQuestionnairePlan('baseline')
+
+    expect(plan?.questionnaires[0].description).toBe('了解最近一段时间的运动感受。')
+    expect(listPsychologyScales).toHaveBeenCalledTimes(1)
+  })
+
   it('lists published visual arrangements in display order and loads the selected set', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const ensureSession = vi.fn().mockResolvedValue(undefined)

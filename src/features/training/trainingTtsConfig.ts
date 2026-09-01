@@ -10,6 +10,15 @@ export interface TrainingTtsPhaseTiming {
   phaseDurationSeconds: number
 }
 
+const scheduledTtsLeadSeconds = 0.1
+
+function applyGeneratedAudioLead(time: number) {
+  // edge-tts MP3 files contain a short leading silent pad. Start every
+  // scheduled (non-zero) cue 100 ms early so the audible speech lands on the
+  // configured timeline marker; true phase-start cues must remain at zero.
+  return time > 0 ? Math.max(0, time - scheduledTtsLeadSeconds) : 0
+}
+
 function toNonNegativeSeconds(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, value)
@@ -57,6 +66,7 @@ export function resolveTrainingPhaseTtsCues(
     .filter(cue => cue.phase === phase && isUsableCue(cue))
     .map(cue => ({ cue, time: resolveCueTime(cue, timing) }))
     .filter((entry): entry is { cue: TrainingTtsCue; time: number } => entry.time !== null)
+    .map(entry => ({ ...entry, time: applyGeneratedAudioLead(entry.time) }))
     .sort((left, right) => (
       left.time - right.time
       || left.cue.order - right.cue.order
@@ -188,7 +198,7 @@ export function resolveTrainingCountdownTtsCues(
     .slice()
     .sort((left, right) => right.seconds_remaining - left.seconds_remaining)
     .map(cue => ({
-      time: duration - cue.seconds_remaining,
+      time: applyGeneratedAudioLead(duration - cue.seconds_remaining),
       text: cue.text,
       audio_url: cue.audio_url
     }))

@@ -32,6 +32,8 @@ const angleLabels: Record<ActionAngleName, string> = {
 interface ScoreActionOptions {
   passScore?: number
   alignmentMethod?: ActionAlignmentMethod
+  coarseAlignment?: boolean
+  smoothingWindow?: number
 }
 
 interface InterpolationResult {
@@ -155,6 +157,51 @@ function resample(values: number[][], sourceTimes: number[], targetLength: numbe
       targetProgress
     ))
   })
+}
+
+function findMotionStart(
+  values: number[][],
+  angleIndices: number[],
+  tolerances: number[]
+) {
+  if (values.length < 3) return 0
+  const activity = values.slice(1).map((row, index) => (
+    angleIndices.reduce((sum, angleIndex, selectedIndex) => (
+      sum + Math.abs(row[angleIndex] - values[index][angleIndex])
+        / tolerances[selectedIndex]
+    ), 0) / angleIndices.length
+  ))
+  const peak = Math.max(...activity)
+  if (!Number.isFinite(peak) || peak < 0.08) return 0
+  const threshold = Math.max(0.08, peak * 0.2)
+  const activityIndex = activity.findIndex(value => value >= threshold)
+  // Keep the last still frame so DTW sees the transition into the movement.
+  return activityIndex < 0 ? 0 : Math.max(0, activityIndex)
+}
+
+function smoothRows(values: number[][], requestedWindow: number) {
+  const bounded = Math.max(1, Math.min(11, Math.round(requestedWindow)))
+  const window = bounded % 2 === 0 ? bounded + 1 : bounded
+  if (window === 1 || values.length < 3) {
+    return { values: values.map(row => [...row]), window: 1 }
+  }
+  const radius = Math.floor(window / 2)
+  return {
+    window,
+    values: values.map((_, rowIndex) => ACTION_ANGLE_NAMES.map((__, columnIndex) => {
+      const start = Math.max(0, rowIndex - radius)
+      const end = Math.min(values.length - 1, rowIndex + radius)
+      const samples: number[] = []
+      for (let index = start; index <= end; index += 1) {
+        samples.push(values[index][columnIndex])
+      }
+      samples.sort((left, right) => left - right)
+      const middle = Math.floor(samples.length / 2)
+      return samples.length % 2 === 0
+        ? (samples[middle - 1] + samples[middle]) / 2
+        : samples[middle]
+    }))
+  }
 }
 
 function selectParent(diagonal: number, up: number, left: number) {
@@ -362,30 +409,56 @@ export function scoreAction(
     return DEFAULT_TOLERANCE
   })
 
-  let alignedStandard = standardInterpolation.values
-  let alignedUser: number[][]
+  const angleIndices = candidates.map(({ name }) => ACTION_ANGLE_NAMES.indexOf(name))
+  const useCoarseAlignment = options.coarseAlignment ?? true
+  const standardStartOffset = useCoarseAlignment
+    ? findMotionStart(standardInterpolation.values, angleIndices, tolerances)
+    : 0
+  const userStartOffset = useCoarseAlignment
+    ? findMotionStart(userInterpolation.values, angleIndices, tolerances)
+    : 0
+  const coarseStandard = standardInterpolation.values.slice(standardStartOffset)
+  const coarseUser = userInterpolation.values.slice(userStartOffset)
+  const coarseUserTimes = timeResult.times.slice(userStartOffset)
+  const smoothedUser = smoothRows(coarseUser, options.smoothingWindow ?? 3)
+
+  let alignedStandard = coarseStandard
+  let alignedUser: number[][] | null = null
+  const angleAlignments = new Map<ActionAngleName, ReturnType<typeof dtwAlign>>()
   let alignmentDebug: Partial<ActionScoreResult['debug']> = {}
   if (alignmentMethod === 'resample') {
-    alignedUser = resample(userInterpolation.values, timeResult.times, alignedStandard.length)
+    alignedUser = resample(smoothedUser.values, coarseUserTimes, alignedStandard.length)
   } else {
-    const aligned = dtwAlign(
-      alignedStandard,
-      userInterpolation.values,
-      candidates.map(({ name }) => ACTION_ANGLE_NAMES.indexOf(name)),
-      normalizedWeights,
-      tolerances
-    )
-    alignedStandard = aligned.standard
-    alignedUser = aligned.user
-    alignmentDebug = aligned.debug
+    candidates.forEach(({ name }, candidateIndex) => {
+      angleAlignments.set(name, dtwAlign(
+        alignedStandard,
+        smoothedUser.values,
+        [angleIndices[candidateIndex]],
+        [1],
+        [tolerances[candidateIndex]]
+      ))
+    })
+    const alignments = [...angleAlignments.values()]
+    alignmentDebug = {
+      alignment_path_length: Math.max(...alignments.map(value => value.debug.alignment_path_length)),
+      dtw_total_cost: alignments.reduce((sum, value, index) => (
+        sum + value.debug.dtw_total_cost * normalizedWeights[index]
+      ), 0),
+      dtw_mean_cost: alignments.reduce((sum, value, index) => (
+        sum + value.debug.dtw_mean_cost * normalizedWeights[index]
+      ), 0)
+    }
   }
 
   const angleDetails: ActionScoreResult['angle_details'] = {}
   const feedback: ActionScoreResult['feedback'] = []
   const angleScores = candidates.map(({ name, rule }, candidateIndex) => {
     const angleIndex = ACTION_ANGLE_NAMES.indexOf(name)
-    const signedErrors = alignedUser.map((row, rowIndex) => (
-      row[angleIndex] - alignedStandard[rowIndex][angleIndex]
+    const angleAlignment = angleAlignments.get(name)
+    const angleStandard = angleAlignment?.standard ?? alignedStandard
+    const angleUser = angleAlignment?.user ?? alignedUser ?? []
+    const signedErrors = angleUser.map((row, rowIndex) => (
+      row[angleIndex] - angleStandard[rowIndex][angleIndex]
     ))
     const absoluteErrors = signedErrors.map(Math.abs)
     const meanSignedError = signedErrors.reduce((sum, value) => sum + value, 0) / signedErrors.length
@@ -440,6 +513,9 @@ export function scoreAction(
       user_frames: userInterpolation.values.length,
       used_angles: candidates.map(({ name }) => name),
       warnings,
+      standard_start_offset: standardStartOffset,
+      user_start_offset: userStartOffset,
+      smoothing_window: smoothedUser.window,
       ...alignmentDebug
     }
   }
@@ -485,14 +561,35 @@ export function aggregateActionScores(
       ? `教学视频已完成，本次动作评分 ${Math.round(score)} 分，动作基本到位。`
       : `教学视频已完成，本次动作评分 ${Math.round(score)} 分，建议根据动作提示继续练习。`
 
+  const angleDimensions = ACTION_ANGLE_NAMES.flatMap(angleName => {
+    const values = actionScores.flatMap(action => {
+      const detail = action.angleDetails[angleName]
+      return detail ? [{ score: detail.score, duration: Math.max(1, action.expectedDuration) }] : []
+    })
+    if (values.length === 0) return []
+    const duration = values.reduce((sum, value) => sum + value.duration, 0)
+    const angleScore = values.reduce(
+      (sum, value) => sum + value.score * value.duration,
+      0
+    ) / duration
+    return [{
+      key: angleName,
+      label: angleLabels[angleName],
+      score: Number(angleScore.toFixed(2))
+    }]
+  })
+  const dimensions = angleDimensions.length > 0
+    ? angleDimensions
+    : actionScores.map(action => ({
+        key: action.actionId,
+        label: action.title,
+        score: Number(action.score.toFixed(2))
+      }))
+
   return {
     score,
     summary,
-    dimensions: actionScores.map(action => ({
-      key: action.actionId,
-      label: action.title,
-      score: Number(action.score.toFixed(2))
-    })),
+    dimensions,
     highlights: actionScores
       .filter(action => action.score >= 90)
       .map(action => `${action.title}完成稳定`),

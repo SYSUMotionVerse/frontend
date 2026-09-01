@@ -7,6 +7,7 @@ export interface CompletionInput {
   qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
+  scoreDetails?: SessionAnalysis['scoreDetails']
 }
 
 function cloneState(state: StudentAppState) {
@@ -40,7 +41,8 @@ export function completeGuidedSession(state: StudentAppState, input: CompletionI
     analysis: {
       qualityScore: input.qualityScore,
       summary: input.summary,
-      capturedBy: input.capturedBy
+      capturedBy: input.capturedBy,
+      ...(input.scoreDetails !== undefined ? { scoreDetails: input.scoreDetails } : {})
     }
   })
 

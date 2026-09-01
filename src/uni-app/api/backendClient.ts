@@ -60,11 +60,28 @@ interface PaginatedResponse<T> {
 
 export class BackendRequestError extends Error {
   readonly statusCode: number
+  readonly requestId: string
+  readonly method: RequestMethod
+  readonly path: string
+  readonly responseData: unknown
 
-  constructor(message: string, statusCode: number) {
+  constructor(
+    message: string,
+    statusCode: number,
+    context: {
+      requestId?: string
+      method?: RequestMethod
+      path?: string
+      responseData?: unknown
+    } = {}
+  ) {
     super(message)
     this.name = 'BackendRequestError'
     this.statusCode = statusCode
+    this.requestId = context.requestId ?? ''
+    this.method = context.method ?? 'GET'
+    this.path = context.path ?? ''
+    this.responseData = context.responseData
   }
 }
 
@@ -176,6 +193,9 @@ function resolveCookiePair(cookie: string) {
 }
 
 function resolveErrorMessage(payload: unknown, fallback: string) {
+  if (typeof payload === 'string' && payload.trim().length > 0) {
+    return payload.trim().slice(0, 500)
+  }
   if (!payload || typeof payload !== 'object') {
     return fallback
   }
@@ -189,7 +209,28 @@ function resolveErrorMessage(payload: unknown, fallback: string) {
     }
   }
 
+  const validationDetails = Object.entries(record)
+    .filter(([key]) => key !== 'request_id')
+    .flatMap(([key, value]) => {
+      const messages = Array.isArray(value) ? value : [value]
+      return messages
+        .filter(message => typeof message === 'string' && message.trim())
+        .map(message => `${key}: ${String(message).trim()}`)
+    })
+  if (validationDetails.length > 0) {
+    return validationDetails.join('；').slice(0, 500)
+  }
+
   return fallback
+}
+
+function resolveResponseHeader(header: unknown, name: string) {
+  if (!header || typeof header !== 'object') return ''
+  const record = header as Record<string, unknown>
+  const matched = Object.entries(record).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase()
+  )?.[1]
+  return typeof matched === 'string' ? matched.trim() : ''
 }
 
 function unwrapCollectionResponse<T>(payload: unknown): T[] {
@@ -332,7 +373,19 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
 
               settle(() => reject(new BackendRequestError(
                 resolveErrorMessage(response.data, `Request failed with ${response.statusCode}`),
-                response.statusCode
+                response.statusCode,
+                {
+                  requestId: (
+                    response.data
+                    && typeof response.data === 'object'
+                    && typeof (response.data as Record<string, unknown>).request_id === 'string'
+                      ? String((response.data as Record<string, unknown>).request_id)
+                      : resolveResponseHeader(response.header, 'X-Request-ID')
+                  ),
+                  method,
+                  path,
+                  responseData: response.data
+                }
               )))
             },
             fail(error) {

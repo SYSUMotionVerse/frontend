@@ -5,6 +5,7 @@ export type {
   PhysicalMetricTrend,
   SessionAnalysis,
   SessionRecord,
+  SessionScoreDetails,
   ShortQuestionnaireState,
   StudentAppState,
   StudentProfile,

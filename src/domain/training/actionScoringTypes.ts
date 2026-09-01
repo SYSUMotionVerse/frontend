@@ -1,4 +1,4 @@
-export const ACTION_SCORING_VERSION = 'action-scoring-ts-v1'
+export const ACTION_SCORING_VERSION = 'action-scoring-ts-v2'
 
 export const ACTION_ANGLE_NAMES = [
   'left_elbow',
@@ -101,6 +101,9 @@ export interface ActionScoreResult {
     alignment_path_length?: number
     dtw_total_cost?: number
     dtw_mean_cost?: number
+    standard_start_offset?: number
+    user_start_offset?: number
+    smoothing_window?: number
   }
 }
 

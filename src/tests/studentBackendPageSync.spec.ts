@@ -1,7 +1,16 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { createInitialStudentState } from '../domain/student/state'
+
+vi.mock('../uni-app/platform/trainingSoundscape', () => ({
+  createTrainingSoundscape: () => ({
+    play: vi.fn(),
+    suspend: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn()
+  })
+}))
 
 const initialStudentState = createInitialStudentState()
 
@@ -155,10 +164,12 @@ const startStairSensorCapture = vi.fn()
 const notifyTrainingComplete = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
+  onBackPress: vi.fn(),
   onHide: vi.fn(),
   onLoad: vi.fn(),
   onResize: vi.fn(),
   onShow: vi.fn(),
+  onUnload: vi.fn(),
   onBeforeUnmount: vi.fn()
 }))
 
@@ -397,6 +408,35 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
+  it('reuses identical visual completion facts after an ambiguous submission failure', async () => {
+    studentBackendSync.syncVisualSession
+      .mockRejectedValueOnce(new Error('request timeout'))
+      .mockResolvedValueOnce({ synced: true })
+    const { useVisualTrainingSubmission } = await import(
+      '../uni-app/composables/useVisualTrainingSubmission'
+    )
+    const submission = useVisualTrainingSubmission()
+    const firstAttempt = {
+      modality: 'wushu' as const,
+      durationSeconds: 30,
+      completedAt: '2026-08-30T10:00:00.000Z',
+      comment: '首次完成事实'
+    }
+
+    await expect(submission.sync(firstAttempt)).rejects.toThrow('request timeout')
+    await submission.sync({
+      ...firstAttempt,
+      durationSeconds: 31,
+      completedAt: '2026-08-30T10:00:05.000Z',
+      comment: '不应覆盖首次完成事实'
+    })
+
+    expect(studentBackendSync.syncVisualSession).toHaveBeenCalledTimes(2)
+    expect(studentBackendSync.syncVisualSession.mock.calls[1]?.[0]).toEqual(
+      studentBackendSync.syncVisualSession.mock.calls[0]?.[0]
+    )
+  })
+
   it('reLaunches to registration when bootstrap resolves that route', async () => {
     studentBackendSync.bootstrapAccess.mockResolvedValue({
       targetPageUrl: '/pages/access/register'
@@ -515,7 +555,7 @@ describe('page-level backend sync wiring', () => {
     )
     expect(store.completeProfile).toHaveBeenCalled()
     expect(store.setActiveCheckpoint).toHaveBeenCalledWith('baseline')
-    expect(currentUni().redirectTo).toHaveBeenCalledWith({
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
       url: '/pages/access/questionnaire?checkpoint=baseline'
     })
   })
@@ -593,6 +633,8 @@ describe('page-level backend sync wiring', () => {
     })
 
     await flushPromises()
+    await wrapper.get('.questionnaire-overview__start').trigger('click')
+    await nextTick()
     await wrapper.get('.submit-questionnaire').trigger('click')
     await flushPromises()
 
@@ -795,6 +837,8 @@ describe('page-level backend sync wiring', () => {
     })
 
     await flushPromises()
+    await wrapper.get('.questionnaire-overview__start').trigger('click')
+    await nextTick()
     await wrapper.get('.submit-questionnaire').trigger('click')
     await flushPromises()
 
@@ -1083,7 +1127,7 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
-  it('reLaunches from the baseline questionnaire result into reminder consent', async () => {
+  it('offers home and direct-training destinations after all questionnaires finish', async () => {
     const ResultPage = (await import('../uni-app/pages/access/questionnaire-result.vue')).default
     const wrapper = mount(ResultPage, {
       global: {
@@ -1092,7 +1136,7 @@ describe('page-level backend sync wiring', () => {
             template: '<div><slot /></div>'
           },
           QuestionnaireResultCard: {
-            template: '<button class="continue-to-home" @click="$emit(\'continue\')">continue</button>'
+            template: '<div><button class="continue-to-home" @click="$emit(\'home\')">home</button><button class="continue-to-training" @click="$emit(\'train\')">train</button></div>'
           }
         }
       }
@@ -1102,10 +1146,14 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
 
     expect(currentUni().reLaunch).toHaveBeenCalledWith({
-      url: '/pages/access/reminder-consent'
-    })
-    expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
       url: '/pages/training/home'
+    })
+
+    await wrapper.get('.continue-to-training').trigger('click')
+    await flushPromises()
+
+    expect(currentUni().reLaunch).toHaveBeenCalledWith({
+      url: '/pages/training/select'
     })
   })
 
@@ -2044,6 +2092,108 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
+  it('does not skip a new action when the previous native video reports late progress', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+    studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
+      id: 16,
+      title: '迟到媒体事件回归',
+      exercise_type: 'MARTIAL_ARTS',
+      item_count: 3,
+      total_duration: 31,
+      is_active: true,
+      order: 1,
+      countdown_tts_cues: [],
+      items: [
+        {
+          id: 161,
+          video_id: 161,
+          video: { id: 161, title: '动作一', exercise_type: 'MARTIAL_ARTS', video_file: 'https://cdn.example.com/late-1.mp4', duration: 1 },
+          pretraining_mode: 'NONE', pretraining_countdown_duration: 0,
+          expected_duration: 1, formal_countdown_duration: 0, countdown_duration: 0, order: 1
+        },
+        {
+          id: 162,
+          video_id: 162,
+          video: { id: 162, title: '动作二', exercise_type: 'MARTIAL_ARTS', video_file: 'https://cdn.example.com/late-2.mp4', duration: 15 },
+          pretraining_mode: 'NONE', pretraining_countdown_duration: 0,
+          expected_duration: 15, formal_countdown_duration: 0, countdown_duration: 0, order: 2
+        },
+        {
+          id: 163,
+          video_id: 163,
+          video: { id: 163, title: '动作三', exercise_type: 'MARTIAL_ARTS', video_file: 'https://cdn.example.com/late-3.mp4', duration: 15 },
+          pretraining_mode: 'NONE', pretraining_countdown_duration: 0,
+          expected_duration: 15, formal_countdown_duration: 0, countdown_duration: 0, order: 3
+        }
+      ]
+    })
+
+    const VisualSessionPage = (await import('../subpackages/training/visual-session.vue')).default
+    const LateEventPanelStub = defineComponent({
+      name: 'LateEventPanelStub',
+      props: ['videoEventToken', 'videoTitle', 'phaseRemainingSeconds'],
+      emits: ['startRecognition', 'poseStats', 'startTraining', 'videoPlay', 'videoTimeUpdate'],
+      template: `
+        <div class="training-panel-stub">
+          <span class="action-title">{{ videoTitle }}</span>
+          <span class="event-token">{{ videoEventToken }}</span>
+          <span class="phase-remaining">{{ phaseRemainingSeconds }}</span>
+          <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
+          <button class="start-training" @click="$emit('startTraining')">start</button>
+          <button class="play-video" @click="$emit('videoPlay', { token: videoEventToken })">play</button>
+        </div>
+      `
+    })
+    const wrapper = mount(VisualSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          VisualTrainingPanel: LateEventPanelStub
+        }
+      }
+    })
+
+    try {
+      await flushPromises()
+      await wrapper.get('.start-recognition').trigger('click')
+      await wrapper.get('.start-training').trigger('click')
+      await flushPromises()
+      const firstToken = wrapper.get('.event-token').text()
+      await wrapper.get('.play-video').trigger('click')
+      await vi.advanceTimersByTimeAsync(1_100)
+      await flushPromises()
+
+      expect(wrapper.get('.action-title').text()).toBe('动作二')
+      const panel = wrapper.getComponent(LateEventPanelStub)
+      panel.vm.$emit('videoTimeUpdate', {
+        token: firstToken,
+        detail: { currentTime: 15, duration: 15 }
+      })
+      await flushPromises()
+      expect(wrapper.get('.action-title').text()).toBe('动作二')
+      expect(wrapper.get('.phase-remaining').text()).toBe('15')
+
+      const secondToken = wrapper.get('.event-token').text()
+      panel.vm.$emit('videoTimeUpdate', {
+        token: secondToken,
+        detail: { currentTime: 15, duration: 15 }
+      })
+      await flushPromises()
+      expect(wrapper.get('.action-title').text()).toBe('动作二')
+      expect(wrapper.get('.phase-remaining').text()).toBe('15')
+
+      await vi.advanceTimersByTimeAsync(14_100)
+      await flushPromises()
+      expect(wrapper.get('.action-title').text()).toBe('动作二')
+      await vi.advanceTimersByTimeAsync(1_000)
+      await flushPromises()
+      expect(wrapper.get('.action-title').text()).toBe('动作三')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
   it('surfaces a retryable error when native media never starts', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
@@ -2080,13 +2230,15 @@ describe('page-level backend sync wiring', () => {
           UniTrainingPageShell: { template: '<div><slot /></div>' },
           VisualTrainingPanel: {
             props: ['videoEventToken', 'phaseKind', 'videoError'],
-            emits: ['startRecognition', 'poseStats', 'startTraining'],
+            emits: ['startRecognition', 'poseStats', 'startTraining', 'retryVideo'],
             template: `
               <div>
                 <span class="phase-kind">{{ phaseKind }}</span>
                 <span class="video-error">{{ videoError }}</span>
+                <span class="video-token">{{ videoEventToken }}</span>
                 <button class="start-recognition" @click="$emit('startRecognition', 5); $emit('poseStats', { status: 'ready', fps: 5 })">camera</button>
                 <button class="start-training" @click="$emit('startTraining')">start</button>
+                <button class="retry-video" @click="$emit('retryVideo')">retry</button>
               </div>
             `
           }
@@ -2102,11 +2254,25 @@ describe('page-level backend sync wiring', () => {
 
       expect(wrapper.get('.phase-kind').text()).toBe('active')
       expect(wrapper.get('.video-error').text()).toBe('')
+      const initialToken = wrapper.get('.video-token').text()
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      await flushPromises()
+
+      expect(wrapper.get('.video-error').text()).toBe('')
+      expect(wrapper.get('.video-token').text()).not.toBe(initialToken)
 
       await vi.advanceTimersByTimeAsync(15_000)
       await flushPromises()
 
       expect(wrapper.get('.video-error').text()).toContain('未能开始播放')
+
+      const arrangementLoadCount = studentBackendSync.loadVisualExerciseArrangement.mock.calls.length
+      await wrapper.get('.retry-video').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('.video-error').text()).toBe('')
+      expect(studentBackendSync.loadVisualExerciseArrangement).toHaveBeenCalledTimes(arrangementLoadCount)
     } finally {
       wrapper.unmount()
       vi.useRealTimers()
@@ -2472,7 +2638,7 @@ describe('page-level backend sync wiring', () => {
       comment: '教学视频已完成，本次动作评分 100 分，整体动作完成稳定。',
       poseAnalysis: expect.objectContaining({
         scoringSource: 'client',
-        scoringVersion: 'action-scoring-ts-v1',
+        scoringVersion: 'action-scoring-ts-v2',
         actionScores: [expect.objectContaining({
           actionId: 'wushu-punch',
           score: 100,
@@ -2488,9 +2654,9 @@ describe('page-level backend sync wiring', () => {
         summary: '动作基本标准，注意细节。'
       })
     )
-    expect(currentUni().redirectTo).toHaveBeenCalledWith({
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=visual-/)
-    })
+    }))
   })
 
   it('blocks visual completion when the backend has no playable video', async () => {

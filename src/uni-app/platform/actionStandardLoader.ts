@@ -1,10 +1,11 @@
 import type { ActionStandard } from '../../domain/training/actionScoringTypes'
 
 interface ActionStandardLoaderDependencies {
-  requestJson: (url: string) => Promise<unknown>
+  requestJson: (url: string, expectedEtag?: string) => Promise<unknown>
 }
 
 export const ACTION_STANDARD_PRELOAD_CONCURRENCY = 2
+export const ACTION_STANDARD_REQUEST_TIMEOUT_MS = 15_000
 
 export async function mapWithConcurrency<Input, Output>(
   items: readonly Input[],
@@ -129,15 +130,37 @@ export function parseActionStandard(value: unknown): ActionStandard {
   return parsed as unknown as ActionStandard
 }
 
-function requestJson(url: string) {
+function normalizeEtag(value: unknown) {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/^W\//i, '').replace(/^"|"$/g, '')
+}
+
+function requestJson(url: string, expectedEtag?: string) {
   return new Promise<unknown>((resolve, reject) => {
     uni.request({
       url,
       method: 'GET',
+      timeout: ACTION_STANDARD_REQUEST_TIMEOUT_MS,
       success(response) {
         if (response.statusCode < 200 || response.statusCode >= 300) {
           reject(new Error(`标准动作文件请求失败（${response.statusCode}）。`))
           return
+        }
+        const expected = normalizeEtag(expectedEtag)
+        if (expected) {
+          const headers = response.header ?? {}
+          const actualHeader = Object.entries(headers).find(
+            ([name]) => name.toLowerCase() === 'etag'
+          )?.[1]
+          const actual = normalizeEtag(actualHeader)
+          if (!actual) {
+            reject(new Error('标准动作文件响应缺少 ETag，无法验证发布版本。'))
+            return
+          }
+          if (actual !== expected) {
+            reject(new Error('标准动作文件已发生变化，请重新发布训练配置。'))
+            return
+          }
         }
         resolve(response.data)
       },
@@ -154,22 +177,24 @@ export function createActionStandardLoader(
   const cache = new Map<string, Promise<ActionStandard>>()
 
   return {
-    load(url: string) {
+    load(url: string, expectedEtag?: string) {
       const normalizedUrl = url.trim()
       if (!normalizedUrl) {
         return Promise.reject(new Error('标准动作文件 URL 为空。'))
       }
 
-      const cached = cache.get(normalizedUrl)
+      const normalizedEtag = normalizeEtag(expectedEtag)
+      const cacheKey = `${normalizedUrl}#${normalizedEtag}`
+      const cached = cache.get(cacheKey)
       if (cached) return cached
 
-      const pending = dependencies.requestJson(normalizedUrl)
+      const pending = dependencies.requestJson(normalizedUrl, normalizedEtag || undefined)
         .then(parseActionStandard)
         .catch(error => {
-          cache.delete(normalizedUrl)
+          cache.delete(cacheKey)
           throw error
         })
-      cache.set(normalizedUrl, pending)
+      cache.set(cacheKey, pending)
       return pending
     },
     clear() {

@@ -14,6 +14,8 @@ import type {
 const props = defineProps<{
   videoTitle: string
   videoUrl: string
+  nextVideoUrl?: string
+  videoResetKey?: string
   videoLoading: boolean
   videoError: string
   videoEnded: boolean
@@ -34,6 +36,7 @@ const props = defineProps<{
   workoutTimelineReady: boolean
   videoAutoplay: boolean
   videoEventToken?: string
+  videoElementId?: string
   trainingStarted: boolean
   startCountdown: number
   phaseKind: VisualWorkoutPhaseKind
@@ -86,6 +89,14 @@ const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
 const automaticTrainingStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
+type TrainingVideoSlot = 'primary' | 'buffer'
+const activeTrainingVideoSlot = shallowRef<TrainingVideoSlot>('primary')
+const primaryTrainingVideoUrl = shallowRef(props.videoUrl)
+const bufferTrainingVideoUrl = shallowRef(props.nextVideoUrl ?? '')
+const primaryTrainingVideoReady = shallowRef(false)
+const bufferTrainingVideoReady = shallowRef(false)
+let pendingVideoResetToStart = true
+let videoSwitchGeneration = 0
 const POSE_MOUNT_DELAY_MS = 500
 const poseMountReady = shallowRef(false)
 let poseMountTimer: ReturnType<typeof setTimeout> | null = null
@@ -101,6 +112,17 @@ const cameraPlaceholderLabel = computed(() =>
     : props.recognitionEnabled ? '正在准备你的画面…' : '正在启动摄像头…'
 )
 const startActionDisabled = computed(() => !props.recognitionReady)
+const showPositionGuide = computed(() => (
+  props.recognitionEnabled
+  && poseMountReady.value
+  && props.workoutState.current.itemIndex === 0
+  && (
+    props.phaseSlot === 'preview'
+    || props.phaseSlot === 'pretraining-countdown'
+    || props.phaseSlot === 'pretraining'
+    || props.phaseSlot === 'formal-countdown'
+  )
+))
 const showStartAction = computed(() =>
   !props.videoLoading
   && !props.videoError
@@ -282,12 +304,50 @@ onUnmounted(() => {
   if (poseMountTimer) clearTimeout(poseMountTimer)
 })
 
-function syncVideoPlayback(resetToStart = false) {
-  if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return
-  const context = uni.createVideoContext(
-    'follow-along-video',
+function trainingVideoId(slot: TrainingVideoSlot) {
+  return slot === 'primary'
+    ? (props.videoElementId || 'follow-along-video')
+    : `${props.videoElementId || 'follow-along-video'}-buffer`
+}
+
+function trainingVideoUrl(slot: TrainingVideoSlot) {
+  return slot === 'primary'
+    ? primaryTrainingVideoUrl.value
+    : bufferTrainingVideoUrl.value
+}
+
+function trainingVideoReady(slot: TrainingVideoSlot) {
+  return slot === 'primary'
+    ? primaryTrainingVideoReady.value
+    : bufferTrainingVideoReady.value
+}
+
+function setTrainingVideoReady(slot: TrainingVideoSlot, ready: boolean) {
+  if (slot === 'primary') primaryTrainingVideoReady.value = ready
+  else bufferTrainingVideoReady.value = ready
+}
+
+function setTrainingVideoUrl(slot: TrainingVideoSlot, url: string) {
+  setTrainingVideoReady(slot, false)
+  if (slot === 'primary') primaryTrainingVideoUrl.value = url
+  else bufferTrainingVideoUrl.value = url
+}
+
+function getTrainingVideoContext(slot = activeTrainingVideoSlot.value) {
+  if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return null
+  return uni.createVideoContext(
+    trainingVideoId(slot),
     componentInstance?.proxy as never
   )
+}
+
+function syncVideoPlayback(
+  resetToStart = false,
+  slot = activeTrainingVideoSlot.value
+) {
+  if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return
+  const context = getTrainingVideoContext(slot)
+  if (!context) return
   if (resetToStart) {
     context.seek(0)
   } else if (
@@ -307,10 +367,8 @@ function syncVideoPlayback(resetToStart = false) {
 
 function getDemonstrationVideoContext() {
   if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return null
-  return uni.createVideoContext(
-    props.tutorialMode ? 'tutorial-video' : 'follow-along-video',
-    componentInstance?.proxy as never
-  )
+  if (!props.tutorialMode) return getTrainingVideoContext()
+  return uni.createVideoContext('tutorial-video', componentInstance?.proxy as never)
 }
 
 function applyDemonstrationPlaybackRate() {
@@ -319,8 +377,43 @@ function applyDemonstrationPlaybackRate() {
   context.playbackRate(demonstrationPlaybackRate.value)
 }
 
-function handleTrainingVideoLoadedMetadata() {
+function promoteTrainingVideo(slot: TrainingVideoSlot) {
+  if (slot === activeTrainingVideoSlot.value || trainingVideoUrl(slot) !== props.videoUrl) return
+  const previousSlot = activeTrainingVideoSlot.value
+  const previousContext = getTrainingVideoContext(previousSlot)
+  const nextContext = getTrainingVideoContext(slot)
+  previousContext?.pause()
+  if (pendingVideoResetToStart) nextContext?.seek(0)
+  else if (props.videoProgressSeconds > 0) nextContext?.seek(props.videoProgressSeconds)
+  activeTrainingVideoSlot.value = slot
+  void nextTick().then(() => {
+    syncVideoPlayback(pendingVideoResetToStart, slot)
+    pendingVideoResetToStart = false
+  })
+}
+
+function handleTrainingVideoLoadedMetadata(slot: TrainingVideoSlot) {
+  if (slot === activeTrainingVideoSlot.value) syncVideoPlayback()
+}
+
+function handleTrainingVideoCanPlay(slot: TrainingVideoSlot) {
+  setTrainingVideoReady(slot, true)
+  if (trainingVideoUrl(slot) === props.videoUrl && slot !== activeTrainingVideoSlot.value) {
+    promoteTrainingVideo(slot)
+    return
+  }
+  if (slot !== activeTrainingVideoSlot.value) return
+  // Native autoplay can be ignored when the source element has only just been
+  // recreated. Re-issuing play after canplay is harmless and fixes that race
+  // on iOS WeChat.
   syncVideoPlayback()
+}
+
+function handleTrainingVideoError(slot: TrainingVideoSlot, event: unknown) {
+  setTrainingVideoReady(slot, false)
+  if (trainingVideoUrl(slot) === props.videoUrl) {
+    emit('videoError', wrapVideoEvent(event, slot))
+  }
 }
 
 function handleTutorialVideoLoadedMetadata() {
@@ -346,12 +439,75 @@ async function replayDemonstration() {
 }
 
 watch(
-  () => [props.videoAutoplay, props.videoUrl, props.phaseKind] as const,
-  async ([, , phaseKind], previous) => {
+  () => [props.videoUrl, props.videoResetKey, props.videoEventToken] as const,
+  async ([url, resetKey], previous) => {
+    if (!url) return
+    const generation = ++videoSwitchGeneration
+    const resetToStart = previous === undefined || previous[1] !== resetKey
+    pendingVideoResetToStart = resetToStart
+    const activeSlot = activeTrainingVideoSlot.value
+    if (trainingVideoUrl(activeSlot) === url) {
+      await nextTick()
+      if (generation !== videoSwitchGeneration || props.videoUrl !== url) return
+      syncVideoPlayback(resetToStart)
+      pendingVideoResetToStart = false
+      return
+    }
+
+    // The arrangement URL arrives asynchronously on first entry. Populate
+    // the visible native video directly instead of waiting for a hidden
+    // buffer's canplay event (some WeChat Android runtimes do not emit it for
+    // an invisible native layer).
+    if (!trainingVideoUrl(activeSlot)) {
+      setTrainingVideoUrl(activeSlot, url)
+      await nextTick()
+      if (generation !== videoSwitchGeneration || props.videoUrl !== url) return
+      syncVideoPlayback(resetToStart, activeSlot)
+      pendingVideoResetToStart = false
+      return
+    }
+
+    const standbySlot: TrainingVideoSlot = activeSlot === 'primary' ? 'buffer' : 'primary'
+    if (trainingVideoUrl(standbySlot) !== url) setTrainingVideoUrl(standbySlot, url)
+    await nextTick()
+    if (generation !== videoSwitchGeneration || props.videoUrl !== url) return
+    // Some Android WeChat versions do not emit canplay for a native video
+    // while it is offscreen. Promote the correct source after it is mounted;
+    // the visible native layer can then finish loading and emit progress/play.
+    // A ready preload remains seamless, while a cold preload no longer
+    // deadlocks behind the media-start watchdog.
+    promoteTrainingVideo(standbySlot)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [props.nextVideoUrl ?? '', props.videoUrl, activeTrainingVideoSlot.value] as const,
+  async ([url, currentUrl, activeSlot]) => {
+    if (!url || url === currentUrl) return
+    const standbySlot: TrainingVideoSlot = activeSlot === 'primary'
+      ? 'buffer'
+      : 'primary'
+    // The standby slot may already contain the action currently being handed
+    // off. Keep it intact until promotion; the active-slot change re-runs this
+    // watcher and preloads the following action into the old slot afterwards.
+    if (trainingVideoUrl(standbySlot) === currentUrl) return
+    if (trainingVideoUrl(standbySlot) === url) return
+    setTrainingVideoUrl(standbySlot, url)
+    await nextTick()
+    if (trainingVideoUrl(standbySlot) !== url) return
+    getTrainingVideoContext(standbySlot)?.seek(0)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [props.videoAutoplay, props.phaseKind, props.videoElementId] as const,
+  async ([, phaseKind], previous) => {
     await nextTick()
     syncVideoPlayback(
       (phaseKind === 'active' || phaseKind === 'demonstration')
-      && previous?.[2] !== phaseKind
+      && previous?.[1] !== phaseKind
     )
   }
 )
@@ -363,18 +519,29 @@ watch(
   }
 )
 
-function wrapVideoEvent(event: unknown) {
-  let token = props.videoEventToken
+function wrapVideoEvent(event: unknown, slot?: TrainingVideoSlot) {
+  // Android WeChat occasionally omits currentTarget.dataset (and sometimes
+  // currentTarget.id) for events emitted by a preloaded native video after it
+  // becomes visible. Seed the envelope from the slot that owns the listener
+  // so valid buffer playback always starts the matching phase clock.
+  let token = slot && trainingVideoUrl(slot) === props.videoUrl
+    ? props.videoEventToken
+    : undefined
+  let elementId = slot ? trainingVideoId(slot) : undefined
   const detail = event && typeof event === 'object'
     ? (event as { detail?: unknown }).detail
     : undefined
   if (event && typeof event === 'object') {
     const currentTarget = (event as { currentTarget?: unknown }).currentTarget
     if (currentTarget && typeof currentTarget === 'object') {
+      const targetId = (currentTarget as { id?: unknown }).id
+      if (typeof targetId === 'string' && targetId.length > 0) {
+        elementId = targetId
+      }
       const dataset = (currentTarget as { dataset?: unknown }).dataset
       if (dataset && typeof dataset === 'object') {
         const targetToken = (dataset as { videoToken?: unknown }).videoToken
-        if (typeof targetToken === 'string' && targetToken.length > 0) {
+        if (!token && typeof targetToken === 'string' && targetToken.length > 0) {
           token = targetToken
         }
       }
@@ -382,6 +549,7 @@ function wrapVideoEvent(event: unknown) {
   }
   return {
     token,
+    elementId,
     detail: detail && typeof detail === 'object' ? detail : undefined
   }
 }
@@ -411,6 +579,14 @@ async function stopRecord() {
   return recordedPath
 }
 
+function startDetect() {
+  poseCamera.value?.startDetect()
+}
+
+function stopDetect() {
+  poseCamera.value?.stopDetect()
+}
+
 function selectMedia(media: ActiveMedia) {
   if (media === 'demonstration') {
     cameraViewRequested.value = false
@@ -428,7 +604,7 @@ function selectMedia(media: ActiveMedia) {
   activeMedia.value = media
 }
 
-defineExpose({ startRecord, stopRecord })
+defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 </script>
 
 <template>
@@ -590,29 +766,64 @@ defineExpose({ startRecord, stopRecord })
           <text>{{ videoError || '当前训练暂未配置教学视频' }}</text>
           <button class="visual-session__retry" @click="emit('retryVideo')">重新加载</button>
         </view>
+        <view v-else class="visual-session__video-stack" :style="comparisonMediaStyle">
         <video
-          v-else
-          id="follow-along-video"
-          :key="videoEventToken || videoUrl"
+          :id="videoElementId || 'follow-along-video'"
           class="visual-session__video"
-          :data-video-token="videoEventToken"
+          :class="{
+            'visual-session__video--active': activeTrainingVideoSlot === 'primary',
+            'visual-session__video--standby': activeTrainingVideoSlot !== 'primary'
+          }"
+          :data-video-token="primaryTrainingVideoUrl === videoUrl ? videoEventToken : `preload:${primaryTrainingVideoUrl}`"
           :style="comparisonMediaStyle"
-          :src="videoUrl"
+          :src="primaryTrainingVideoUrl"
           :title="videoTitle"
-          :autoplay="videoAutoplay"
+          :autoplay="videoAutoplay && activeTrainingVideoSlot === 'primary'"
+          :initial-time="0"
+          :muted="true"
           :loop="phaseKind !== 'demonstration'"
           :controls="false"
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
           object-fit="cover"
-          @timeupdate="emit('videoTimeUpdate', wrapVideoEvent($event))"
-          @play="emit('videoPlay', wrapVideoEvent($event))"
-          @pause="emit('videoPause', wrapVideoEvent($event))"
-          @waiting="emit('videoWaiting', wrapVideoEvent($event))"
-          @loadedmetadata="handleTrainingVideoLoadedMetadata"
-          @ended="emit('videoEnded', wrapVideoEvent($event))"
-          @error="emit('videoError', wrapVideoEvent($event))"
+          @timeupdate="activeTrainingVideoSlot === 'primary' && emit('videoTimeUpdate', wrapVideoEvent($event, 'primary'))"
+          @play="activeTrainingVideoSlot === 'primary' && emit('videoPlay', wrapVideoEvent($event, 'primary'))"
+          @pause="activeTrainingVideoSlot === 'primary' && emit('videoPause', wrapVideoEvent($event, 'primary'))"
+          @waiting="activeTrainingVideoSlot === 'primary' && emit('videoWaiting', wrapVideoEvent($event, 'primary'))"
+          @loadedmetadata="handleTrainingVideoLoadedMetadata('primary')"
+          @canplay="handleTrainingVideoCanPlay('primary')"
+          @ended="activeTrainingVideoSlot === 'primary' && emit('videoEnded', wrapVideoEvent($event, 'primary'))"
+          @error="handleTrainingVideoError('primary', $event)"
         />
+        <video
+          :id="`${videoElementId || 'follow-along-video'}-buffer`"
+          class="visual-session__video"
+          :class="{
+            'visual-session__video--active': activeTrainingVideoSlot === 'buffer',
+            'visual-session__video--standby': activeTrainingVideoSlot !== 'buffer'
+          }"
+          :data-video-token="bufferTrainingVideoUrl === videoUrl ? videoEventToken : `preload:${bufferTrainingVideoUrl}`"
+          :style="comparisonMediaStyle"
+          :src="bufferTrainingVideoUrl"
+          :title="videoTitle"
+          :autoplay="videoAutoplay && activeTrainingVideoSlot === 'buffer'"
+          :initial-time="0"
+          :muted="true"
+          :loop="phaseKind !== 'demonstration'"
+          :controls="false"
+          :show-center-play-btn="false"
+          :enable-progress-gesture="false"
+          object-fit="cover"
+          @timeupdate="activeTrainingVideoSlot === 'buffer' && emit('videoTimeUpdate', wrapVideoEvent($event, 'buffer'))"
+          @play="activeTrainingVideoSlot === 'buffer' && emit('videoPlay', wrapVideoEvent($event, 'buffer'))"
+          @pause="activeTrainingVideoSlot === 'buffer' && emit('videoPause', wrapVideoEvent($event, 'buffer'))"
+          @waiting="activeTrainingVideoSlot === 'buffer' && emit('videoWaiting', wrapVideoEvent($event, 'buffer'))"
+          @loadedmetadata="handleTrainingVideoLoadedMetadata('buffer')"
+          @canplay="handleTrainingVideoCanPlay('buffer')"
+          @ended="activeTrainingVideoSlot === 'buffer' && emit('videoEnded', wrapVideoEvent($event, 'buffer'))"
+          @error="handleTrainingVideoError('buffer', $event)"
+        />
+        </view>
         <cover-view
           v-if="!comparisonMode && showingCamera"
           class="visual-session__secondary-switch"
@@ -649,10 +860,7 @@ defineExpose({ startRecord, stopRecord })
         <cover-view v-if="comparisonMode && recognitionEnabled && poseMountReady" class="visual-session__pose-badge">
           {{ poseStatusLabel }}
         </cover-view>
-        <cover-view
-          v-if="recognitionEnabled && poseMountReady && (phaseKind === 'preview' || phaseKind === 'countdown')"
-          class="visual-session__position-guide"
-        >
+        <cover-view v-if="showPositionGuide" class="visual-session__position-guide">
           <cover-view class="visual-session__guide-head"></cover-view>
           <cover-view class="visual-session__guide-torso"></cover-view>
           <cover-view class="visual-session__guide-arm visual-session__guide-arm--left"></cover-view>
@@ -717,10 +925,16 @@ defineExpose({ startRecord, stopRecord })
         </cover-view>
         <cover-view
           v-if="completionError"
+          class="visual-session__completion-error-detail"
+        >
+          {{ completionError }}
+        </cover-view>
+        <cover-view
+          v-if="completionError"
           class="visual-session__completion-retry"
           @tap="emit('complete')"
         >
-          重新提交结果
+          {{ completionError.includes('已保存') ? '继续填写问卷' : '重新提交结果' }}
         </cover-view>
       </cover-view>
 
@@ -1264,6 +1478,32 @@ defineExpose({ startRecord, stopRecord })
   height: 100%;
 }
 
+.visual-session__video-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #20344f;
+}
+
+.visual-session__video-stack .visual-session__video {
+  position: absolute;
+  inset: 0;
+}
+
+.visual-session__video--active {
+  inset: 0;
+  z-index: 2;
+}
+
+.visual-session__video--standby {
+  inset: auto;
+  top: 0;
+  left: -200vw;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .visual-session__stage--comparison .visual-session__demonstration-stage,
 .visual-session__stage--comparison .visual-session__camera-stage {
   position: relative;
@@ -1606,8 +1846,13 @@ defineExpose({ startRecord, stopRecord })
 
 .visual-session__position-guide {
   position: absolute;
-  inset: 12rpx 24rpx 12rpx;
+  top: 50%;
+  left: 50%;
   z-index: 1;
+  width: 180rpx;
+  height: 360rpx;
+  margin-top: -180rpx;
+  margin-left: -90rpx;
   pointer-events: none;
   color: rgba(255, 250, 244, 0.84);
 }
@@ -1623,50 +1868,52 @@ defineExpose({ startRecord, stopRecord })
 }
 
 .visual-session__guide-head {
-  top: 4%;
-  width: 30rpx;
-  height: 36rpx;
+  top: 8rpx;
+  width: 42rpx;
+  height: 42rpx;
   border-radius: 50%;
   transform: translateX(-50%);
 }
 
 .visual-session__guide-torso {
-  top: 22%;
-  width: 52rpx;
-  height: 82rpx;
-  border-radius: 28rpx 28rpx 18rpx 18rpx;
+  top: 48rpx;
+  width: 76rpx;
+  height: 140rpx;
+  border-radius: 36rpx 36rpx 22rpx 22rpx;
   transform: translateX(-50%);
 }
 
 .visual-session__guide-arm,
 .visual-session__guide-leg {
-  width: 0;
-  border-width: 0 0 0 3rpx;
+  width: 6rpx;
+  border: 0;
+  border-radius: 999rpx;
+  background: rgba(255, 250, 244, 0.84);
   transform-origin: top center;
 }
 
 .visual-session__guide-arm {
-  top: 25%;
-  height: 76rpx;
+  top: 62rpx;
+  height: 132rpx;
 }
 
 .visual-session__guide-arm--left {
-  margin-left: -25rpx;
+  margin-left: -38rpx;
   transform: rotate(13deg);
 }
 
 .visual-session__guide-arm--right {
-  margin-left: 25rpx;
+  margin-left: 32rpx;
   transform: rotate(-13deg);
 }
 
 .visual-session__guide-leg {
-  top: 58%;
-  height: 82rpx;
+  top: 184rpx;
+  height: 144rpx;
 }
 
 .visual-session__guide-leg--left {
-  margin-left: -14rpx;
+  margin-left: -20rpx;
   transform: rotate(6deg);
 }
 
@@ -1694,32 +1941,47 @@ defineExpose({ startRecord, stopRecord })
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 18rpx;
+  overflow: hidden;
   box-sizing: border-box;
-  background: rgba(15, 27, 43, 0.9);
+  border-radius: 30rpx;
+  background: rgba(15, 27, 43, 0.3);
   color: #fffaf4;
   padding: 40rpx;
   text-align: center;
 }
 
 .visual-session__completion-title {
+  color: rgba(255, 250, 244, 0.86);
   font-size: 30rpx;
-  font-weight: 900;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.visual-session__completion-error-detail {
+  width: min(720rpx, 86vw);
+  margin-top: 18rpx;
+  color: rgba(255, 250, 244, 0.82);
+  font-size: 22rpx;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .visual-session__completion-retry {
   display: inline-flex;
+  margin-top: 36rpx;
+  height: 64rpx;
+  min-height: 64rpx;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   border: 0;
   border-radius: 999rpx;
   background: #fffaf4;
   color: #20344f;
   font-size: 22rpx;
   font-weight: 900;
-  line-height: 1;
-  min-height: 88rpx;
-  padding: 20rpx 28rpx;
+  line-height: 64rpx;
+  padding: 0 28rpx;
 }
 
 .visual-session__feedback {

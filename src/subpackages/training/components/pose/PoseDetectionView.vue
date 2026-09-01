@@ -92,6 +92,8 @@ let lastFrameTime = 0;
 let fps = 0;
 let liveInferenceInFlight = false;
 let emittedFrameIndex = 0
+let consecutiveLiveInferenceErrors = 0
+const MAX_CONSECUTIVE_LIVE_INFERENCE_ERRORS = 3
 
 // ───────────────────────────────────────────
 //  Detector lifecycle
@@ -381,7 +383,9 @@ async function onFrame(frame: Frame) {
       if (!firstPoseEstimated.value) firstPoseEstimated.value = true;
       poseCamera.value?.setOverlayFrame(frame.width, frame.height);
       poseCamera.value?.drawKeypoints(poses[0].keypoints);
-      const tsMs = Date.now()
+      // Attribute the result to the frame capture boundary, not to the time a
+      // potentially slow inference finishes after the next action has begun.
+      const tsMs = t
       props.onResult({
         pose: poses[0],
         inferMs,
@@ -390,7 +394,17 @@ async function onFrame(frame: Frame) {
         angleFrame: buildPoseAngleFrame(poses[0], tsMs)
       });
     }
+    consecutiveLiveInferenceErrors = 0
     emitStats('detecting');
+  } catch (err: any) {
+    consecutiveLiveInferenceErrors += 1
+    console.warn('[PoseDetection] live inference failed:', err?.message ?? err)
+    if (consecutiveLiveInferenceErrors >= MAX_CONSECUTIVE_LIVE_INFERENCE_ERRORS) {
+      detectorReadyForTraining = false
+      cameraError.value = '姿态识别运行失败，请退出训练后重试'
+      poseCamera.value?.stopCamera()
+      emitStats('failed')
+    }
   } finally {
     liveInferenceInFlight = false;
   }

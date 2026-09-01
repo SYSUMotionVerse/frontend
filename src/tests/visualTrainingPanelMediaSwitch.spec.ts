@@ -38,12 +38,13 @@ function mountPanel(
   recognitionEnabled = false,
   comparisonMode = false,
   videoAutoplay = false,
-  poseDetectionViewStub: object | boolean = true
+  poseDetectionViewStub: object | boolean = true,
+  videoUrl = 'https://example.com/demo.mp4'
 ) {
   return mount(VisualTrainingPanel, {
     props: {
       videoTitle: '开合跳',
-      videoUrl: 'https://example.com/demo.mp4',
+      videoUrl,
       videoLoading: false,
       videoError: '',
       videoEnded: false,
@@ -96,6 +97,35 @@ afterEach(() => {
 })
 
 describe('VisualTrainingPanel media switch', () => {
+  it('loads an asynchronously resolved first video into the visible native slot', async () => {
+    const play = vi.fn()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn(() => ({ seek: vi.fn(), play, pause: vi.fn() }))
+    })
+    const wrapper = mountPanel(false, false, true, true, '')
+
+    await wrapper.setProps({ videoUrl: 'https://example.com/first.mp4' })
+    await nextTick()
+
+    expect(wrapper.get('#follow-along-video').attributes('src'))
+      .toBe('https://example.com/first.mp4')
+    expect(wrapper.get('#follow-along-video').classes())
+      .toContain('visual-session__video--active')
+  })
+
+  it('keeps automatic follow-along playback muted and retries it at canplay', async () => {
+    const play = vi.fn()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn(() => ({ seek: vi.fn(), play, pause: vi.fn() }))
+    })
+    const wrapper = mountPanel(false, false, true)
+    const video = wrapper.get('#follow-along-video')
+
+    expect((video.element as HTMLVideoElement).muted).toBe(true)
+    await video.trigger('canplay')
+    expect(play).toHaveBeenCalled()
+  })
+
   it('binds media events to the token rendered on that video instance', async () => {
     const wrapper = mountPanel()
 
@@ -159,6 +189,8 @@ describe('VisualTrainingPanel media switch', () => {
       videoProgressSeconds: 7,
       videoUrl: 'https://example.com/remote-fallback.mp4'
     })
+    await wrapper.get('#follow-along-video-buffer').trigger('canplay')
+    await Promise.resolve()
     await nextTick()
 
     expect(seek).toHaveBeenCalledWith(7)
@@ -225,6 +257,152 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.find('.visual-session__start-button').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('摄像头已就绪，轻触画面开始训练')
     expect(wrapper.emitted('startTraining')).toHaveLength(1)
+  })
+
+  it('keeps the full-body position guide visible until the first formal action starts', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountPanel(true)
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(wrapper.find('.visual-session__position-guide').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__guide-head').exists()).toBe(true)
+    expect(wrapper.findAll('.visual-session__guide-arm')).toHaveLength(2)
+    expect(wrapper.findAll('.visual-session__guide-leg')).toHaveLength(2)
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      phaseKind: 'demonstration',
+      phaseSlot: 'pretraining'
+    })
+    expect(wrapper.find('.visual-session__position-guide').exists()).toBe(true)
+
+    await wrapper.setProps({
+      phaseKind: 'countdown',
+      phaseSlot: 'formal-countdown'
+    })
+    expect(wrapper.find('.visual-session__position-guide').exists()).toBe(true)
+
+    await wrapper.setProps({
+      phaseKind: 'active',
+      phaseSlot: 'formal-training'
+    })
+    expect(wrapper.find('.visual-session__position-guide').exists()).toBe(false)
+  })
+
+  it('does not recreate the native video merely because the phase token changes', async () => {
+    const wrapper = mountPanel()
+    const initialVideo = wrapper.get('#follow-along-video').element
+
+    await wrapper.setProps({ videoEventToken: 'next-phase-token' })
+
+    expect(wrapper.get('#follow-along-video').element).toBe(initialVideo)
+  })
+
+  it('preloads the next action in a second native video and promotes it from frame zero', async () => {
+    const contexts = new Map<string, { seek: ReturnType<typeof vi.fn>; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn> }>()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn((id: string) => {
+        if (!contexts.has(id)) {
+          contexts.set(id, { seek: vi.fn(), play: vi.fn(), pause: vi.fn() })
+        }
+        return contexts.get(id)
+      })
+    })
+    const wrapper = mountPanel(false, false, true)
+
+    await wrapper.setProps({
+      nextVideoUrl: 'https://example.com/next.mp4',
+      videoResetKey: '0:formal-training'
+    })
+    const buffer = wrapper.get('#follow-along-video-buffer')
+    expect(buffer.attributes('src')).toBe('https://example.com/next.mp4')
+    expect(buffer.classes()).toContain('visual-session__video--standby')
+    await buffer.trigger('canplay')
+
+    await wrapper.setProps({
+      videoUrl: 'https://example.com/next.mp4',
+      videoResetKey: '1:pretraining-countdown',
+      videoProgressSeconds: 9
+    })
+    await Promise.resolve()
+    await nextTick()
+
+    expect(wrapper.get('#follow-along-video-buffer').classes())
+      .toContain('visual-session__video--active')
+    expect(wrapper.get('#follow-along-video').classes())
+      .toContain('visual-session__video--standby')
+    expect(contexts.get('follow-along-video-buffer')?.seek).toHaveBeenCalledWith(0)
+  })
+
+  it('keeps the hand-off target when current and following actions change together', async () => {
+    const contexts = new Map<string, { seek: ReturnType<typeof vi.fn>; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn> }>()
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn((id: string) => {
+        if (!contexts.has(id)) {
+          contexts.set(id, { seek: vi.fn(), play: vi.fn(), pause: vi.fn() })
+        }
+        return contexts.get(id)
+      })
+    })
+    const wrapper = mountPanel(false, false, true)
+    await wrapper.setProps({ nextVideoUrl: 'https://example.com/action-2.mp4' })
+    await wrapper.get('#follow-along-video-buffer').trigger('canplay')
+
+    await wrapper.setProps({
+      videoUrl: 'https://example.com/action-2.mp4',
+      nextVideoUrl: 'https://example.com/action-3.mp4',
+      videoResetKey: '1:pretraining-countdown'
+    })
+    await Promise.resolve()
+    await nextTick()
+
+    expect(wrapper.get('#follow-along-video-buffer').attributes('src'))
+      .toBe('https://example.com/action-2.mp4')
+    expect(wrapper.get('#follow-along-video-buffer').classes())
+      .toContain('visual-session__video--active')
+    expect(wrapper.get('#follow-along-video').attributes('src'))
+      .toBe('https://example.com/action-3.mp4')
+    expect(wrapper.get('#follow-along-video').classes())
+      .toContain('visual-session__video--standby')
+  })
+
+  it('identifies active buffer events even when WeChat omits native target metadata', async () => {
+    vi.stubGlobal('uni', {
+      createVideoContext: vi.fn(() => ({ seek: vi.fn(), play: vi.fn(), pause: vi.fn() }))
+    })
+    const wrapper = mountPanel(false, false, true)
+    await wrapper.setProps({
+      nextVideoUrl: 'https://example.com/next.mp4',
+      videoEventToken: 'action-1'
+    })
+    const buffer = wrapper.get('#follow-along-video-buffer')
+    await buffer.trigger('canplay')
+    await wrapper.setProps({
+      videoUrl: 'https://example.com/next.mp4',
+      videoResetKey: '1:formal-training',
+      videoEventToken: 'action-2'
+    })
+    await Promise.resolve()
+    await nextTick()
+
+    const activeBuffer = wrapper.get('#follow-along-video-buffer')
+    activeBuffer.element.removeAttribute('id')
+    // The native event may race Vue's dataset update and still expose the
+    // preload token from before this slot became visible.
+    activeBuffer.element.setAttribute('data-video-token', 'preload:https://example.com/next.mp4')
+    await activeBuffer.trigger('play')
+    await activeBuffer.trigger('timeupdate', {
+      detail: { currentTime: 1, duration: 15 }
+    })
+
+    expect(wrapper.emitted('videoPlay')?.at(-1)?.[0]).toMatchObject({
+      token: 'action-2',
+      elementId: 'follow-along-video-buffer'
+    })
+    expect(wrapper.emitted('videoTimeUpdate')?.at(-1)?.[0]).toMatchObject({
+      token: 'action-2',
+      detail: { currentTime: 1, duration: 15 }
+    })
   })
 
   it('shows the pretraining notice from the first countdown frame in the lower-left corner', async () => {

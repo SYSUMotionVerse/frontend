@@ -63,7 +63,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('visual-session__secondary-space')
     expect(source).not.toContain('visual-session__media-switch')
     expect(source).not.toContain('visual-session__recording-badge')
-    expect(source).toContain('defineExpose({ startRecord, stopRecord })')
+    expect(source).toContain('defineExpose({ startRecord, stopRecord, startDetect, stopDetect })')
     expect(source).not.toContain("phaseKind === 'rest'")
     expect(source).not.toContain('visual-session__rest-overlay')
     expect(source).not.toContain('下一训练步骤：{{ restNextTitle }}')
@@ -82,6 +82,12 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('const showTutorialDemonstrationControls = computed(() =>')
     expect(source).not.toContain('visual-session__playback-control')
     expect(source).toContain('visual-session__position-guide')
+    expect(source).toContain('const showPositionGuide = computed(() => (')
+    expect(source).toContain("props.phaseSlot === 'pretraining'")
+    expect(source).toContain("props.phaseSlot === 'formal-countdown'")
+    expect(source).toContain("props.workoutState.current.itemIndex === 0")
+    expect(source).toMatch(/\.visual-session__position-guide\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*360rpx;/)
+    expect(source).toMatch(/\.visual-session__guide-arm,[\s\S]*?\.visual-session__guide-leg\s*\{[\s\S]*width:\s*6rpx;[\s\S]*background:\s*rgba\(255, 250, 244, 0\.84\);/)
     expect(source).toContain('站在框内')
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__media-label"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__start-overlay"/)
@@ -208,6 +214,23 @@ describe('VisualTrainingPanel mini-program styles', () => {
     )
     expect(source).toMatch(
       /\.visual-session--comparison \.visual-session__media-label\s*\{[\s\S]*font-size:\s*12px;[\s\S]*padding:\s*6px 8px;/
+    )
+  })
+
+  it('matches the completion curtain to camera preparation and clips it to the media corners', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
+      'utf8'
+    )
+
+    expect(source).toMatch(
+      /\.visual-session__completion-overlay\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*30rpx;[\s\S]*background:\s*rgba\(15, 27, 43, 0\.3\);/
+    )
+    expect(source).toMatch(
+      /\.visual-session__completion-title\s*\{[\s\S]*color:\s*rgba\(255, 250, 244, 0\.86\);[\s\S]*font-size:\s*30rpx;[\s\S]*font-weight:\s*800;[\s\S]*line-height:\s*1\.45;/
+    )
+    expect(source).toMatch(
+      /\.visual-session__completion-retry\s*\{[\s\S]*margin-top:\s*36rpx;[\s\S]*height:\s*64rpx;[\s\S]*min-height:\s*64rpx;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*line-height:\s*64rpx;[\s\S]*padding:\s*0 28rpx;/
     )
   })
 })
