@@ -1,71 +1,125 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTrainingSoundscape,
-  trainingSoundscapeProfiles,
-  trainingSoundscapeUrl
+  trainingBoundarySoundUrl,
+  trainingSecondSoundUrl,
+  trainingSoundscapeVolumes
 } from '../uni-app/platform/trainingSoundscape'
 
 function createAudioContext() {
   return {
     src: '',
     autoplay: true,
-    loop: false,
-    volume: 1,
-    playbackRate: 1,
+    loop: true,
+    volume: 0,
+    playbackRate: 0,
     obeyMuteSwitch: true,
     play: vi.fn(),
-    pause: vi.fn(),
     stop: vi.fn(),
+    seek: vi.fn(),
     destroy: vi.fn(),
     onError: vi.fn()
   }
 }
 
 describe('trainingSoundscape', () => {
-  it('loops the quiet pretraining rhythm and resumes without recreating it', () => {
-    const context = createAudioContext()
-    const createContext = vi.fn(() => context)
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('preloads all CDN players but stays silent during pretraining', () => {
+    const createContext = vi.fn(createAudioContext)
     const soundscape = createTrainingSoundscape(createContext)
 
+    soundscape.preload()
     soundscape.play('pretraining')
-    soundscape.play('pretraining')
+    vi.advanceTimersByTime(5000)
+
+    expect(createContext).toHaveBeenCalledTimes(3)
+    expect(createContext.mock.results.map(result => result.value.src)).toEqual([
+      trainingSecondSoundUrl,
+      trainingBoundarySoundUrl,
+      trainingBoundarySoundUrl
+    ])
+    for (const result of createContext.mock.results) {
+      expect(result.value.play).not.toHaveBeenCalled()
+      expect(result.value.playbackRate).toBe(1)
+    }
+  })
+
+  it('plays one pulse per formal second with prominent first and final pulses', () => {
+    const secondContext = createAudioContext()
+    const startingBoundaryContext = createAudioContext()
+    const finalBoundaryContext = createAudioContext()
+    const createContext = vi.fn()
+      .mockReturnValueOnce(secondContext)
+      .mockReturnValueOnce(startingBoundaryContext)
+      .mockReturnValueOnce(finalBoundaryContext)
+    const soundscape = createTrainingSoundscape(createContext)
+
+    soundscape.play('formal', 4)
+
+    expect(secondContext.src).toBe(trainingSecondSoundUrl)
+    expect(secondContext.volume).toBe(trainingSoundscapeVolumes.second)
+    expect(startingBoundaryContext.src).toBe(trainingBoundarySoundUrl)
+    expect(startingBoundaryContext.volume).toBe(trainingSoundscapeVolumes.boundary)
+    expect(startingBoundaryContext.play).toHaveBeenCalledTimes(1)
+    expect(secondContext.play).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1000)
+    expect(secondContext.play).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    expect(secondContext.play).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(1000)
+    expect(finalBoundaryContext.play).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    expect(secondContext.play).toHaveBeenCalledTimes(2)
+    expect(startingBoundaryContext.play).toHaveBeenCalledTimes(1)
+    expect(finalBoundaryContext.play).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses one boundary pulse for a one-second formal action', () => {
+    const secondContext = createAudioContext()
+    const startingBoundaryContext = createAudioContext()
+    const finalBoundaryContext = createAudioContext()
+    const soundscape = createTrainingSoundscape(vi.fn()
+      .mockReturnValueOnce(secondContext)
+      .mockReturnValueOnce(startingBoundaryContext)
+      .mockReturnValueOnce(finalBoundaryContext))
+
+    soundscape.play('formal', 1)
+    vi.advanceTimersByTime(3000)
+
+    expect(startingBoundaryContext.play).toHaveBeenCalledOnce()
+    expect(finalBoundaryContext.play).not.toHaveBeenCalled()
+    expect(secondContext.play).not.toHaveBeenCalled()
+  })
+
+  it('pauses scheduling while hidden and releases both players at session end', () => {
+    const secondContext = createAudioContext()
+    const startingBoundaryContext = createAudioContext()
+    const finalBoundaryContext = createAudioContext()
+    const soundscape = createTrainingSoundscape(vi.fn()
+      .mockReturnValueOnce(secondContext)
+      .mockReturnValueOnce(startingBoundaryContext)
+      .mockReturnValueOnce(finalBoundaryContext))
+
+    soundscape.play('formal', 3)
     soundscape.suspend()
+    vi.advanceTimersByTime(2000)
+    expect(secondContext.play).not.toHaveBeenCalled()
+
     soundscape.resume()
-
-    expect(createContext).toHaveBeenCalledOnce()
-    expect(context.src).toBe(trainingSoundscapeUrl)
-    expect(context.loop).toBe(true)
-    expect(context.volume).toBe(trainingSoundscapeProfiles.pretraining.volume)
-    expect(context.playbackRate).toBe(0.5)
-    expect(context.pause).toHaveBeenCalledOnce()
-    expect(context.play).toHaveBeenCalledTimes(2)
-  })
-
-  it('changes rate and volume without restarting at formal training', () => {
-    const context = createAudioContext()
-    const createContext = vi.fn(() => context)
-    const soundscape = createTrainingSoundscape(createContext)
-
-    soundscape.play('pretraining')
-    soundscape.play('formal')
-
-    expect(createContext).toHaveBeenCalledOnce()
-    expect(context.src).toBe(trainingSoundscapeUrl)
-    expect(context.playbackRate).toBe(trainingSoundscapeProfiles.formal.playbackRate)
-    expect(context.volume).toBe(trainingSoundscapeProfiles.formal.volume)
-    expect(context.play).toHaveBeenCalledOnce()
-    expect(context.stop).not.toHaveBeenCalled()
-    expect(context.destroy).not.toHaveBeenCalled()
-  })
-
-  it('stops and destroys the loop when the session ends', () => {
-    const context = createAudioContext()
-    const soundscape = createTrainingSoundscape(() => context)
-
-    soundscape.play('formal')
+    vi.advanceTimersByTime(1000)
+    expect(secondContext.play).toHaveBeenCalledOnce()
     soundscape.stop()
 
-    expect(context.stop).toHaveBeenCalledOnce()
-    expect(context.destroy).toHaveBeenCalledOnce()
+    expect(secondContext.destroy).toHaveBeenCalledOnce()
+    expect(startingBoundaryContext.destroy).toHaveBeenCalledOnce()
+    expect(finalBoundaryContext.destroy).toHaveBeenCalledOnce()
   })
 })

@@ -305,6 +305,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const scoringWarnings = shallowRef<string[]>([])
   const ttsPlayer = createTrainingTtsPlayer()
   const trainingSoundscape = createTrainingSoundscape()
+  // Setting the CDN sources now gives both cue players the whole preview and
+  // pretraining period to buffer before the first formal-training second.
+  trainingSoundscape.preload()
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setInterval> | null = null
   let mediaStartWatchdogTimer: ReturnType<typeof setTimeout> | null = null
@@ -1056,8 +1059,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     activeActionStartedAtMs = Date.now()
     phaseKind.value = 'active'
     phaseSlot.value = 'formal-training'
-    trainingSoundscape.play('formal')
-    setPhaseRemaining(Math.max(1, activeItem.value?.expected_duration ?? 1))
+    const formalDuration = Math.max(1, activeItem.value?.expected_duration ?? 1)
+    trainingSoundscape.play('formal', formalDuration)
+    setPhaseRemaining(formalDuration)
     videoProgressSeconds.value = 0
     videoDurationSeconds.value = exerciseVideo.value?.duration ?? 0
     playbackState.value = 'idle'

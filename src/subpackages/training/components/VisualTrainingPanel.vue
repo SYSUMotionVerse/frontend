@@ -925,12 +925,6 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
         </cover-view>
         <cover-view
           v-if="completionError"
-          class="visual-session__completion-error-detail"
-        >
-          {{ completionError }}
-        </cover-view>
-        <cover-view
-          v-if="completionError"
           class="visual-session__completion-retry"
           @tap="emit('complete')"
         >
@@ -1955,15 +1949,6 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   font-size: 30rpx;
   font-weight: 800;
   line-height: 1.45;
-}
-
-.visual-session__completion-error-detail {
-  width: min(720rpx, 86vw);
-  margin-top: 18rpx;
-  color: rgba(255, 250, 244, 0.82);
-  font-size: 22rpx;
-  line-height: 1.5;
-  text-align: center;
 }
 
 .visual-session__completion-retry {

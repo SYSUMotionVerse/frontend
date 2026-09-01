@@ -93,6 +93,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__start-overlay"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__position-guide"/)
     expect(source).toContain('class="visual-session__tutorial-skip"')
+    expect(source).not.toContain('visual-session__completion-error-detail')
   })
 
   it('uses a stable portrait 4:3 media stage followed by the training information', () => {

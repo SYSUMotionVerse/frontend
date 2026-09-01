@@ -5,6 +5,7 @@ import { createInitialStudentState } from '../domain/student/state'
 
 vi.mock('../uni-app/platform/trainingSoundscape', () => ({
   createTrainingSoundscape: () => ({
+    preload: vi.fn(),
     play: vi.fn(),
     suspend: vi.fn(),
     resume: vi.fn(),
