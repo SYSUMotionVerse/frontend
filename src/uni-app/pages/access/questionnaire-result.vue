@@ -1,56 +1,49 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import type { CheckpointKey } from '../../../domain/student/types'
 import QuestionnaireResultCard from '../../../components/access/QuestionnaireResultCard.vue'
-import { normalizeCheckpoint } from '../../../features/access/questionnaire'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
 const store = useStudentStore()
-const checkpoint = ref<CheckpointKey>('baseline')
-const score = ref(0)
-const percentage = ref(0)
-const submittedAt = ref('')
 const questionnaireCount = ref(1)
 
 onLoad((query) => {
   const nextQuery = query ?? {}
-  checkpoint.value = normalizeCheckpoint(nextQuery.checkpoint?.toString())
-  score.value = Number(nextQuery.score ?? 0)
-  percentage.value = Number(nextQuery.percentage ?? 0)
-  submittedAt.value = nextQuery.submittedAt?.toString() ?? ''
   questionnaireCount.value = Math.max(1, Number(nextQuery.questionnaireCount ?? 1))
 })
 
-const scoreValue = computed(() => score.value)
-const percentageValue = computed(() => percentage.value)
-const submittedAtValue = computed(() => submittedAt.value)
-
-function handleContinue() {
+function prepareDestination() {
   store.refreshReminderEligibility()
+}
+
+function goHome() {
+  prepareDestination()
   void uni.reLaunch({
-    url: checkpoint.value === 'baseline'
-      ? '/pages/access/reminder-consent'
-      : '/pages/training/home'
+    url: '/pages/training/home'
+  })
+}
+
+function startTraining() {
+  prepareDestination()
+  void uni.reLaunch({
+    url: '/pages/training/select'
   })
 }
 </script>
 
 <template>
   <UniAccessPageShell
-    chip="A3"
-    navigation-title="问卷结果"
-    title="问卷结果"
-    subtitle="评估结果已生成，请查阅后进入训练首页。"
+    navigation-title="填写完成"
+    title="问卷填写完成"
+    subtitle="谢谢你的认真作答，接下来可以按自己的节奏开始运动。"
+    :show-back="false"
+    heading-inset
   >
     <QuestionnaireResultCard
-      :checkpoint="checkpoint"
-      :score="scoreValue"
-      :percentage="percentageValue"
-      :submitted-at="submittedAtValue"
       :questionnaire-count="questionnaireCount"
-      @continue="handleContinue"
+      @home="goHome"
+      @train="startTraining"
     />
   </UniAccessPageShell>
 </template>

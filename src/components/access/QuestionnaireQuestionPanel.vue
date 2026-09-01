@@ -8,8 +8,8 @@ import type {
 const props = defineProps<{
   question: PsychologyQuestionnaireQuestion
   answer: PsychologyQuestionnaireAnswer
-  instructions?: string
-  showInstructions?: boolean
+  questionNumber: number
+  questionCount: number
 }>()
 
 const emit = defineEmits<{
@@ -67,26 +67,10 @@ function inputEventValue(event: unknown) {
 
 <template>
   <view class="questionnaire-question bg-white chunky-shadow">
-    <view v-if="showInstructions && instructions" class="questionnaire-question__instructions">
-      <text class="questionnaire-question__instructions-label">本份作答说明</text>
-      <text>{{ instructions }}</text>
-    </view>
-
+    <text class="questionnaire-question__progress">
+      {{ questionNumber }} / {{ questionCount }}
+    </text>
     <text class="questionnaire-question__prompt">{{ question.prompt }}</text>
-
-    <view
-      v-if="usesFivePointLegend"
-      class="questionnaire-question__legend"
-      aria-label="作答标准"
-    >
-      <text
-        v-for="(option, optionIndex) in question.options"
-        :key="option.id"
-        class="questionnaire-question__legend-item"
-      >
-        {{ optionCode(option.score, optionIndex) }}={{ option.label }}
-      </text>
-    </view>
 
     <view v-if="question.questionType !== 'TEXT'" class="questionnaire-runner__options">
       <button
@@ -162,25 +146,6 @@ function inputEventValue(event: unknown) {
   border-radius: 32rpx;
 }
 
-.questionnaire-question__instructions {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  margin-bottom: 26rpx;
-  padding: 20rpx 22rpx;
-  border-radius: 20rpx;
-  background: #F8FAFC;
-  color: #536176;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.55;
-}
-
-.questionnaire-question__instructions-label {
-  color: #1A202C;
-  font-weight: 900;
-}
-
 .questionnaire-question__prompt {
   color: #1A202C;
   font-size: 36rpx;
@@ -188,19 +153,12 @@ function inputEventValue(event: unknown) {
   line-height: 1.55;
 }
 
-.questionnaire-question__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8rpx 18rpx;
-  margin-top: 18rpx;
-  color: #64748B;
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.questionnaire-question__legend-item {
-  white-space: nowrap;
+.questionnaire-question__progress {
+  margin-bottom: 12rpx;
+  color: #c35f6b;
+  font-size: 23rpx;
+  font-weight: 900;
+  letter-spacing: 0.04em;
 }
 
 .questionnaire-runner__options {
@@ -283,6 +241,7 @@ function inputEventValue(event: unknown) {
 }
 
 .questionnaire-runner__field-label {
+  margin-left: 32rpx;
   color: #1A202C;
   font-size: 25rpx;
   font-weight: 900;
@@ -296,7 +255,7 @@ function inputEventValue(event: unknown) {
   border: 6rpx solid #FFEAC2;
   border-radius: 999rpx;
   background: #F8FAFC;
-  padding: 0 22rpx;
+  padding: 0 36rpx;
   color: #64748B;
   font-size: 23rpx;
 }

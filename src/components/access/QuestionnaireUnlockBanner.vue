@@ -15,9 +15,9 @@ const emit = defineEmits<{
   >
     <view class="questionnaire-unlock__copy">
       <text class="questionnaire-unlock__eyebrow">预览模式</text>
-      <text class="questionnaire-unlock__title">内容可以先看，完成问卷后即可开练</text>
+      <text class="questionnaire-unlock__title">先逛一逛，完成问卷后就能开练</text>
       <text v-if="!compact" class="questionnaire-unlock__description">
-        训练项目和成长内容都可以浏览。为保证评估顺序，开始训练与个人结果功能暂时锁定。
+        你可以先浏览训练项目和成长内容。填写完问卷后，就能开始训练并查看自己的成长记录。
       </text>
     </view>
     <button
@@ -25,7 +25,7 @@ const emit = defineEmits<{
       type="button"
       @click="emit('continueQuestionnaire')"
     >
-      继续完成问卷
+      去完成问卷
     </button>
   </view>
 </template>
@@ -77,8 +77,11 @@ const emit = defineEmits<{
 }
 
 .questionnaire-unlock__action {
+  display: inline-flex;
   min-height: 72rpx;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   margin: 0;
   border: 0;
   border-radius: 999rpx;
@@ -86,6 +89,7 @@ const emit = defineEmits<{
   color: #28766a;
   font-size: 24rpx;
   font-weight: 900;
+  line-height: 1.2;
   padding: 0 24rpx;
 }
 

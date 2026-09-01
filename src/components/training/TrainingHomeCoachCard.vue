@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 
 const props = defineProps<{
   eyebrow: string
@@ -10,6 +10,35 @@ const props = defineProps<{
 }>()
 
 const isRecovery = computed(() => props.eyebrow.includes('恢复'))
+const displayedTitle = shallowRef(props.title)
+const outgoingTitle = shallowRef('')
+const quoteRolling = shallowRef(false)
+let quoteRollStartTimer: ReturnType<typeof setTimeout> | undefined
+let quoteRollCleanupTimer: ReturnType<typeof setTimeout> | undefined
+
+function clearQuoteRollTimers() {
+  if (quoteRollStartTimer) clearTimeout(quoteRollStartTimer)
+  if (quoteRollCleanupTimer) clearTimeout(quoteRollCleanupTimer)
+  quoteRollStartTimer = undefined
+  quoteRollCleanupTimer = undefined
+}
+
+watch(() => props.title, (nextTitle) => {
+  if (nextTitle === displayedTitle.value) return
+  clearQuoteRollTimers()
+  outgoingTitle.value = displayedTitle.value
+  displayedTitle.value = nextTitle
+  quoteRolling.value = false
+  quoteRollStartTimer = setTimeout(() => {
+    quoteRolling.value = true
+  }, 16)
+  quoteRollCleanupTimer = setTimeout(() => {
+    outgoingTitle.value = ''
+    quoteRolling.value = false
+  }, 320)
+})
+
+onBeforeUnmount(clearQuoteRollTimers)
 </script>
 
 <template>
@@ -26,10 +55,23 @@ const isRecovery = computed(() => props.eyebrow.includes('恢复'))
           :class="{ 'coach-card__eyebrow--recovery': isRecovery }"
         >{{ eyebrow }}</text>
       </view>
-      <text class="coach-card__title">{{ title }}</text>
+      <view class="coach-card__title-window">
+        <text
+          v-if="outgoingTitle"
+          class="coach-card__title coach-card__title--outgoing"
+          :class="{ 'coach-card__title--rolling': quoteRolling }"
+        >{{ outgoingTitle }}</text>
+        <text
+          class="coach-card__title"
+          :class="{
+            'coach-card__title--incoming': outgoingTitle,
+            'coach-card__title--rolling': quoteRolling
+          }"
+        >{{ displayedTitle }}</text>
+      </view>
     </view>
 
-    <text class="coach-card__body">{{ body }}</text>
+    <text v-if="body" class="coach-card__body">{{ body }}</text>
     <text class="coach-card__footer">{{ footer }}</text>
   </view>
 </template>
@@ -70,11 +112,37 @@ const isRecovery = computed(() => props.eyebrow.includes('恢复'))
 .coach-card__eyebrow--recovery { color: #203042; }
 
 .coach-card__title {
+  grid-area: 1 / 1;
   display: block;
   color: #203042;
   font-size: 27rpx;
   line-height: 1.2;
   font-weight: 800;
+}
+
+.coach-card__title-window {
+  display: grid;
+  overflow: hidden;
+}
+
+.coach-card__title--outgoing,
+.coach-card__title--incoming {
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.coach-card__title--incoming {
+  opacity: 0;
+  transform: translateY(80%);
+}
+
+.coach-card__title--outgoing.coach-card__title--rolling {
+  opacity: 0;
+  transform: translateY(-80%);
+}
+
+.coach-card__title--incoming.coach-card__title--rolling {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .coach-card__body {

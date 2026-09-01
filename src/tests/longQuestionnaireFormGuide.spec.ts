@@ -24,7 +24,7 @@ function createQuestionnaire(questionCount = 3): PsychologyQuestionnaireModel {
 }
 
 describe('LongQuestionnaireForm progressive runner', () => {
-  it('shows study duration without exposing the intimidating total item count', () => {
+  it('shows questionnaire duration without repeating the overview introduction', () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: {
         questionnaire: createQuestionnaire(119),
@@ -33,11 +33,36 @@ describe('LongQuestionnaireForm progressive runner', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('本阶段共 4 份问卷，预计约 18 分钟')
-    expect(wrapper.text()).not.toContain('119 题')
+    expect(wrapper.text()).toContain('全程约 18 分钟')
+    expect(wrapper.text()).not.toContain('开始前，请了解这些')
+    expect(wrapper.text()).toContain('已完成 0 / 119 题')
     expect(wrapper.findAll('.questionnaire-question')).toHaveLength(1)
+    expect(wrapper.get('.questionnaire-question__progress').text()).toBe('1 / 119')
     expect(wrapper.text()).toContain('第 1 个问题')
     expect(wrapper.text()).not.toContain('第 2 个问题')
+    expect(wrapper.findAll('.questionnaire-runner__block--spaced')).toHaveLength(3)
+  })
+
+  it('shows completed questions across all questionnaires instead of the local question number', async () => {
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: {
+        questionnaire: createQuestionnaire(3),
+        completedQuestionCountBefore: 10,
+        totalQuestionCount: 24,
+        initialAnswers: { 1: 11 }
+      }
+    })
+
+    expect(wrapper.get('.questionnaire-progress__detail').text()).toContain('已完成 11 / 24 题')
+    expect(wrapper.get('.questionnaire-progress__detail').text()).toContain('46%')
+    expect(wrapper.get('.questionnaire-question__progress').text()).toBe('1 / 3')
+
+    await wrapper.findAll('.questionnaire-runner__option')[1].trigger('click')
+    expect(wrapper.get('.questionnaire-progress__detail').text()).toContain('已完成 11 / 24 题')
+    await wrapper.get('.questionnaire-runner__primary').trigger('click')
+    await wrapper.findAll('.questionnaire-runner__option')[0].trigger('click')
+    expect(wrapper.get('.questionnaire-progress__detail').text()).toContain('已完成 12 / 24 题')
+    expect(wrapper.get('.questionnaire-progress__detail').text()).toContain('50%')
   })
 
   it('renders the exact backend 1–5 legend in a compact row and saves after each answer and navigation step', async () => {
@@ -47,7 +72,7 @@ describe('LongQuestionnaireForm progressive runner', () => {
       }
     })
 
-    expect(wrapper.findAll('.questionnaire-question__legend-item').map(item => item.text()))
+    expect(wrapper.findAll('.questionnaire-instructions__legend-item').map(item => item.text()))
       .toEqual(['1=从不', '2=很少', '3=有时', '4=经常', '5=总是'])
 
     await wrapper.findAll('.questionnaire-runner__option')[2].trigger('click')
@@ -114,6 +139,38 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(wrapper.text()).toContain('第 1 个问题')
   })
 
+  it('resets to question one when the next questionnaire replaces the current one', async () => {
+    const firstQuestionnaire = createQuestionnaire(10)
+    const nextQuestionnaire = {
+      ...createQuestionnaire(11),
+      scaleId: 13,
+      title: '下一份问卷',
+      questions: createQuestionnaire(11).questions.map((question, index) => ({
+        ...question,
+        id: index + 101,
+        prompt: `新问卷第 ${index + 1} 题`
+      }))
+    }
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: {
+        questionnaire: firstQuestionnaire,
+        initialQuestionIndex: 9
+      }
+    })
+
+    expect(wrapper.get('.questionnaire-question__progress').text()).toBe('10 / 10')
+
+    await wrapper.setProps({
+      questionnaire: nextQuestionnaire,
+      initialQuestionIndex: 0,
+      initialAnswers: {}
+    })
+
+    expect(wrapper.get('.questionnaire-question__progress').text()).toBe('1 / 11')
+    expect(wrapper.text()).toContain('新问卷第 1 题')
+    expect(wrapper.text()).not.toContain('新问卷第 11 题')
+  })
+
   it('shows a recoverable state instead of a blank runner when no questions are available', async () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: { questionnaire: createQuestionnaire(0) }
@@ -163,7 +220,7 @@ describe('LongQuestionnaireForm progressive runner', () => {
     }])
   })
 
-  it('only shows the study introduction at the beginning of the first questionnaire', () => {
+  it('keeps the study introduction out of the answering runner', () => {
     const first = mount(LongQuestionnaireForm, {
       props: {
         questionnaire: createQuestionnaire(),
@@ -179,22 +236,28 @@ describe('LongQuestionnaireForm progressive runner', () => {
       }
     })
 
-    expect(first.find('.questionnaire-runner__introduction').exists()).toBe(true)
+    expect(first.find('.questionnaire-runner__introduction').exists()).toBe(false)
     expect(later.find('.questionnaire-runner__introduction').exists()).toBe(false)
   })
 
-  it('only shows the primary action after an answer is selected', async () => {
+  it('keeps next visible but disabled until an answer is selected', async () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: { questionnaire: createQuestionnaire() }
     })
 
-    expect(wrapper.find('.questionnaire-runner__footer').exists()).toBe(false)
+    expect(wrapper.find('.questionnaire-runner__footer').exists()).toBe(true)
+    expect(wrapper.get('.questionnaire-runner__primary').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.questionnaire-runner__primary').classes())
+      .toContain('questionnaire-runner__navigation-button--disabled')
     await wrapper.find('.questionnaire-runner__option').trigger('click')
     expect(wrapper.get('.questionnaire-runner__footer').text()).toContain('下一题')
+    expect(wrapper.get('.questionnaire-runner__primary').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.questionnaire-runner__primary').classes())
+      .not.toContain('questionnaire-runner__navigation-button--disabled')
     expect(wrapper.text()).not.toContain('已保存在本机')
   })
 
-  it('uses an icon-only previous control with an accessible label', async () => {
+  it('uses the paired previous control below the question', async () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: {
         questionnaire: createQuestionnaire(2),
@@ -203,11 +266,21 @@ describe('LongQuestionnaireForm progressive runner', () => {
       }
     })
 
-    const previous = wrapper.get('.questionnaire-progress__back')
-    expect(previous.attributes('aria-label')).toBe('返回上一题')
-    expect(previous.classes()).toContain('questionnaire-progress__back')
+    const previous = wrapper.findAll('.questionnaire-runner__navigation-button')[0]
+    expect(previous.text()).toContain('上一题')
+    expect(previous.attributes('disabled')).toBeUndefined()
     await previous.trigger('click')
     expect(wrapper.text()).toContain('第 1 个问题')
+  })
+
+  it('visually disables previous on the first question', () => {
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: { questionnaire: createQuestionnaire(2) }
+    })
+
+    const previous = wrapper.findAll('.questionnaire-runner__navigation-button')[0]
+    expect(previous.attributes('disabled')).toBeDefined()
+    expect(previous.classes()).toContain('questionnaire-runner__navigation-button--disabled')
   })
 
   it('preserves GPAQ duration inputs and follows reviewed skip logic', async () => {

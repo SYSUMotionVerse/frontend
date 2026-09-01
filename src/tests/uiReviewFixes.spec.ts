@@ -131,7 +131,7 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(registerPage).toContain('uni.redirectTo')
+    expect(registerPage).toContain('uni.reLaunch')
     expect(questionnairePage).toContain('uni.redirectTo')
     expect(resultPage).toContain('uni.reLaunch')
   })
@@ -433,23 +433,21 @@ describe('ui review fixes', () => {
     expect(growthIndexPage).not.toMatch(/>\s*History\s*</)
     expect(growthIndexPage).not.toMatch(/>\s*Open session and questionnaire history\.\s*</)
 
-    expect(resultCard).toContain('优秀势头')
-    expect(resultCard).toContain('进步良好')
-    expect(resultCard).toContain('需要加强')
-    expect(resultCard).toContain('评估得分')
-    expect(resultCard).toContain('提交时间')
-    expect(resultCard).toContain('刚刚生成')
-    expect(resultCard).toContain('继续前往首页 ✨')
+    expect(resultCard).toContain('全部完成')
+    expect(resultCard).toContain('太棒了，你已经完成本次问卷！')
+    expect(resultCard).toContain('先去首页')
+    expect(resultCard).toContain('直接开练')
     expect(resultCard).not.toContain('Excellent momentum')
     expect(resultCard).not.toContain('Checkpoint score')
     expect(resultCard).not.toContain('Submitted')
     expect(resultCard).not.toContain('Continue to Home')
 
     expect(registrationForm).toContain('基本信息')
-    expect(registrationForm).toContain('填写今天加入训练的同学信息。')
+    expect(registrationForm).not.toContain('填写今天加入训练的同学信息。')
     expect(registrationForm).toContain('请选择')
     expect(registrationForm).toContain('健康指标')
-    expect(registrationForm).toContain('在训练开始前补充基础数据。')
+    expect(registrationForm).not.toContain('在训练开始前补充基础数据。')
+    expect(registrationForm).toContain('我同意上传这些信息以建立初始训练档案。')
     expect(registrationForm).toContain('准备好了，出发！ 🚀')
     expect(registrationForm).not.toContain('Basic Info')
     expect(registrationForm).not.toContain('Health Metrics')
@@ -469,6 +467,21 @@ describe('ui review fixes', () => {
     expect(cameraPlatform).not.toContain('Power is there')
     expect(sensorPlatform).toContain('传感器采集很稳定，下一轮可以尝试把抬膝再提高一些。')
     expect(sensorPlatform).not.toContain('Sensor capture stayed stable')
+  })
+
+  it('uses user-facing copy and centered controls in questionnaire preview mode', () => {
+    const banner = readFileSync(
+      resolve('src/components/access/QuestionnaireUnlockBanner.vue'),
+      'utf8'
+    )
+
+    expect(banner).toContain('先逛一逛，完成问卷后就能开练')
+    expect(banner).toContain('填写完问卷后，就能开始训练并查看自己的成长记录。')
+    expect(banner).toContain('去完成问卷')
+    expect(banner).not.toContain('为保证评估顺序')
+    expect(banner).not.toContain('功能暂时锁定')
+    expect(banner).toMatch(/\.questionnaire-unlock__action\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;/)
+    expect(banner).toMatch(/\.questionnaire-unlock__action\s*\{[\s\S]*line-height:\s*1\.2;/)
   })
 
 
@@ -584,10 +597,20 @@ describe('ui review fixes', () => {
 
     expect(registrationForm).toContain('registration-input-shell')
     expect(registrationForm).toContain('registration-picker-shell')
+    expect(registrationForm).toContain('registration-label')
     expect(registrationForm).toContain('form-stack-field')
     expect(registrationForm).toContain('flex: 1 1 0;')
+    expect(registrationForm).toContain('gap: 16rpx;')
+    expect(registrationForm).toContain('margin-left: 24rpx;')
+    expect(registrationForm).not.toContain('ml-[12rpx]')
+    expect(registrationForm).not.toContain('gap-[16rpx]')
     expect(registrationForm).toContain('width: 100%;')
     expect(registrationForm).toContain('box-sizing: border-box;')
+    expect(registrationForm).toContain('display: block;')
+    expect(registrationForm).toContain('flex: 1 1 auto;')
+    expect(registrationForm).toMatch(/\.registration-consent\s*\{[\s\S]*justify-content:\s*center;/)
+    expect(registrationForm).toMatch(/\.registration-consent__label\s*\{[\s\S]*align-items:\s*center;[\s\S]*gap:\s*8rpx;/)
+    expect(registrationForm).toMatch(/\.registration-consent__control\s*\{[\s\S]*transform-origin:\s*center;/)
     expect(unoConfig).toContain("'input-shell': 'w-full box-border")
     expect(registrationForm).not.toContain('max-width: 480rpx;')
     expect(registrationForm).not.toContain('max-width: 520rpx;')
@@ -628,7 +651,7 @@ describe('ui review fixes', () => {
   })
 
 
-  it('brings demo-style badge and sticker treatments into shared cards', () => {
+  it('brings demo-style badge treatments into shared cards', () => {
     const registrationForm = readFileSync(
       resolve('src/components/access/RegistrationForm.vue'),
       'utf8'
@@ -646,7 +669,7 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(registrationForm).toContain('form-card__sticker')
+    expect(registrationForm).not.toContain('form-card__sticker')
     expect(registrationForm).toContain('form-card__kicker')
     expect(dailyProgressCard).toContain('progress-card__eyebrow')
     expect(dailyProgressCard).toContain('progress-card__meter-pill')
@@ -859,11 +882,19 @@ describe('ui review fixes', () => {
       resolve('src/components/access/QuestionnaireBottomNavigation.vue'),
       'utf8'
     )
+    const instructions = readFileSync(
+      resolve('src/components/access/QuestionnaireInstructionsCard.vue'),
+      'utf8'
+    )
 
     expect(progressHeader).toContain('border: 4rpx solid rgba(255, 211, 132, 0.24);')
     expect(progressHeader).not.toContain('rgba(137, 207, 255')
     expect(questionPanel).toContain('questionnaire-question__prompt')
+    expect(questionPanel).toContain('questionnaire-question__progress')
+    expect(questionPanel).toContain('{{ questionNumber }} / {{ questionCount }}')
     expect(questionPanel).toContain('questionnaire-runner__options')
+    expect(questionPanel).toMatch(/\.questionnaire-runner__field-label\s*\{[\s\S]*margin-left:\s*32rpx;/)
+    expect(questionPanel).toMatch(/\.questionnaire-runner__input-wrap\s*\{[\s\S]*padding:\s*0 36rpx;/)
     expect(questionPanel).toContain('min-height: 92rpx;')
     expect(questionPanel).toContain('border-radius: 24rpx;')
     expect(questionPanel).toContain('border-color: #FF8B8B;')
@@ -879,20 +910,28 @@ describe('ui review fixes', () => {
     expect(questionPanel).not.toContain("'✓'")
     expect(questionPanel).not.toContain('background: rgba(255, 139, 139, 0.18);')
     expect(questionPanel).not.toContain('#2563EB')
-    expect(runner).toContain('border: 4rpx solid rgba(255, 211, 132, 0.24);')
-    expect(runner).not.toContain('rgba(168, 230, 207')
+    expect(runner).toContain('QuestionnaireInstructionsCard')
+    expect(runner).toContain('questionnaire-runner__block--spaced')
+    expect(runner).toContain('margin-top: 32rpx;')
+    expect(runner).not.toContain('gap: 32rpx;')
+    expect(instructions).toContain('questionnaire-instructions__legend')
+    expect(questionPanel).not.toContain('questionnaire-question__instructions')
+    expect(questionPanel).not.toContain('questionnaire-question__legend')
     expect(navigation).toContain('questionnaire-runner__actions')
     expect(navigation).not.toContain('已保存在本机')
-    expect(navigation).toContain('class="questionnaire-runner__primary btn-primary"')
-    expect(navigation).toContain('flex-direction: column;')
-    expect(navigation).toContain('v-if="canContinue"')
+    expect(navigation).toContain('questionnaire-runner__navigation-button--secondary')
+    expect(navigation).toContain('questionnaire-runner__navigation-button--submit')
+    expect(navigation).toContain('gap: 30rpx;')
+    expect(navigation).toContain(':disabled="!canGoBack"')
+    expect(navigation).toContain(':disabled="!canContinue"')
+    expect(navigation).toContain('questionnaire-runner__navigation-button--disabled')
     expect(navigation).not.toContain('#F7C948')
     expect(navigation).not.toContain('UniIcons')
     expect(navigation).toContain('margin-top: 24rpx;')
-    expect(navigation).toContain('padding: 0 0 80rpx;')
-    expect(navigation).toContain('background: #FF8B8B;')
-    expect(navigation).toContain('box-shadow: 0 10rpx 0 #DE7272;')
-    expect(navigation).toContain('color: #1A202C;')
+    expect(navigation).toContain('padding: 0;')
+    expect(navigation).toContain('background: #ff8b8b;')
+    expect(navigation).toContain('box-shadow: 0 10rpx 0 #de7272;')
+    expect(navigation).toContain('color: #1a202c;')
   })
 
   it('keeps the short post-training questionnaire as one calm, continuous check-in surface', () => {
@@ -943,7 +982,7 @@ describe('ui review fixes', () => {
 
     expect(accessShell).toContain('padding: 56rpx 48rpx 216rpx;')
     expect(accessShell).toContain('gap: 56rpx;')
-    expect(uniAccessShell).toContain('padding: 0 48rpx 120rpx;')
+    expect(uniAccessShell).toContain('padding: 40rpx 48rpx calc(120rpx + env(safe-area-inset-bottom));')
     expect(uniAccessShell).toContain('gap: 32rpx;')
     expect(uniTrainingShell).toContain('padding: 16rpx 32rpx 0;')
     expect(uniTrainingShell).toContain('class="training-shell__dock-clearance"')

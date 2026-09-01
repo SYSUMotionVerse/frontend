@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, shallowRef } from 'vue'
 import type { StudentProfile } from '../../domain/student/types'
 
 type RegistrationPayload = Omit<StudentProfile, 'completed'>
@@ -20,16 +20,17 @@ const form = reactive<RegistrationPayload>({
   studentId: '',
   name: '',
   gender: '',
-  age: 12,
+  age: 0,
   major: '',
   grade: '',
-  heightCm: 150,
-  weightKg: 40,
-  restingHeartRate: 70
+  heightCm: 0,
+  weightKg: 0,
+  restingHeartRate: 0
 })
 
 const genderOptions = ['女', '男']
 const gradeOptions = ['一年级', '二年级', '三年级', '四年级']
+const consentGiven = shallowRef(false)
 
 const selectedGenderIndex = computed(() => {
   const index = genderOptions.indexOf(form.gender)
@@ -94,6 +95,7 @@ const canSubmit = computed(() => {
     form.heightCm > 0 &&
     form.weightKg > 0 &&
     form.restingHeartRate > 0
+    && consentGiven.value
   )
 })
 
@@ -116,20 +118,23 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 
   form.grade = gradeOptions[nextIndex] ?? ''
 }
+
+function handleConsentChange(event: { detail?: { value?: string[] } }) {
+  consentGiven.value = event.detail?.value?.includes('profile-upload') === true
+}
 </script>
 
 <template>
-  <form class="flex flex-col gap-[32rpx]" @submit.prevent="handleSubmit">
+  <form class="registration-form" @submit.prevent="handleSubmit">
     <view class="form-card form-card--gold">
       <view class="form-card__header">
         <view class="form-card__heading">
           <text class="form-card__kicker form-card__kicker--gold">基本信息</text>
-          <text class="form-card__title">填写今天加入训练的同学信息。</text>
         </view>
       </view>
 
       <view class="form-stack-field">
-        <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">学号</text>
+        <text class="registration-label">学号</text>
         <input
           :value="form.studentId"
           aria-label="学号"
@@ -138,20 +143,20 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           inputmode="numeric"
           maxlength="8"
           name="studentId"
-          placeholder="例如：20260001"
+          placeholder="八位数字，例如：20260001"
           type="text"
           @input="handleStudentIdInput"
         />
       </view>
 
       <view class="form-stack-field">
-        <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">姓名</text>
+        <text class="registration-label">姓名</text>
         <input v-model.trim="form.name" aria-label="姓名" autocomplete="name" class="input-shell registration-input-shell" name="name" placeholder="例如：运动小明" />
       </view>
 
       <view class="form-row">
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">性别</text>
+        <view class="form-row__field">
+          <text class="registration-label">性别</text>
           <picker
             aria-label="性别"
             class="registration-picker-shell"
@@ -166,17 +171,17 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           </picker>
         </view>
         
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">年龄</text>
+        <view class="form-row__field">
+          <text class="registration-label">年龄</text>
           <input
-            :value="String(form.age)"
+            :value="form.age > 0 ? String(form.age) : ''"
             aria-label="年龄"
             autocomplete="off"
             class="input-shell registration-input-shell"
             inputmode="numeric"
             maxlength="3"
             name="age"
-            placeholder="12"
+            placeholder="20"
             type="text"
             @input="handleNumericFieldInput('age', $event)"
           />
@@ -184,13 +189,13 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
       </view>
       
       <view class="form-row">
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">专业</text>
+        <view class="form-row__field">
+          <text class="registration-label">专业</text>
           <input v-model.trim="form.major" aria-label="专业" autocomplete="organization-title" class="input-shell registration-input-shell" name="major" placeholder="理科..." />
         </view>
         
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">年级</text>
+        <view class="form-row__field">
+          <text class="registration-label">年级</text>
           <picker
             aria-label="年级"
             class="registration-picker-shell"
@@ -209,20 +214,16 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 
     <view class="form-card form-card--teal">
       <view class="form-card__header">
-        <view class="form-card__sticker form-card__sticker--teal">
-          <text class="text-[40rpx]">💓</text>
-        </view>
         <view class="form-card__heading">
           <text class="form-card__kicker form-card__kicker--teal">健康指标</text>
-          <text class="form-card__title">在训练开始前补充基础数据。</text>
         </view>
       </view>
 
       <view class="form-row">
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">身高 (cm)</text>
+        <view class="form-row__field">
+          <text class="registration-label">身高 (cm)</text>
           <input
-            :value="String(form.heightCm)"
+            :value="form.heightCm > 0 ? String(form.heightCm) : ''"
             aria-label="身高（厘米）"
             autocomplete="off"
             class="input-shell registration-input-shell"
@@ -235,10 +236,10 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
           />
         </view>
 
-        <view class="form-row__field flex flex-col gap-[16rpx]">
-          <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">体重 (kg)</text>
+        <view class="form-row__field">
+          <text class="registration-label">体重 (kg)</text>
           <input
-            :value="String(form.weightKg)"
+            :value="form.weightKg > 0 ? String(form.weightKg) : ''"
             aria-label="体重（千克）"
             autocomplete="off"
             class="input-shell registration-input-shell"
@@ -253,9 +254,9 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
       </view>
 
       <view class="form-stack-field">
-        <text class="text-[28rpx] font-800 text-[#1A202C] ml-[12rpx]">静息心率 (bpm)</text>
+        <text class="registration-label">静息心率 (bpm)</text>
         <input
-          :value="String(form.restingHeartRate)"
+          :value="form.restingHeartRate > 0 ? String(form.restingHeartRate) : ''"
           aria-label="静息心率"
           autocomplete="off"
           class="input-shell registration-input-shell"
@@ -269,17 +270,34 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
       </view>
     </view>
 
+    <checkbox-group class="registration-consent" @change="handleConsentChange">
+      <label class="registration-consent__label">
+        <checkbox
+          class="registration-consent__control"
+          value="profile-upload"
+          :checked="consentGiven"
+          color="#ff7777"
+        />
+        <text>我同意上传这些信息以建立初始训练档案。</text>
+      </label>
+    </checkbox-group>
+
+    <button form-type="submit" class="btn-primary registration-submit" :disabled="!canSubmit || props.submitting">
+      <text class="tracking-wide">{{ props.submitting ? '正在提交…' : props.submitLabel }}</text>
+    </button>
+
     <view class="form-card__footer-note">
       <text>这些信息用于建立初始训练档案，请确认准确后提交。</text>
     </view>
-
-    <button form-type="submit" class="btn-primary mt-[24rpx] mb-[48rpx]" :disabled="!canSubmit || props.submitting">
-      <text class="tracking-wide">{{ props.submitting ? '正在提交…' : props.submitLabel }}</text>
-    </button>
   </form>
 </template>
 
 <style scoped>
+.registration-form {
+  display: flex;
+  flex-direction: column;
+}
+
 .form-row {
   display: flex;
   flex-wrap: wrap;
@@ -287,7 +305,10 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 }
 
 .form-row__field {
+  display: flex;
   flex: 1 1 0;
+  flex-direction: column;
+  gap: 16rpx;
   min-width: 0;
 }
 
@@ -309,9 +330,19 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 }
 
 .registration-picker-shell {
-  display: flex;
+  display: block;
   width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   box-sizing: border-box;
+}
+
+.registration-label {
+  margin-left: 24rpx;
+  color: #1A202C;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .form-card {
@@ -345,26 +376,6 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
   gap: 12rpx;
 }
 
-.form-card__sticker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 84rpx;
-  height: 84rpx;
-  flex: none;
-  border-radius: 9999px;
-  border: 4rpx solid #ffffff;
-  box-shadow: 0 8rpx 0 rgba(0, 0, 0, 0.04);
-}
-
-.form-card__sticker--gold {
-  background: rgba(255, 211, 132, 0.24);
-}
-
-.form-card__sticker--teal {
-  background: rgba(137, 207, 255, 0.24);
-}
-
 .form-card__kicker {
   display: inline-flex;
   width: fit-content;
@@ -390,22 +401,54 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
   border: 4rpx solid rgba(137, 207, 255, 0.22);
 }
 
-.form-card__title {
-  display: block;
-  color: #1A202C;
-  font-size: 34rpx;
-  line-height: 1.35;
-  font-weight: 900;
+.form-card--gold {
+  margin-bottom: 48rpx;
+}
+
+.form-card--teal {
+  margin-bottom: 48rpx;
+}
+
+.registration-consent {
+  display: flex;
+  width: 100%;
+  margin-bottom: 28rpx;
+  justify-content: center;
+}
+
+.registration-consent__label {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 0 8rpx;
+  color: #536176;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.registration-consent__control {
+  display: flex;
+  flex: none;
+  transform: scale(0.9);
+  transform-origin: center;
+}
+
+.registration-submit {
+  margin: 0;
 }
 
 .form-card__footer-note {
   display: flex;
   justify-content: center;
-  padding: 0 16rpx;
-  color: #64748B;
-  font-size: 26rpx;
+  margin: 16rpx 0 48rpx;
+  padding: 0 20rpx;
+  color: #9aa5b3;
+  font-size: 22rpx;
   line-height: 1.5;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
 }
 </style>

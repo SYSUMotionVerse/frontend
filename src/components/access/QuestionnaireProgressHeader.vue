@@ -1,18 +1,12 @@
 <script setup lang="ts">
-import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-
 defineProps<{
   questionnaireTitle: string
   questionnaireCount: number
   questionnaireNumber: number
-  questionNumber: number
+  completedQuestionCount: number
+  totalQuestionCount: number
   estimatedMinutes: number
   progressPercent: number
-  canGoBack: boolean
-}>()
-
-const emit = defineEmits<{
-  previous: []
 }>()
 </script>
 
@@ -20,15 +14,6 @@ const emit = defineEmits<{
   <view class="questionnaire-progress bg-white chunky-shadow" aria-live="polite">
     <view class="questionnaire-progress__topline">
       <view class="questionnaire-progress__step-group">
-        <button
-          v-if="canGoBack"
-          class="questionnaire-progress__back"
-          type="button"
-          aria-label="返回上一题"
-          @click="emit('previous')"
-        >
-          <UniIcons aria-hidden="true" type="left" size="22" color="#536176" />
-        </button>
         <text class="questionnaire-progress__step">
           第 {{ questionnaireNumber }} / {{ questionnaireCount }} 份
         </text>
@@ -39,7 +24,7 @@ const emit = defineEmits<{
     </view>
     <text class="questionnaire-progress__title">{{ questionnaireTitle }}</text>
     <view class="questionnaire-progress__detail">
-      <text>当前第 {{ questionNumber }} 题</text>
+      <text>已完成 {{ completedQuestionCount }} / {{ totalQuestionCount }} 题</text>
       <text>{{ progressPercent }}%</text>
     </view>
     <view class="questionnaire-progress__track">
@@ -70,26 +55,9 @@ const emit = defineEmits<{
 
 .questionnaire-progress__step-group {
   display: flex;
-  min-height: 88rpx;
+  min-height: 0;
   align-items: center;
   gap: 12rpx;
-}
-
-.questionnaire-progress__back {
-  display: flex;
-  width: 88rpx;
-  height: 88rpx;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  margin: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.questionnaire-progress__back::after {
-  border: none;
 }
 
 .questionnaire-progress__step {

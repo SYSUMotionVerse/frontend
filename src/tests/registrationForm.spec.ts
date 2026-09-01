@@ -20,13 +20,38 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.get('input[name="studentId"]').setValue('20260001')
   await wrapper.get('input[name="name"]').setValue('Lin')
   await wrapper.get('input[name="major"]').setValue('Sports Science')
+  await wrapper.get('input[name="age"]').setValue('12')
+  await wrapper.get('input[name="heightCm"]').setValue('170')
+  await wrapper.get('input[name="weightKg"]').setValue('55')
+  await wrapper.get('input[name="restingHeartRate"]').setValue('70')
 
   const pickers = wrapper.findAll('.picker-stub')
   await pickers[0]?.trigger('change', { detail: { value: 0 } })
   await pickers[1]?.trigger('change', { detail: { value: 0 } })
+  await wrapper.get('checkbox-group').trigger('change', {
+    detail: { value: ['profile-upload'] }
+  })
 }
 
 describe('registration form', () => {
+  it('uses the eight-digit hint and one shared label rhythm', () => {
+    const wrapper = mountForm()
+
+    expect(wrapper.get('input[name="studentId"]').attributes('placeholder'))
+      .toBe('八位数字，例如：20260001')
+    expect(wrapper.findAll('.registration-label')).toHaveLength(9)
+    expect(wrapper.findAll('.form-row__field')).toHaveLength(6)
+  })
+
+  it('starts measured fields empty and uses 20 only as the age hint', () => {
+    const wrapper = mountForm()
+
+    expect(wrapper.get('input[name="age"]').attributes('placeholder')).toBe('20')
+    for (const field of ['age', 'heightCm', 'weightKg', 'restingHeartRate']) {
+      expect(wrapper.get(`input[name="${field}"]`).element).toHaveProperty('value', '')
+    }
+  })
+
   it('only offers backend-supported gender values', () => {
     const wrapper = mountForm()
 
@@ -64,6 +89,21 @@ describe('registration form', () => {
     await wrapper.get('form').trigger('submit')
 
     expect(wrapper.emitted('submit')).toBeUndefined()
+  })
+
+  it('requires explicit consent before uploading the profile', async () => {
+    const wrapper = mountForm()
+    await wrapper.get('input[name="studentId"]').setValue('20260001')
+    await wrapper.get('input[name="name"]').setValue('Lin')
+    await wrapper.get('input[name="major"]').setValue('Sports Science')
+    const pickers = wrapper.findAll('.picker-stub')
+    await pickers[0]?.trigger('change', { detail: { value: 0 } })
+    await pickers[1]?.trigger('change', { detail: { value: 0 } })
+
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.get('.registration-submit').attributes('disabled')).toBeDefined()
   })
 
   it('sanitizes numeric-only fields before submit', async () => {

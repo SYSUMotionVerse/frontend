@@ -1,9 +1,11 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type { TrainingProgressState } from './useTrainingProgress'
+import { TRAINING_HOME_QUOTES } from '../../features/training/trainingHomeQuotes'
 
 interface TrainingHomeProgressViewModelOptions {
   progressState: Readonly<Ref<TrainingProgressState>>
-  displayName: ComputedRef<string>
+  displayName?: ComputedRef<string>
+  coachQuote?: Readonly<Ref<string>>
 }
 
 export function useTrainingHomeProgressViewModel(
@@ -54,9 +56,9 @@ export function useTrainingHomeProgressViewModel(
     {
       id: 'quote',
       eyebrow: '教练金句',
-      title: '今天先把动作做扎实',
-      body: `“${options.displayName.value}，真正的进步不是一次爆发，而是把每一次基本动作都做对。”`,
-      footer: 'Coach Harris',
+      title: options.coachQuote?.value ?? TRAINING_HOME_QUOTES[0],
+      body: '',
+      footer: '屈萍老师',
       tone: 'quote' as const
     },
     {

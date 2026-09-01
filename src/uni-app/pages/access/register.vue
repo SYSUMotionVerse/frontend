@@ -42,7 +42,7 @@ async function handleSubmit(payload: RegistrationPayload) {
 
   store.completeProfile(completedProfile)
   store.setActiveCheckpoint('baseline')
-  void uni.redirectTo({
+  void uni.reLaunch({
     url: '/pages/access/questionnaire?checkpoint=baseline'
   })
 }
@@ -50,10 +50,11 @@ async function handleSubmit(payload: RegistrationPayload) {
 
 <template>
   <UniAccessPageShell
-    chip="A1"
     navigation-title="注册"
-    title="注册"
-    subtitle="请先完善个人信息，注册完成后才能解锁训练。"
+    :title="'请先完善个人信息\n注册完成后才能解锁训练。'"
+    :show-back="false"
+    heading-inset
+    compact-title
   >
     <RegistrationForm
       :submitting="isSubmitting"

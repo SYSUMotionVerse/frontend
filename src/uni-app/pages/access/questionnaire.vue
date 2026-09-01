@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { onHide, onLoad } from '@dcloudio/uni-app'
 import LongQuestionnaireForm from '../../../components/access/LongQuestionnaireForm.vue'
+import QuestionnaireOverview from '../../../components/access/QuestionnaireOverview.vue'
 import {
   CHECKPOINT_LABELS,
   normalizeCheckpoint
@@ -51,6 +52,8 @@ const checkpointCompletionError = shallowRef('')
 const questionnaireDraft = shallowRef<QuestionnaireDraft | null>(null)
 const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
 const questionnaireRunnerKey = shallowRef(0)
+const hasStartedQuestionnaire = shallowRef(false)
+const pageScrollTop = shallowRef(0)
 const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
 const draftSaveDelayMs = 250
 const navigationTimeoutMs = 5_000
@@ -85,6 +88,25 @@ const questionnaireNumber = computed(() => {
   const entry = questionnairePlan.value?.questionnaires.find(item => item.id === scaleId)
   return entry?.order ?? 1
 })
+const totalQuestionCount = computed(() => {
+  const plannedTotal = questionnairePlan.value?.questionnaires.reduce(
+    (total, item) => total + item.question_count,
+    0
+  )
+  return plannedTotal || questionnaire.value?.questions?.length || 0
+})
+const completedQuestionCountBefore = computed(() => {
+  const currentScaleId = questionnaire.value?.scaleId
+  return questionnairePlan.value?.questionnaires.reduce(
+    (total, item) => total + (item.completed && item.id !== currentScaleId ? item.question_count : 0),
+    0
+  ) ?? 0
+})
+const startLabel = computed(() =>
+  questionnaireDraft.value || (questionnairePlan.value?.completed_questionnaire_count ?? 0) > 0
+    ? '继续填写'
+    : '开始填写'
+)
 
 onMounted(() => {
   if (hasLoaded.value) {
@@ -356,15 +378,41 @@ function previewTrainingContent() {
     url: '/pages/training/home-preview?preview=questionnaire'
   })
 }
+
+function startQuestionnaire() {
+  hasStartedQuestionnaire.value = true
+}
+
+function returnToQuestionnaireList() {
+  flushDraftSave()
+  hasStartedQuestionnaire.value = false
+  pageScrollTop.value = 1
+  void nextTick(() => {
+    pageScrollTop.value = 0
+  })
+}
 </script>
 
 <template>
   <UniAccessPageShell
-    chip="A2"
     navigation-title="问卷"
     :title="title"
     :subtitle="subtitle"
+    :show-back="hasStartedQuestionnaire"
+    custom-back
+    :scroll-top="pageScrollTop"
+    heading-inset
+    :show-hero="!hasStartedQuestionnaire"
+    @back="returnToQuestionnaireList"
   >
+    <template #hero-footer>
+      <view class="questionnaire-page__preview">
+        <text>想先了解什么内容？</text>
+        <button class="questionnaire-page__preview-action" type="button" @click="previewTrainingContent">
+          先浏览小程序
+        </button>
+      </view>
+    </template>
     <view v-if="isLoading" class="questionnaire-page__empty-state">
       正在加载问卷…
     </view>
@@ -381,19 +429,22 @@ function previewTrainingContent() {
     <view v-else-if="!questionnaire" class="questionnaire-page__empty-state">
       当前没有可提交的后端量表。
     </view>
-    <view v-else class="questionnaire-page__handoff-stage">
+    <view v-else class="questionnaire-page__flow">
+      <QuestionnaireOverview
+        v-show="!hasStartedQuestionnaire"
+        :plan="questionnairePlan"
+        :current-questionnaire="questionnaire"
+        :start-label="startLabel"
+        @start="startQuestionnaire"
+      />
+      <view v-show="hasStartedQuestionnaire" class="questionnaire-page__handoff-stage">
       <view
         class="questionnaire-page__form-content"
         :class="{ 'questionnaire-page__form-content--held': confirmedSubmission }"
       >
-        <view class="questionnaire-page__preview">
-          <text>想先了解训练内容？</text>
-          <button class="questionnaire-page__preview-action" type="button" @click="previewTrainingContent">
-            先浏览小程序
-          </button>
-        </view>
-        <view :key="questionnaireRunnerKey" class="questionnaire-page__form-stage">
+        <view class="questionnaire-page__form-stage">
           <LongQuestionnaireForm
+            :key="questionnaireRunnerKey"
             :questionnaire="questionnaire"
             :submitting="isSubmitting"
             :submit-label="submitLabel"
@@ -401,6 +452,8 @@ function previewTrainingContent() {
             :initial-question-index="questionnaireDraft?.currentQuestionIndex"
             :questionnaire-count="questionnaireCount"
             :questionnaire-number="questionnaireNumber"
+            :completed-question-count-before="completedQuestionCountBefore"
+            :total-question-count="totalQuestionCount"
             :estimated-minutes="estimatedMinutes"
             @draft-change="handleDraftChange"
             @reload="loadQuestionnaire"
@@ -443,6 +496,7 @@ function previewTrainingContent() {
           </template>
           <text v-else>答案已保存，正在继续。</text>
         </view>
+      </view>
       </view>
     </view>
   </UniAccessPageShell>
@@ -502,6 +556,10 @@ function previewTrainingContent() {
 
 .questionnaire-page__handoff-stage {
   position: relative;
+}
+
+.questionnaire-page__flow {
+  width: 100%;
 }
 
 .questionnaire-page__form-content {
@@ -587,9 +645,11 @@ function previewTrainingContent() {
 .questionnaire-page__preview {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-bottom: 24rpx;
+  justify-content: flex-start;
+  gap: 8rpx;
+  width: calc(100% - 32rpx);
+  margin: 14rpx 32rpx 0 0;
+  box-sizing: border-box;
   color: #64748B;
   font-size: 23rpx;
   font-weight: 700;
@@ -597,6 +657,8 @@ function previewTrainingContent() {
 
 .questionnaire-page__preview-action {
   min-height: 56rpx;
+  width: auto;
+  flex: none;
   margin: 0;
   padding: 0;
   border: 0;

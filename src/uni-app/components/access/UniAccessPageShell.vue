@@ -3,17 +3,33 @@ import { computed } from 'vue'
 import ImmersiveNavigationBar from '../layout/ImmersiveNavigationBar.vue'
 
 const props = withDefaults(defineProps<{
-  chip: string
+  chip?: string
   title: string
-  subtitle: string
+  subtitle?: string
   navigationTitle?: string
   showBack?: boolean
+  customBack?: boolean
+  scrollTop?: number
+  headingInset?: boolean
+  compactTitle?: boolean
+  showHero?: boolean
 }>(), {
+  chip: '',
+  subtitle: '',
   navigationTitle: '',
-  showBack: true
+  showBack: true,
+  customBack: false,
+  scrollTop: 0,
+  headingInset: false,
+  compactTitle: false,
+  showHero: true
 })
 
 const resolvedNavigationTitle = computed(() => props.navigationTitle || props.title)
+
+const emit = defineEmits<{
+  back: []
+}>()
 </script>
 
 <template>
@@ -27,22 +43,41 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
       class="access-entry__navigation"
       :title="resolvedNavigationTitle"
       :show-back="props.showBack"
+      :custom-back="props.customBack"
+      @back="emit('back')"
     />
 
-    <view class="access-entry__inner">
-      <view class="access-entry__hero">
-        <text class="access-entry__chip">{{ chip }}</text>
-        <text class="access-entry__title">
-          {{ title }}
-        </text>
-        <text class="access-entry__subtitle">
-          {{ subtitle }}
-        </text>
-      </view>
+    <view class="access-entry__scroll-frame">
+      <scroll-view
+        class="access-entry__scroller"
+        scroll-y
+        enable-flex
+        :scroll-top="props.scrollTop"
+      >
+        <view class="access-entry__inner">
+          <view
+            v-if="props.showHero"
+            class="access-entry__hero"
+            :class="{ 'access-entry__hero--inset': props.headingInset }"
+          >
+            <text v-if="chip" class="access-entry__chip">{{ chip }}</text>
+            <text
+              class="access-entry__title"
+              :class="{ 'access-entry__title--compact': props.compactTitle }"
+            >
+              {{ title }}
+            </text>
+            <text v-if="subtitle" class="access-entry__subtitle">
+              {{ subtitle }}
+            </text>
+            <slot name="hero-footer" />
+          </view>
 
-      <view class="access-entry__body">
-        <slot />
-      </view>
+          <view class="access-entry__body">
+            <slot />
+          </view>
+        </view>
+      </scroll-view>
     </view>
   </view>
 </template>
@@ -50,10 +85,14 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
 <style scoped>
 .access-entry {
   position: relative;
+  display: flex;
+  height: 100vh;
   min-height: 100vh;
+  flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
   background: #FCF7F0;
-  padding: 0 48rpx 120rpx;
+  padding: 0;
   color: #1A202C;
 }
 
@@ -105,8 +144,38 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
 }
 
 .access-entry__navigation {
-  width: calc(100% + 96rpx);
-  margin: 0 -48rpx;
+  width: 100%;
+  flex: none;
+}
+
+.access-entry__scroll-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.access-entry__scroller {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.5) 16rpx,
+    #000 32rpx,
+    #000 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 .access-entry__inner {
@@ -114,10 +183,11 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
   z-index: 1;
   margin: 0 auto;
   display: flex;
-  max-width: 720px;
+  width: min(720px, 100%);
   flex-direction: column;
   gap: 32rpx;
-  padding-top: 40rpx;
+  padding: 40rpx 48rpx calc(120rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
   animation: access-entry-reveal 180ms ease-out both;
 }
 
@@ -127,6 +197,10 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
   align-items: flex-start;
   gap: 12rpx;
   text-align: left;
+}
+
+.access-entry__hero--inset {
+  margin-left: 32rpx;
 }
 
 .access-entry__chip {
@@ -142,6 +216,12 @@ const resolvedNavigationTitle = computed(() => props.navigationTitle || props.ti
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  white-space: pre-line;
+}
+
+.access-entry__title--compact {
+  font-size: 36rpx;
+  line-height: 1.35;
 }
 
 .access-entry__subtitle {

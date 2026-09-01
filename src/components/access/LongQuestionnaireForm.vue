@@ -5,6 +5,7 @@ import type {
   PsychologyQuestionnaireModel
 } from '../../uni-app/api/studentBackendTypes'
 import QuestionnaireBottomNavigation from './QuestionnaireBottomNavigation.vue'
+import QuestionnaireInstructionsCard from './QuestionnaireInstructionsCard.vue'
 import QuestionnaireProgressHeader from './QuestionnaireProgressHeader.vue'
 import QuestionnaireQuestionPanel from './QuestionnaireQuestionPanel.vue'
 
@@ -27,6 +28,8 @@ const props = withDefaults(defineProps<{
   initialQuestionIndex?: number
   questionnaireCount?: number
   questionnaireNumber?: number
+  completedQuestionCountBefore?: number
+  totalQuestionCount?: number
   estimatedMinutes?: number
 }>(), {
   submitting: false,
@@ -34,7 +37,8 @@ const props = withDefaults(defineProps<{
   initialAnswers: () => ({}),
   initialQuestionIndex: 0,
   questionnaireCount: 1,
-  questionnaireNumber: 1
+  questionnaireNumber: 1,
+  completedQuestionCountBefore: 0
 })
 
 const emit = defineEmits<{
@@ -46,24 +50,35 @@ const emit = defineEmits<{
 const answers = reactive<Record<number, PsychologyQuestionnaireAnswer>>({})
 const validationMessage = shallowRef('')
 
-for (const question of props.questionnaire.questions) {
-  const restoredAnswer = props.initialAnswers[question.id]
-  if (question.questionType === 'TEXT') {
-    answers[question.id] = typeof restoredAnswer === 'string' ? restoredAnswer : ''
-    continue
+function initializeAnswers(
+  questionnaire: PsychologyQuestionnaireModel,
+  initialAnswers: Record<number, PsychologyQuestionnaireAnswer>
+) {
+  for (const questionId of Object.keys(answers)) {
+    delete answers[Number(questionId)]
   }
 
-  if (question.questionType === 'MULTIPLE') {
-    answers[question.id] = Array.isArray(restoredAnswer)
-      ? restoredAnswer.filter(optionId => question.options.some(option => option.id === optionId))
-      : []
-    continue
-  }
+  for (const question of questionnaire.questions) {
+    const restoredAnswer = initialAnswers[question.id]
+    if (question.questionType === 'TEXT') {
+      answers[question.id] = typeof restoredAnswer === 'string' ? restoredAnswer : ''
+      continue
+    }
 
-  answers[question.id] = question.options.some(option => option.id === restoredAnswer)
-    ? restoredAnswer
-    : 0
+    if (question.questionType === 'MULTIPLE') {
+      answers[question.id] = Array.isArray(restoredAnswer)
+        ? restoredAnswer.filter(optionId => question.options.some(option => option.id === optionId))
+        : []
+      continue
+    }
+
+    answers[question.id] = question.options.some(option => option.id === restoredAnswer)
+      ? restoredAnswer
+      : 0
+  }
 }
+
+initializeAnswers(props.questionnaire, props.initialAnswers)
 
 function responseConfigValue(question: PsychologyQuestionnaireModel['questions'][number], key: string) {
   return question.responseConfig?.[key]
@@ -108,23 +123,63 @@ const currentQuestionNumber = computed(() => currentQuestionIndex.value + 1)
 const resolvedEstimatedMinutes = computed(() =>
   props.estimatedMinutes ?? Math.max(3, Math.ceil((questionCount.value * 8) / 60))
 )
+const totalQuestionCount = computed(() =>
+  props.totalQuestionCount ?? questionCount.value
+)
+const completedQuestionCount = computed(() => Math.min(
+  totalQuestionCount.value,
+  props.completedQuestionCountBefore + visibleQuestions.value.filter(
+    question => hasAnswer(answers[question.id])
+  ).length
+))
 const overallProgressPercent = computed(() => {
-  if (!questionCount.value || !props.questionnaireCount) return 0
-  const questionnaireProgress = currentQuestionNumber.value / questionCount.value
-  return Math.max(1, Math.round(
-    ((props.questionnaireNumber - 1 + questionnaireProgress) / props.questionnaireCount) * 100
-  ))
+  if (!totalQuestionCount.value) return 0
+  return Math.round((completedQuestionCount.value / totalQuestionCount.value) * 100)
 })
-const showStudyIntroduction = computed(() =>
-  props.questionnaireNumber === 1 && currentQuestionIndex.value === 0
-)
-const showInstrumentInstructions = computed(() =>
-  currentQuestionIndex.value === 0
-)
 const isFirstQuestion = computed(() => currentQuestionIndex.value === 0)
 const isLastQuestion = computed(() =>
   currentQuestionIndex.value === questionCount.value - 1
 )
+const legendItems = computed(() => {
+  if (props.questionnaire.responseLegend?.length) {
+    return props.questionnaire.responseLegend.map(item => ({
+      key: String(item.value),
+      label: item.label
+    }))
+  }
+
+  const question = currentQuestion.value
+  if (!question || question.questionType === 'TEXT' || question.options.length > 7) {
+    return []
+  }
+
+  const scores = question.options.map(option => option.score)
+  const usesNumericLegend = scores.length > 0
+    && new Set(scores).size === scores.length
+    && [...scores].sort((left, right) => left - right).every(
+      (score, index) => score === index + 1
+    )
+
+  return question.options.map((option, index) => ({
+    key: usesNumericLegend ? String(option.score) : String.fromCharCode(65 + index),
+    label: option.label
+  }))
+})
+const instructionsCopy = computed(() =>
+  props.questionnaire.instructions?.trim()
+    || props.questionnaire.description?.trim()
+    || '请结合自己的真实情况选择最符合的答案。'
+)
+
+watch(() => props.questionnaire, (nextQuestionnaire) => {
+  // uni-app may reuse the Vue child instance even when the surrounding view's
+  // key changes. Reset the runner explicitly so every new questionnaire owns
+  // its own local question index and answers.
+  currentQuestionIndex.value = 0
+  initializeAnswers(nextQuestionnaire, props.initialAnswers)
+  currentQuestionIndex.value = clampQuestionIndex(props.initialQuestionIndex)
+  validationMessage.value = ''
+}, { flush: 'pre' })
 
 function hasAnswer(answer: PsychologyQuestionnaireAnswer | undefined) {
   if (Array.isArray(answer)) return answer.length > 0
@@ -241,48 +296,47 @@ function handleSubmit() {
 
 <template>
   <view class="questionnaire-runner">
-    <QuestionnaireProgressHeader
-      :questionnaire-title="questionnaire.shortTitle || questionnaire.title"
-      :questionnaire-count="questionnaireCount"
-      :questionnaire-number="questionnaireNumber"
-      :question-number="currentQuestionNumber"
-      :estimated-minutes="resolvedEstimatedMinutes"
-      :progress-percent="overallProgressPercent"
-      :can-go-back="!isFirstQuestion"
-      @previous="showPreviousQuestion"
-    />
-
-    <view v-if="showStudyIntroduction" class="questionnaire-runner__introduction">
-      <text class="questionnaire-runner__introduction-title">开始前，请了解这些</text>
-      <text>
-        本阶段共 {{ questionnaireCount }} 份问卷，预计约 {{ resolvedEstimatedMinutes }} 分钟。
-        每次只呈现一题，答案会自动保存。
-      </text>
-      <text>
-        完成后可以建立你的初始状态基线，帮助后续训练安排更贴合实际情况，并用于比较之后的变化。
-      </text>
+    <view class="questionnaire-runner__block">
+      <QuestionnaireProgressHeader
+        :questionnaire-title="questionnaire.shortTitle || questionnaire.title"
+        :questionnaire-count="questionnaireCount"
+        :questionnaire-number="questionnaireNumber"
+        :completed-question-count="completedQuestionCount"
+        :total-question-count="totalQuestionCount"
+        :estimated-minutes="resolvedEstimatedMinutes"
+        :progress-percent="overallProgressPercent"
+      />
     </view>
 
-    <QuestionnaireQuestionPanel
-      v-if="currentQuestion"
-      :question="currentQuestion"
-      :answer="currentAnswer"
-      :instructions="questionnaire.instructions"
-      :show-instructions="showInstrumentInstructions"
-      @select="handleResponseChange"
-      @integer-input="handleIntegerInput"
-      @duration-input="handleDurationInput"
-    />
-    <view v-else class="questionnaire-runner__empty-state" aria-live="polite">
-      <text class="questionnaire-runner__empty-title">这份问卷暂时没有可作答的题目。</text>
-      <text>请重新加载问卷；若仍无法继续，请联系研究管理员。</text>
-      <button
-        class="questionnaire-runner__empty-retry"
-        type="button"
-        @click="emit('reload')"
-      >
-        重新加载问卷
-      </button>
+    <view class="questionnaire-runner__block questionnaire-runner__block--spaced">
+      <QuestionnaireInstructionsCard
+        :instructions="instructionsCopy"
+        :legend-items="legendItems"
+      />
+    </view>
+
+    <view class="questionnaire-runner__block questionnaire-runner__block--spaced">
+      <QuestionnaireQuestionPanel
+        v-if="currentQuestion"
+        :question="currentQuestion"
+        :answer="currentAnswer"
+        :question-number="currentQuestionNumber"
+        :question-count="questionCount"
+        @select="handleResponseChange"
+        @integer-input="handleIntegerInput"
+        @duration-input="handleDurationInput"
+      />
+      <view v-else class="questionnaire-runner__empty-state" aria-live="polite">
+        <text class="questionnaire-runner__empty-title">这份问卷暂时没有可作答的题目。</text>
+        <text>请重新加载问卷；若仍无法继续，请联系研究管理员。</text>
+        <button
+          class="questionnaire-runner__empty-retry"
+          type="button"
+          @click="emit('reload')"
+        >
+          重新加载问卷
+        </button>
+      </view>
     </view>
 
     <text
@@ -293,14 +347,18 @@ function handleSubmit() {
       {{ validationMessage }}
     </text>
 
-    <QuestionnaireBottomNavigation
-      :can-continue="hasAnswer(currentAnswer)"
-      :last-question="isLastQuestion"
-      :submitting="submitting"
-      :submit-label="submitLabel"
-      @next="showNextQuestion"
-      @submit="handleSubmit"
-    />
+    <view class="questionnaire-runner__block questionnaire-runner__block--spaced">
+      <QuestionnaireBottomNavigation
+        :can-continue="hasAnswer(currentAnswer)"
+        :can-go-back="!isFirstQuestion"
+        :last-question="isLastQuestion"
+        :submitting="submitting"
+        :submit-label="submitLabel"
+        @previous="showPreviousQuestion"
+        @next="showNextQuestion"
+        @submit="handleSubmit"
+      />
+    </view>
   </view>
 </template>
 
@@ -308,34 +366,21 @@ function handleSubmit() {
 .questionnaire-runner {
   display: flex;
   flex-direction: column;
-  gap: 32rpx;
   min-height: 70vh;
 }
 
-.questionnaire-runner__introduction {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  padding: 28rpx 30rpx;
-  border: 4rpx solid rgba(255, 211, 132, 0.24);
-  border-radius: 28rpx;
-  background: #FFFCF8;
-  box-shadow: 0 8rpx 0 rgba(0, 0, 0, 0.05);
-  color: #64748B;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.6;
+.questionnaire-runner__block {
+  display: block;
+  width: 100%;
 }
 
-.questionnaire-runner__introduction-title {
-  color: #1A202C;
-  font-size: 32rpx;
-  font-weight: 900;
+.questionnaire-runner__block--spaced {
+  margin-top: 32rpx;
 }
 
 .questionnaire-runner__validation {
   display: block;
-  margin-top: -10rpx;
+  margin-top: 22rpx;
   padding: 18rpx 20rpx;
   border: 4rpx solid rgba(255, 139, 139, 0.36);
   border-radius: 20rpx;

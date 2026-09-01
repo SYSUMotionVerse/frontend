@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
@@ -8,6 +8,7 @@ import TrainingHomeProgressOverview from '../../../components/training/TrainingH
 import TrainingReminderAuthorizationCard from '../../../components/training/TrainingReminderAuthorizationCard.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
+import { pickTrainingHomeQuote } from '../../../features/training/trainingHomeQuotes'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useReminderConsent } from '../../composables/useReminderConsent'
@@ -30,8 +31,10 @@ const trainingProgress = useTrainingProgress()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
 const isRefreshing = ref(false)
+const coachQuote = ref(pickTrainingHomeQuote())
 const hasLoadedReminderStatus = ref(false)
 let hasStartedPrimaryTabPrefetch = false
+let quoteRotationTimer: ReturnType<typeof setInterval> | undefined
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -43,8 +46,25 @@ const {
   coachCards
 } = useTrainingHomeProgressViewModel({
   progressState: trainingProgress.state,
-  displayName
+  coachQuote
 })
+
+function rotateCoachQuote() {
+  coachQuote.value = pickTrainingHomeQuote(coachQuote.value)
+}
+
+function startQuoteRotation() {
+  if (quoteRotationTimer) return
+  quoteRotationTimer = setInterval(rotateCoachQuote, 60_000)
+}
+
+function stopQuoteRotation() {
+  if (!quoteRotationTimer) return
+  clearInterval(quoteRotationTimer)
+  quoteRotationTimer = undefined
+}
+
+onBeforeUnmount(stopQuoteRotation)
 
 const trainingHints: Record<TrainingModality, string> = {
   wushu: '跟着示范完成一轮动作训练。',
@@ -115,6 +135,7 @@ onLoad((query) => {
 })
 
 onShow(async () => {
+  startQuoteRotation()
   await reminderReturn.resolvePending()
   if (reminderReturn.state.value.status === 'resolved') {
     store.setReminderSource('wechat-reminder')
@@ -137,6 +158,7 @@ onShow(async () => {
 
 async function handlePullDownRefresh() {
   if (isRefreshing.value) return
+  rotateCoachQuote()
   isRefreshing.value = true
   try {
     await Promise.all([
