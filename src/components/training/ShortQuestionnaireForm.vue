@@ -36,6 +36,7 @@ const questionSections: Array<{
   values: number[]
   lowLabel: string
   highLabel: string
+  neutralValue: number
 }> = [
   {
     field: 'feelingScale',
@@ -44,7 +45,8 @@ const questionSections: Array<{
     hint: '选择最符合你此刻运动感受的一项',
     values: Array.from({ length: 11 }, (_, index) => index - 5),
     lowLabel: '非常糟糕',
-    highLabel: '非常好'
+    highLabel: '非常好',
+    neutralValue: 0
   },
   {
     field: 'feltArousalScale',
@@ -53,7 +55,8 @@ const questionSections: Array<{
     hint: '选择最符合你此刻激活程度的一项',
     values: [1, 2, 3, 4, 5, 6],
     lowLabel: '低唤醒',
-    highLabel: '高唤醒'
+    highLabel: '高唤醒',
+    neutralValue: 3
   }
 ]
 
@@ -105,6 +108,15 @@ function handleFieldChange(field: RatingField, value: number) {
   form[field] = value
 }
 
+function sliderValue(field: RatingField, fallback: number) {
+  return form[field] ?? fallback
+}
+
+function handleSliderChange(field: RatingField, event: { detail?: { value?: number } }) {
+  const value = Number(event.detail?.value)
+  if (Number.isFinite(value)) handleFieldChange(field, value)
+}
+
 function scoreLabel(field: RatingField) {
   return form[field] !== null ? `已选 ${form[field]} 分` : '未选择'
 }
@@ -148,22 +160,33 @@ function handleSubmit() {
           <text class="short-questionnaire-form__question-score">{{ scoreLabel(section.field) }}</text>
         </view>
 
-        <view class="short-questionnaire-form__scores" role="radiogroup" :aria-label="section.title">
-          <button
+        <view class="short-questionnaire-form__scale">
+          <view class="short-questionnaire-form__ticks" aria-hidden="true">
+            <view
             v-for="value in section.values"
             :key="value"
-            class="short-questionnaire-form__score"
-            :class="{ 'short-questionnaire-form__score--selected': form[section.field] === value }"
-            type="button"
+              class="short-questionnaire-form__tick"
+              :class="{ 'short-questionnaire-form__tick--selected': form[section.field] === value }"
+            >
+              <text>{{ value }}</text>
+              <view class="short-questionnaire-form__tick-mark" />
+            </view>
+          </view>
+          <slider
+            class="short-questionnaire-form__slider"
+            :min="section.values[0]"
+            :max="section.values[section.values.length - 1]"
+            :step="1"
+            :value="sliderValue(section.field, section.neutralValue)"
             :disabled="isFormLocked"
-            :aria-label="`${section.title} ${value} 分`"
-            :aria-checked="form[section.field] === value"
-            role="radio"
-            hover-class="short-questionnaire-form__score--pressed"
-            @click="handleFieldChange(section.field, value)"
-          >
-            <text>{{ value }}</text>
-          </button>
+            active-color="#ff8b8b"
+            background-color="#e8e0d7"
+            block-color="#203042"
+            :block-size="22"
+            :aria-label="section.title"
+            @changing="handleSliderChange(section.field, $event)"
+            @change="handleSliderChange(section.field, $event)"
+          />
         </view>
         <view class="short-questionnaire-form__scale-labels">
           <text>{{ section.lowLabel }}</text>
@@ -238,10 +261,7 @@ function handleSubmit() {
   display: flex;
   width: 100%;
   flex-direction: column;
-  overflow: hidden;
-  border: 2rpx solid var(--checkin-line);
-  border-radius: 28rpx;
-  background: var(--checkin-surface);
+  gap: 28rpx;
   box-sizing: border-box;
   color: var(--checkin-ink);
 }
@@ -250,7 +270,11 @@ function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 10rpx;
-  padding: 40rpx 36rpx 32rpx;
+  padding: 34rpx 32rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.32);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
 
 .short-questionnaire-form__eyebrow {
@@ -280,18 +304,18 @@ function handleSubmit() {
 .short-questionnaire-form__questions {
   display: flex;
   flex-direction: column;
-  border-top: 2rpx solid var(--checkin-line);
+  gap: 24rpx;
 }
 
 .short-questionnaire-form__question {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  padding: 30rpx 36rpx;
-}
-
-.short-questionnaire-form__question + .short-questionnaire-form__question {
-  border-top: 2rpx solid var(--checkin-line);
+  gap: 30rpx;
+  padding: 30rpx 32rpx 28rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.28);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
 
 .short-questionnaire-form__question-head,
@@ -350,39 +374,53 @@ function handleSubmit() {
   white-space: nowrap;
 }
 
-.short-questionnaire-form__scores {
+.short-questionnaire-form__scale {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
+  flex-direction: column;
+  gap: 6rpx;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.short-questionnaire-form--submitted .short-questionnaire-form__scores {
+.short-questionnaire-form--submitted .short-questionnaire-form__scale {
   transform: scale(0.992);
 }
 
-.short-questionnaire-form__score {
-  display: inline-flex;
-  min-width: 0;
-  min-height: 88rpx;
-  flex: 1 1 72rpx;
+.short-questionnaire-form__ticks {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 18rpx;
+}
+
+.short-questionnaire-form__tick {
+  display: flex;
+  min-width: 24rpx;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0;
-  border: 2rpx solid #d9cec1;
-  border-radius: 18rpx;
-  background: var(--checkin-subtle-surface);
-  box-sizing: border-box;
-  color: #4c5c68;
-  font-size: 29rpx;
-  font-weight: 800;
+  gap: 8rpx;
+  color: #8a97a8;
+  font-size: 20rpx;
+  font-weight: 700;
   line-height: 1;
-  transition:
-    opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.short-questionnaire-form__tick--selected {
+  color: #c76b5b;
+  font-weight: 900;
+  transform: translateY(-2rpx);
+}
+
+.short-questionnaire-form__tick-mark {
+  width: 3rpx;
+  height: 10rpx;
+  border-radius: 999rpx;
+  background: currentColor;
+}
+
+.short-questionnaire-form__slider {
+  width: 100%;
+  margin: -6rpx 0 0;
 }
 
 .short-questionnaire-form__scale-labels {
@@ -393,36 +431,18 @@ function handleSubmit() {
   font-weight: 700;
 }
 
-.short-questionnaire-form__score::after,
 .short-questionnaire-form__primary-action::after {
   display: none;
-}
-
-.short-questionnaire-form__score--selected {
-  border-color: var(--checkin-ink);
-  background: var(--checkin-ink);
-  color: #fffaf4;
-}
-
-.short-questionnaire-form__score--pressed {
-  background: #eae0d4;
-}
-
-.short-questionnaire-form__score--selected.short-questionnaire-form__score--pressed {
-  background: #1e2a36;
-}
-
-.short-questionnaire-form__score[disabled] {
-  opacity: 0.56;
 }
 
 .short-questionnaire-form__actions {
   display: flex;
   flex-direction: column;
   gap: 18rpx;
-  padding: 28rpx 36rpx calc(36rpx + env(safe-area-inset-bottom));
-  border-top: 2rpx solid var(--checkin-line);
-  background: #f8f1e9;
+  padding: 28rpx 32rpx 32rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.28);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.94);
   transition: background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -544,10 +564,6 @@ function handleSubmit() {
     gap: 20rpx;
     padding-top: 24rpx;
     padding-bottom: 24rpx;
-  }
-
-  .short-questionnaire-form__score {
-    min-height: 80rpx;
   }
 }
 </style>

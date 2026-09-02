@@ -63,7 +63,8 @@ describe('immersive mini-program navigation', () => {
     expect(startup).toContain('<ImmersiveNavigationBar title="运动零食" />')
     expect(startup).toContain('每天一点，动出好状态')
     expect(startup).toContain('正在准备今日训练')
-    expect(feedback).toContain('<ImmersiveNavigationBar title="训练反馈" show-back />')
+    expect(feedback).toContain('page-title="训练反馈"')
+    expect(feedback).toContain('UniTrainingPageShell')
   })
 
   it('keeps every route on the shared immersive TitleBar implementation', () => {
@@ -78,7 +79,7 @@ describe('immersive mini-program navigation', () => {
       ['src/uni-app/pages/training/exercise-sets.vue', 'UniTrainingPageShell'],
       ['src/uni-app/pages/training/stair-session.vue', 'UniTrainingPageShell'],
       ['src/uni-app/pages/training/short-questionnaire.vue', 'UniTrainingPageShell'],
-      ['src/uni-app/pages/training/feedback.vue', 'ImmersiveNavigationBar'],
+      ['src/uni-app/pages/training/feedback.vue', 'UniTrainingPageShell'],
       ['src/uni-app/pages/notifications/index.vue', 'UniTrainingPageShell'],
       ['src/uni-app/pages/growth/index.vue', 'UniGrowthPageShell'],
       ['src/uni-app/pages/growth/adherence.vue', 'UniGrowthPageShell'],

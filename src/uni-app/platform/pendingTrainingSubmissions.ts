@@ -41,7 +41,11 @@ export interface PendingTrainingSubmissionStore {
   clear: () => void
 }
 
-const storageKey = 'sport-snack:pending-training-submissions'
+// Increment only when a release changes the durable submission contract in a
+// backward-incompatible way. A mismatched envelope is discarded atomically;
+// ordinary releases keep replaying the exact saved completion facts.
+export const pendingTrainingSubmissionStorageVersion = 1
+const storageKey = 'sport-snack:pending-training-submissions:versioned'
 const submissionTtlMs = 30 * 24 * 60 * 60 * 1000
 // Capacity must cover at least 30 days at 3 sessions/day = 90 entries.
 const maxPendingSubmissions = 90
@@ -55,6 +59,11 @@ const maxQualityScore = 100
 interface PendingTrainingSubmissionStoreOptions {
   now?: () => Date
   maxClockSkewMs?: number
+}
+
+interface PendingTrainingSubmissionEnvelope {
+  version: number
+  submissions: PendingTrainingSubmission[]
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -164,8 +173,18 @@ export function createPendingTrainingSubmissionStore(
     }
 
     const stored = uni.getStorageSync(storageKey)
-    const sanitized = sanitizeSubmissions(stored, now(), maxClockSkewMs)
-    if (!Array.isArray(stored) || sanitized.length !== stored.length) {
+    const isCurrentEnvelope = Boolean(
+      stored
+      && typeof stored === 'object'
+      && (stored as Partial<PendingTrainingSubmissionEnvelope>).version
+        === pendingTrainingSubmissionStorageVersion
+      && Array.isArray((stored as Partial<PendingTrainingSubmissionEnvelope>).submissions)
+    )
+    const storedSubmissions = isCurrentEnvelope
+      ? (stored as PendingTrainingSubmissionEnvelope).submissions
+      : []
+    const sanitized = sanitizeSubmissions(storedSubmissions, now(), maxClockSkewMs)
+    if (!isCurrentEnvelope || sanitized.length !== storedSubmissions.length) {
       write(sanitized)
     }
     return sanitized
@@ -177,7 +196,11 @@ export function createPendingTrainingSubmissionStore(
       return
     }
 
-    uni.setStorageSync(storageKey, submissions)
+    const envelope: PendingTrainingSubmissionEnvelope = {
+      version: pendingTrainingSubmissionStorageVersion,
+      submissions
+    }
+    uni.setStorageSync(storageKey, envelope)
   }
 
   function clear() {
@@ -190,7 +213,10 @@ export function createPendingTrainingSubmissionStore(
       uni.removeStorageSync(storageKey)
       return
     }
-    uni.setStorageSync(storageKey, [])
+    uni.setStorageSync(storageKey, {
+      version: pendingTrainingSubmissionStorageVersion,
+      submissions: []
+    } satisfies PendingTrainingSubmissionEnvelope)
   }
 
   return {

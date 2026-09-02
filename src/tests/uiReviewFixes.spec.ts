@@ -246,8 +246,9 @@ describe('ui review fixes', () => {
     expect(growthIndexPage).toContain('dock-tab="growth"')
     expect(growthIndexPage).toContain('TrainingHomeHeader')
     expect(shortQuestionnairePage).toContain(':show-dock="false"')
-    expect(feedbackPage).toContain('feedback-page__title')
-    expect(feedbackPage).not.toContain('UniTrainingPageShell')
+    expect(feedbackPage).toContain('page-title="训练反馈"')
+    expect(feedbackPage).toContain('UniTrainingPageShell')
+    expect(feedbackPage).toContain('show-decorations')
   })
 
   it('keeps home high-level and reserves modality details for the playground', () => {
@@ -859,8 +860,9 @@ describe('ui review fixes', () => {
       'utf8'
     )
 
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__scores')
-    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__score')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__scale')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__slider')
+    expect(shortQuestionnaireForm).toContain('short-questionnaire-form__tick')
     expect(shortQuestionnaireForm).not.toContain('rating-option')
     expect(longQuestionnaireForm).not.toContain('rating-option--rounded')
   })

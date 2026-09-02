@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createPendingTrainingSubmissionStore } from '../uni-app/platform/pendingTrainingSubmissions'
+import {
+  createPendingTrainingSubmissionStore,
+  pendingTrainingSubmissionStorageVersion
+} from '../uni-app/platform/pendingTrainingSubmissions'
+
+function versioned(submissions: unknown[]) {
+  return { version: pendingTrainingSubmissionStorageVersion, submissions }
+}
+
+function expectVersioned(submissions: unknown[]) {
+  return { version: pendingTrainingSubmissionStorageVersion, submissions }
+}
 
 describe('pending training submissions', () => {
   afterEach(() => {
@@ -107,7 +118,7 @@ describe('pending training submissions', () => {
 
   it('drops malformed and legacy entries during read', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // valid visual entry
       {
         kind: 'visual',
@@ -132,7 +143,7 @@ describe('pending training submissions', () => {
       'string',
       null,
       42
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -145,12 +156,12 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['valid'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
   })
 
   it('expires entries older than the 30-day TTL', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       {
         kind: 'visual',
         sessionId: 'recent',
@@ -165,7 +176,7 @@ describe('pending training submissions', () => {
         durationSeconds: 30,
         queuedAt: new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString()
       }
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -178,7 +189,7 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['recent'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
   })
 
   it('clears all entries via the clear API', () => {
@@ -206,7 +217,7 @@ describe('pending training submissions', () => {
 
   it('rejects entries with future-dated queuedAt beyond the clock-skew allowance', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // valid recent entry
       {
         kind: 'visual',
@@ -223,7 +234,7 @@ describe('pending training submissions', () => {
         durationSeconds: 30,
         queuedAt: '2026-07-18T12:10:00.000Z'
       }
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -239,12 +250,12 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['valid'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
   })
 
   it('keeps entries within the clock-skew allowance', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // entry 2 minutes in the future (within 5 min skew)
       {
         kind: 'visual',
@@ -253,7 +264,7 @@ describe('pending training submissions', () => {
         durationSeconds: 30,
         queuedAt: '2026-07-18T12:02:00.000Z'
       }
-    ]
+    ])
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
       setStorageSync: vi.fn()
@@ -270,7 +281,7 @@ describe('pending training submissions', () => {
 
   it('rejects entries with nonpositive durationSeconds', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // valid
       {
         kind: 'visual',
@@ -305,7 +316,7 @@ describe('pending training submissions', () => {
         summary: {},
         queuedAt: '2026-07-18T11:00:00.000Z'
       }
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -318,12 +329,12 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['valid'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
   })
 
   it('rejects entries with negative completedIntervals', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // valid stairs entry
       {
         kind: 'stairs',
@@ -354,7 +365,7 @@ describe('pending training submissions', () => {
         summary: {},
         queuedAt: '2026-07-18T11:00:00.000Z'
       }
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -367,12 +378,12 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['valid'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
   })
 
   it('rejects entries with qualityScore outside the 0-100 domain', () => {
     const now = new Date('2026-07-18T12:00:00.000Z')
-    const stored: unknown = [
+    const stored: unknown = versioned([
       // valid stairs entry at boundary
       {
         kind: 'stairs',
@@ -423,7 +434,7 @@ describe('pending training submissions', () => {
         summary: {},
         queuedAt: '2026-07-18T11:00:00.000Z'
       }
-    ]
+    ])
     let written: unknown = null
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => stored),
@@ -436,6 +447,28 @@ describe('pending training submissions', () => {
     const items = store.list()
 
     expect(items.map(item => item.sessionId)).toEqual(['valid-zero', 'valid-hundred'])
-    expect(written).toEqual(items)
+    expect(written).toEqual(expectVersioned(items))
+  })
+
+  it('discards queued submissions when a breaking storage version changes', () => {
+    const now = new Date('2026-07-18T12:00:00.000Z')
+    const stored: unknown = {
+      version: pendingTrainingSubmissionStorageVersion - 1,
+      submissions: [{
+        kind: 'visual',
+        sessionId: 'obsolete-session',
+        modality: 'hiit',
+        durationSeconds: 30,
+        queuedAt: '2026-07-18T11:00:00.000Z'
+      }]
+    }
+    let written: unknown = null
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => stored),
+      setStorageSync: vi.fn((_key: string, value: unknown) => { written = value })
+    })
+
+    expect(createPendingTrainingSubmissionStore({ now: () => now }).list()).toEqual([])
+    expect(written).toEqual(expectVersioned([]))
   })
 })

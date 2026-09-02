@@ -109,7 +109,7 @@ onMounted(() => {
 }
 
 .growth-shell--no-dock {
-  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+  padding-bottom: 0;
 }
 
 .growth-shell--refreshable {

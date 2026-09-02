@@ -16,7 +16,6 @@ const state = shallowRef<TrainingProgressState>({ status: 'loading' })
 const progressCache = createRequestCache({
   ttlMs: 60_000,
   async load() {
-    await studentBackendSync.retryPendingTrainingSubmissions()
     const dto = await studentBackendSync.loadTrainingProgress()
     if (dto === null) {
       throw new Error('Backend training progress is disabled.')

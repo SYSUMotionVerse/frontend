@@ -76,7 +76,8 @@ describe('student growth summaries', () => {
         modalityLabel: '武术训练',
         svgName: 'stable-star',
         shareTitle: '我在 Sport Snack 获得了「动作稳定星」',
-        sharePath: '/pages/access/startup'
+        sharePath: '/pages/access/startup',
+        earnedCount: 1
       }
     ])
   })

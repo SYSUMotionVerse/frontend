@@ -1,3 +1,5 @@
+import type { ScoredActionResult } from '../domain/training/actionScoringTypes'
+
 export type CheckpointKey = 'baseline' | 'week4' | 'week8' | 'week12'
 
 export type TrainingModality = 'wushu' | 'hiit' | 'stair'
@@ -42,6 +44,7 @@ export interface SessionScoreDetails {
   dimensions: Array<{ key: string, label: string, score: number }>
   highlights: string[]
   warnings: string[]
+  actionResults?: ScoredActionResult[]
   chartSnapshot?: {
     radar?: Array<{ key: string, label: string, score: number }>
   }

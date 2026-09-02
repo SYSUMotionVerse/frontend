@@ -4,6 +4,11 @@ import type { SessionBadge } from '../../features/growth/summary'
 defineProps<{
   badges: SessionBadge[]
 }>()
+
+function badgeScore(scoreLabel: string) {
+  const score = Number.parseInt(scoreLabel, 10)
+  return Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0
+}
 </script>
 
 <template>
@@ -22,28 +27,40 @@ defineProps<{
         :key="badge.id"
         :class="['session-badge', `session-badge--${badge.level}`]"
       >
-        <view class="session-badge__svg" :class="`session-badge__svg--${badge.svgName}`">
-          <view class="session-badge__svg-ring" />
-          <text class="session-badge__svg-mark">
-            {{ badge.svgName === 'full-power' ? '冠' : badge.svgName === 'stable-star' ? '星' : badge.svgName === 'rhythm-spark' ? '火' : '芽' }}
-          </text>
+        <view class="session-badge__topline">
+          <view class="session-badge__chart" aria-label="本次质量得分">
+            <view class="session-badge__chart-track">
+              <view
+                class="session-badge__chart-fill"
+                :class="`session-badge__chart-fill--${badge.level}`"
+                :style="{ height: `${badgeScore(badge.scoreLabel)}%` }"
+              />
+            </view>
+            <view class="session-badge__chart-copy">
+              <text class="session-badge__chart-value">{{ badgeScore(badge.scoreLabel) }}</text>
+              <text class="session-badge__chart-unit">质量分</text>
+            </view>
+          </view>
+
+          <view class="session-badge__body">
+            <text class="session-badge__title">{{ badge.title }}</text>
+            <text class="session-badge__meta">{{ badge.modalityLabel }}</text>
+            <text class="session-badge__count">累计获得 {{ badge.earnedCount }} 次</text>
+          </view>
         </view>
 
-        <view class="session-badge__body">
-          <text class="session-badge__title">{{ badge.title }}</text>
-          <text class="session-badge__meta">{{ badge.modalityLabel }} · {{ badge.scoreLabel }}</text>
+        <view class="session-badge__footer">
           <text class="session-badge__description">{{ badge.description }}</text>
+          <button
+            class="session-badge__share"
+            type="button"
+            open-type="share"
+            :data-share-title="badge.shareTitle"
+            :data-share-path="badge.sharePath"
+          >
+            <text>分享</text>
+          </button>
         </view>
-
-        <button
-          class="session-badge__share"
-          type="button"
-          open-type="share"
-          :data-share-title="badge.shareTitle"
-          :data-share-path="badge.sharePath"
-        >
-          <text>分享徽章</text>
-        </button>
       </view>
     </view>
 
@@ -97,21 +114,21 @@ defineProps<{
 
 .session-badges__rail {
   display: flex;
-  gap: 24rpx;
+  gap: 16rpx;
   overflow-x: auto;
   padding-bottom: 8rpx;
 }
 
 .session-badge {
-  flex: 0 0 420rpx;
+  flex: 0 0 336rpx;
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
-  padding: 28rpx;
-  border-radius: 40rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.92);
+  gap: 16rpx;
+  padding: 20rpx;
+  border-radius: 28rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.26);
   background: #fffaf2;
-  box-shadow: 0 10rpx 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8rpx 18rpx rgba(71, 56, 39, 0.05);
 }
 
 .session-badge--platinum {
@@ -130,84 +147,135 @@ defineProps<{
   background: linear-gradient(145deg, #fff0df 0%, #fffaf2 100%);
 }
 
-.session-badge__svg {
-  position: relative;
-  display: inline-flex;
-  width: 132rpx;
-  height: 132rpx;
+.session-badge__topline,
+.session-badge__chart,
+.session-badge__chart-copy,
+.session-badge__footer {
+  display: flex;
+}
+
+.session-badge__topline {
   align-items: center;
+  gap: 16rpx;
+}
+
+.session-badge__chart {
+  width: 88rpx;
+  height: 104rpx;
+  flex: none;
+  align-items: flex-end;
   justify-content: center;
-  border-radius: 38rpx;
-  overflow: hidden;
+  gap: 8rpx;
+  padding: 10rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.72);
+  box-sizing: border-box;
 }
 
-.session-badge__svg--full-power {
-  background: linear-gradient(145deg, #89d6ff 0%, #ffd384 100%);
-}
-
-.session-badge__svg--stable-star {
-  background: linear-gradient(145deg, #ffd384 0%, #ffad88 100%);
-}
-
-.session-badge__svg--rhythm-spark {
-  background: linear-gradient(145deg, #a8e6cf 0%, #89d6ff 100%);
-}
-
-.session-badge__svg--steady-seed {
-  background: linear-gradient(145deg, #d9b38c 0%, #a8e6cf 100%);
-}
-
-.session-badge__svg-ring {
-  position: absolute;
-  inset: 20rpx;
-  border: 8rpx solid rgba(255, 255, 255, 0.82);
-  border-radius: 9999px;
-}
-
-.session-badge__svg-mark {
+.session-badge__chart-track {
   position: relative;
-  z-index: 1;
-  color: #1A202C;
-  font-size: 46rpx;
+  width: 18rpx;
+  height: 76rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e7eef3;
+}
+
+.session-badge__chart-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-height: 4rpx;
+  border-radius: inherit;
+  background: #ff8b8b;
+}
+
+.session-badge__chart-fill--platinum { background: #5aa996; }
+.session-badge__chart-fill--gold { background: #d49a42; }
+.session-badge__chart-fill--silver { background: #5a9bc8; }
+.session-badge__chart-fill--bronze { background: #c76b5b; }
+
+.session-badge__chart-copy {
+  flex-direction: column;
+  align-items: center;
+  gap: 2rpx;
+}
+
+.session-badge__chart-value {
+  color: #203042;
+  font-size: 28rpx;
   font-weight: 900;
+  line-height: 1;
+}
+
+.session-badge__chart-unit {
+  color: #8a97a8;
+  font-size: 16rpx;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .session-badge__body {
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
+  min-width: 0;
+  flex: 1;
+  gap: 8rpx;
 }
 
 .session-badge__title {
   color: #1A202C;
-  font-size: 34rpx;
+  font-size: 28rpx;
   font-weight: 900;
 }
 
 .session-badge__meta {
   color: #2B7CB8;
-  font-size: 24rpx;
+  font-size: 21rpx;
   font-weight: 900;
 }
 
 .session-badge__description,
 .session-badges__empty-copy {
   color: #64748B;
-  font-size: 25rpx;
+  font-size: 20rpx;
   font-weight: 700;
   line-height: 1.55;
 }
 
+.session-badge__footer {
+  align-items: flex-end;
+  gap: 12rpx;
+}
+
+.session-badge__count {
+  color: #7a8798;
+  font-size: 19rpx;
+  font-weight: 700;
+}
+
+.session-badge__description {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .session-badge__share {
   display: inline-flex;
-  min-height: 72rpx;
+  min-width: 82rpx;
+  min-height: 56rpx;
   align-items: center;
   justify-content: center;
   border: none;
   border-radius: 9999px;
   background: #1A202C;
   color: #fffaf2;
-  font-size: 25rpx;
+  padding: 0 18rpx;
+  font-size: 21rpx;
   font-weight: 900;
 }
 

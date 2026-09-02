@@ -63,6 +63,7 @@ async function handlePullDownRefresh() {
 
 <style scoped>
 .detail-page__card { margin-bottom: 28rpx; border: 2rpx solid rgba(255, 211, 132, 0.3); border-radius: 28rpx; padding: 32rpx; background: rgba(255, 255, 255, 0.94); }
+.detail-page__card:last-child { margin-bottom: 0; }
 .detail-page__heading { margin: 0 0 20rpx; color: #203042; font-size: 30rpx; }
 .detail-page__hint { margin: 0 0 20rpx; color: #718096; font-size: 22rpx; }
 </style>

@@ -58,6 +58,7 @@ describe('growth backend read models', () => {
         id: 'stair-2',
         modality: 'stair',
         date: '2026-04-11',
+        durationSeconds: 26,
         summary: '节奏稳定。',
         qualityScore: 81
       },
@@ -65,6 +66,7 @@ describe('growth backend read models', () => {
         id: 'visual-1',
         modality: 'wushu',
         date: '2026-04-11',
+        durationSeconds: 30,
         summary: '动作基本标准，注意细节。',
         qualityScore: 89,
         scoreDetails: {
@@ -115,6 +117,28 @@ describe('growth backend read models', () => {
         }]
       ).map(session => session.qualityScore)
     ).toEqual([null, null])
+  })
+
+  it('uses completion time for history ordering and calendar dates', async () => {
+    const { mapBackendTrainingHistory } = await import('../uni-app/api/growthBackendModels')
+
+    const [session] = mapBackendTrainingHistory([{
+      id: 5,
+      video: 7,
+      duration: 30,
+      score: 0,
+      comment: '训练已完成。',
+      status: 'COMPLETED',
+      completed_at: '2026-09-01T20:00:00+08:00',
+      created_at: '2026-09-02T09:00:00+08:00',
+      video_info: {
+        id: 7,
+        title: '马步冲拳',
+        exercise_type: 'MARTIAL_ARTS'
+      }
+    }], [])
+
+    expect(session?.date).toBe('2026-09-01')
   })
 
   it('maps backend visual score trend data into chart models', async () => {
@@ -180,6 +204,47 @@ describe('growth backend read models', () => {
       scoreLabel: '88 分',
       modalityLabel: 'HIIT 训练'
     })
+  })
+
+  it('does not render the same score-tier badge more than once', async () => {
+    const { mapBackendAchievementAwards } = await import('../uni-app/api/growthBackendModels')
+    const result = mapBackendAchievementAwards({
+      milestones: [],
+      session_badges: [1, 2, 3, 4].map(index => ({
+        code: 'session_bronze',
+        training_session_id: `zero-${index}`,
+        modality: 'MARTIAL_ARTS' as const,
+        local_date: `2026-09-0${index}`,
+        score: 0,
+        awarded_at: `2026-09-0${index}T10:00:00Z`
+      }))
+    })
+
+    expect(result.sessionBadges).toHaveLength(1)
+    expect(result.sessionBadges[0]?.id).toBe('zero-4-badge')
+    expect(result.sessionBadges[0]?.earnedCount).toBe(4)
+  })
+
+  it('converts UTC completion timestamps to the Shanghai history date', async () => {
+    const { mapBackendTrainingHistory } = await import('../uni-app/api/growthBackendModels')
+
+    const [session] = mapBackendTrainingHistory([{
+      id: 6,
+      video: 7,
+      duration: 30,
+      score: 70,
+      comment: '离线补交。',
+      status: 'COMPLETED',
+      completed_at: '2026-09-01T16:30:00Z',
+      created_at: '2026-09-02T08:00:00Z',
+      video_info: {
+        id: 7,
+        title: '马步冲拳',
+        exercise_type: 'MARTIAL_ARTS'
+      }
+    }], [])
+
+    expect(session?.date).toBe('2026-09-02')
   })
 
   it('maps backend psychology records into growth assessment history entries', async () => {

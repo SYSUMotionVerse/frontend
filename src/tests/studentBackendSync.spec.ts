@@ -557,7 +557,8 @@ describe('student backend sync orchestration', () => {
       sessionId: 'durable-visual-session',
       modality: 'wushu',
       durationSeconds: 30,
-      scoreUnavailableReason: 'camera_permission_denied'
+      scoreUnavailableReason: 'camera_permission_denied',
+      completedAt: '2026-09-01T16:30:00.000Z'
     })).rejects.toThrow('request timeout')
     expect(pending.entries.has('durable-visual-session')).toBe(true)
 
@@ -571,7 +572,8 @@ describe('student backend sync orchestration', () => {
     )
     expect(createExerciseRecord.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
       training_session_id: 'durable-visual-session',
-      score_unavailable_reason: 'camera_permission_denied'
+      score_unavailable_reason: 'camera_permission_denied',
+      client_completed_at: '2026-09-01T16:30:00.000Z'
     }))
     expect(pending.entries.size).toBe(0)
   })

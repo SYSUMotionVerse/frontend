@@ -20,7 +20,7 @@ describe('growth dock clearance', () => {
     expect(shell).not.toMatch(/\.growth-shell\s*\{[^}]*padding:[^;]*var\(--floating-dock-content-clearance/)
     expect(shell).toMatch(/\.growth-shell__dock-clearance\s*\{[\s\S]*flex:\s*0 0 var\(--floating-dock-content-clearance, 100px\);/)
     expect(shell).toContain("'growth-shell--no-dock': !props.showDock")
-    expect(shell).toMatch(/\.growth-shell--no-dock\s*\{[\s\S]*padding-bottom:\s*calc\(48rpx \+ env\(safe-area-inset-bottom\)\);/)
+    expect(shell).toMatch(/\.growth-shell--no-dock\s*\{[\s\S]*padding-bottom:\s*0;/)
     expect(page).toMatch(/\.growth-page__section-shell--explore \.growth-page__section-head\s*\{[\s\S]*margin-bottom:\s*12rpx;/)
     expect(page).toMatch(/\.growth-page__section-title\s*\{[\s\S]*font-size:\s*30rpx;/)
     expect(page).toMatch(/\.growth-page__exploration-title\s*\{[\s\S]*font-size:\s*28rpx;/)

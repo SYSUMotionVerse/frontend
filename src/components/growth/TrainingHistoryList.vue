@@ -1,9 +1,32 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+import { computed, ref } from 'vue'
 import type { GrowthTrainingHistoryItem } from '../../uni-app/api/studentBackendTypes'
 
-defineProps<{
+const props = defineProps<{
   sessions: GrowthTrainingHistoryItem[]
 }>()
+
+const visibleCount = ref(3)
+const visibleSessions = computed(() => props.sessions.slice(0, visibleCount.value))
+const hasMore = computed(() => visibleCount.value < props.sessions.length)
+
+const modalityLabels: Record<GrowthTrainingHistoryItem['modality'], string> = {
+  wushu: '武术',
+  hiit: '自重抗阻',
+  stair: '跑楼梯'
+}
+
+function formatDuration(durationSeconds?: number | null) {
+  if (!durationSeconds) return '时长暂无'
+  const minutes = Math.floor(durationSeconds / 60)
+  const seconds = Math.round(durationSeconds % 60)
+  return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`
+}
+
+function showMore() {
+  visibleCount.value += 3
+}
 </script>
 
 <template>
@@ -11,15 +34,28 @@ defineProps<{
     <text v-if="sessions.length === 0" class="history__empty block">暂无已完成训练。</text>
 
     <view v-else class="history__list">
-      <view v-for="session in sessions" :key="session.id" class="history-item">
-        <text class="history-item__headline block">
-          {{ session.modality.toUpperCase() }} · {{ session.date }}
-        </text>
+      <view v-for="session in visibleSessions" :key="session.id" class="history-item">
+        <view class="history-item__head">
+          <view class="history-item__identity">
+            <text class="history-item__headline">{{ modalityLabels[session.modality] }}</text>
+            <text class="history-item__date">{{ session.date }}</text>
+          </view>
+          <view class="history-item__score">
+            <text class="history-item__score-value">{{ session.qualityScore === null ? '—' : session.qualityScore }}</text>
+            <text class="history-item__score-label">质量分</text>
+          </view>
+        </view>
         <text class="history-item__subline block">{{ session.summary }}</text>
-        <text class="history-item__meta block">
-          {{ session.qualityScore === null ? '质量分：暂无评分' : `质量分：${session.qualityScore}` }}
-        </text>
+        <view class="history-item__meta">
+          <text>训练时长</text>
+          <text>{{ formatDuration(session.durationSeconds) }}</text>
+        </view>
       </view>
+
+      <button v-if="hasMore" class="history__more" type="button" @click="showMore">
+        <uni-icons type="bottom" size="18" color="#718096" />
+        <text>查看更多</text>
+      </button>
     </view>
   </view>
 </template>
@@ -39,39 +75,101 @@ defineProps<{
 .history__list {
   display: flex;
   flex-direction: column;
-  gap: 32rpx;
+  gap: 18rpx;
   margin: 0;
   padding: 0;
 }
 
 .history-item {
-  border-radius: 48rpx;
-  border: 8rpx solid rgba(137, 207, 255, 0.2);
-  background: #fff;
-  padding: 40rpx;
-  box-shadow: 0 12rpx 0px rgba(0, 0, 0, 0.04);
+  border-radius: 26rpx;
+  border: 2rpx solid rgba(137, 207, 255, 0.28);
+  background: #fffdf9;
+  padding: 24rpx;
+  box-shadow: 0 8rpx 18rpx rgba(71, 56, 39, 0.04);
+}
+
+.history-item__head,
+.history-item__identity,
+.history-item__score,
+.history-item__meta,
+.history__more {
+  display: flex;
+}
+
+.history-item__head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.history-item__identity,
+.history-item__score {
+  flex-direction: column;
+}
+
+.history-item__identity { gap: 6rpx; }
+
+.history-item__score {
+  min-width: 74rpx;
+  align-items: flex-end;
+  gap: 2rpx;
 }
 
 .history-item__headline {
   margin: 0;
   color: #1A202C;
   font-weight: 900;
-  font-size: 32rpx;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 30rpx;
+  line-height: 1.25;
+}
+
+.history-item__date,
+.history-item__score-label {
+  color: #8a97a8;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.history-item__score-value {
+  color: #ff7d7d;
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .history-item__subline {
-  margin: 16rpx 0 0;
+  margin: 18rpx 0 0;
   color: #64748B;
-  font-size: 28rpx;
+  font-size: 23rpx;
   font-weight: 600;
 }
 
 .history-item__meta {
-  margin: 16rpx 0 0;
-  color: #FF8B8B;
-  font-size: 26rpx;
-  font-weight: 900;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 18rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx solid rgba(226, 232, 240, 0.86);
+  color: #718096;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.history__more {
+  min-height: 68rpx;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  margin: 2rpx 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #718096;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.history__more::after {
+  display: none;
 }
 </style>

@@ -6,6 +6,7 @@ import type {
   SessionRecord,
   WeeklyAdherenceState
 } from './types'
+import { toShanghaiDate } from './shanghaiTime'
 import { buildSessionBadges, type SessionBadge } from './sessionBadges'
 
 export interface GrowthSummaryCard {
@@ -76,7 +77,9 @@ export type GrowthStateSource = {
 }
 
 export function buildGrowthSummary(state: GrowthStateSource): GrowthSummaryModel {
-  const completedSessions = state.sessions.filter(session => session.completed)
+  const completedSessions = state.sessions.filter(session => (
+    session.completed && session.analysis.qualityScore !== null
+  ))
   const validCheckInSessions = completedSessions.filter(session => session.validCheckInApplied)
   const latestSession = getLatestSession(completedSessions)
   const latestAssessment = getLatestAssessment(state.longQuestionnaires)
@@ -247,13 +250,11 @@ function buildAdherenceCalendar(sessions: readonly SessionRecord[]): GrowthCalen
     return accumulator
   }, {})
 
-  const today = new Date()
+  const now = Date.now()
   const calendar: GrowthCalendarDay[] = []
 
   for (let offset = 27; offset >= 0; offset -= 1) {
-    const date = new Date(today)
-    date.setDate(today.getDate() - offset)
-    const isoDate = toIsoDate(date)
+    const isoDate = toShanghaiDate(now - offset * 24 * 60 * 60 * 1000)
     const completedCount = sessionByDate[isoDate] ?? 0
 
     calendar.push({

@@ -109,6 +109,8 @@ async function handlePullDownRefresh() {
   margin-bottom: 28rpx;
 }
 
+.detail-page__card:last-child { margin-bottom: 0; }
+
 .detail-page__stats {
   display: flex;
   flex-wrap: wrap;

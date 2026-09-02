@@ -30,6 +30,8 @@ type TrainingSessionInput = {
   qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
+  completedAt?: string
+  countsAsCompletion?: boolean
   scoreDetails?: SessionAnalysis['scoreDetails']
 }
 

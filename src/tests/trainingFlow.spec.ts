@@ -25,6 +25,36 @@ describe('student training and adherence flow', () => {
     expect(nextState.sessions[0]?.analysis.qualityScore).toBe(34)
   })
 
+  it('keeps a no-body result in history without counting it as completion', async () => {
+    const { completeGuidedSession } = await loadTrainingModule()
+    const state = createInitialStudentState()
+
+    const nextState = completeGuidedSession(state, {
+      sessionId: 'no-body-session',
+      modality: 'wushu',
+      qualityScore: null,
+      summary: '未识别到人体，暂无评分',
+      capturedBy: 'camera',
+      completedAt: '2026-09-01T16:30:00.000Z',
+      countsAsCompletion: false
+    })
+
+    expect(nextState.sessions).toHaveLength(1)
+    expect(nextState.sessions[0]).toMatchObject({
+      id: 'no-body-session',
+      date: '2026-09-02',
+      completed: true,
+      validCheckInApplied: false,
+      analysis: {
+        qualityScore: null,
+        summary: '未识别到人体，暂无评分'
+      }
+    })
+    expect(nextState.dailyAdherence.rawSessions).toBe(0)
+    expect(nextState.dailyAdherence.validCheckIns).toBe(0)
+    expect(nextState.dailyAdherence.goalReached).toBe(false)
+  })
+
   it('caps valid daily check-ins at three', async () => {
     const { completeGuidedSession } = await loadTrainingModule()
 

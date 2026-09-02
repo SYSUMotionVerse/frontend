@@ -15,6 +15,7 @@ export interface SessionBadge {
   svgName: SessionBadgeSvgName
   shareTitle: string
   sharePath: string
+  earnedCount: number
 }
 
 export interface SessionBadgeHistoryItem {
@@ -22,6 +23,7 @@ export interface SessionBadgeHistoryItem {
   modality: TrainingModality
   date: string
   qualityScore: number | null
+  earnedCount?: number
 }
 
 const MODALITY_LABELS: Record<TrainingModality, string> = {
@@ -47,7 +49,8 @@ export function buildSessionBadge(session: SessionRecord): SessionBadge {
       modalityLabel: MODALITY_LABELS[session.modality],
       svgName: badge.svgName,
       shareTitle: '我完成了一次 Sport Snack 训练',
-      sharePath: '/pages/access/startup'
+      sharePath: '/pages/access/startup',
+      earnedCount: 0
     }
   }
 
@@ -61,25 +64,26 @@ export function buildSessionBadge(session: SessionRecord): SessionBadge {
     modalityLabel: MODALITY_LABELS[session.modality],
     svgName: badge.svgName,
     shareTitle: `我在 Sport Snack 获得了「${badge.title}」`,
-    sharePath: '/pages/access/startup'
+    sharePath: '/pages/access/startup',
+    earnedCount: 1
   }
 }
 
 export function buildSessionBadges(sessions: readonly SessionRecord[], limit = 6): SessionBadge[] {
-  return sessions
-    .filter(session => session.completed)
+  return dedupeBadges(sessions
+    .filter(session => session.completed && session.analysis.qualityScore !== null)
     .map(buildSessionBadge)
-    .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate))
-    .slice(0, limit)
+    .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate)), limit)
 }
 
 export function buildSessionBadgesFromHistory(
   sessions: readonly SessionBadgeHistoryItem[],
   limit = 6
 ): SessionBadge[] {
-  return sessions
+  return dedupeBadges(sessions
     .filter((session): session is SessionBadgeHistoryItem & { qualityScore: number } =>
       session.qualityScore !== null)
+    .sort((left, right) => right.date.localeCompare(left.date))
     .map(session => {
       const score = Math.round(session.qualityScore)
       const badge = resolveBadgeDefinition(score)
@@ -94,11 +98,23 @@ export function buildSessionBadgesFromHistory(
         modalityLabel: MODALITY_LABELS[session.modality],
         svgName: badge.svgName,
         shareTitle: `我在 Sport Snack 获得了「${badge.title}」`,
-        sharePath: '/pages/access/startup'
+        sharePath: '/pages/access/startup',
+        earnedCount: session.earnedCount ?? 1
       }
-    })
-    .sort((left, right) => right.sessionDate.localeCompare(left.sessionDate))
-    .slice(0, limit)
+    }), limit)
+}
+
+function dedupeBadges(badges: SessionBadge[], limit: number) {
+  const unique = new Map<SessionBadgeLevel, SessionBadge>()
+  for (const badge of badges) {
+    const existing = unique.get(badge.level)
+    if (existing) {
+      existing.earnedCount += badge.earnedCount
+    } else {
+      unique.set(badge.level, { ...badge })
+    }
+  }
+  return [...unique.values()].slice(0, limit)
 }
 
 export function resolveModalityLabel(modality: TrainingModality): string {

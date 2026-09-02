@@ -218,11 +218,22 @@ function buildActionMotion(angleFrames: PoseAngleFrame[]): ActionMotion | null {
   }
 }
 
-function buildSessionScoringResult(
+export function buildSessionScoringResult(
   actionScores: ScoredActionResult[],
   scoringWarnings: string[],
   expectedItemIds: number[]
 ) {
+  const hasScoredAction = actionScores.some(
+    action => Object.keys(action.angleDetails).length > 0
+  )
+  if (!hasScoredAction) {
+    return {
+      score: undefined,
+      summary: '未识别到人体，暂无评分',
+      scoreDetails: undefined,
+      scoreUnavailableReason: '未识别到人体，暂无评分'
+    }
+  }
   const aggregate = aggregateActionScores(
     actionScores,
     scoringWarnings,
@@ -242,6 +253,7 @@ function buildSessionScoringResult(
     dimensions: aggregate.dimensions,
     highlights: aggregate.highlights,
     warnings: aggregate.warnings,
+    actionResults: actionScores,
     chartSnapshot: {
       radar: aggregate.dimensions
     }
@@ -279,7 +291,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const playbackState = shallowRef<VisualTrainingPlaybackState>('idle')
 
   // ── Tutorial mode state ──
-  const tutorialMode = shallowRef(false)
+  // This route always enters through action guidance. Keep the first rendered
+  // frame in tutorial mode while the arrangement request is still in flight.
+  const tutorialMode = shallowRef(true)
   const tutorialIndex = shallowRef(0)
   const tutorialText = shallowRef('')
   const tutorialRecords = shallowRef<ExerciseRecordBrief[]>([])
@@ -333,6 +347,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   let acceptingPoseFrames = false
   let activeActionStartedAtMs = 0
   let resultStored = false
+  let resultCountsAsCompletion = false
   let startedMediaGuidanceToken = ''
   let moduleTransitionGeneration = 0
   let moduleTransitionInFlight = false
@@ -1011,9 +1026,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     if (!motion) {
       const warning = `${item.video.title}未采集到有效姿态角度，本动作记为 0 分。`
       recordScoringWarning(warning)
-      // Not entering the camera frame is a measurable training outcome, not
-      // a submission error. Emit a complete signed action result so test
-      // sessions and real no-show attempts can still be stored deterministically.
+      // Preserve the missing action as a zero inside a partially scored
+      // session. If every action is missing, the session remains unscored.
       actionScores.value = [
         ...actionScores.value.filter(action => action.itemId !== item.id),
         buildMissingPoseActionResult(item, standard, frames.length)
@@ -1153,7 +1167,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     videoDurationSeconds.value = Math.max(1, exerciseVideo.value?.duration ?? 1)
     phaseKind.value = 'demonstration'
     phaseSlot.value = 'pretraining'
-    trainingSoundscape.play('pretraining')
+    trainingSoundscape.play('pretraining', resolvePretrainingDuration(activeItem.value))
     setPhaseRemaining(resolvePretrainingDuration(activeItem.value))
     playbackState.value = 'idle'
     const pretrainingMode = resolvePretrainingMode(activeItem.value?.pretraining_mode ?? 'FULL')
@@ -1370,8 +1384,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     actionStandards.value = {}
     actionScores.value = []
     scoringWarnings.value = []
-    // Reset tutorial state
-    tutorialMode.value = false
+    // The page must never flash the follow-along layout before guidance data
+    // finishes loading.
+    tutorialMode.value = true
     tutorialIndex.value = 0
     tutorialText.value = ''
     tutorialRecords.value = []
@@ -1411,8 +1426,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
         syncSessionProgress()
         await restoreCachedVideo(0)
         scheduleVideoPrefetch(0)
-        // Enter tutorial mode after arrangement loads
-        tutorialMode.value = true
         tutorialIndex.value = 0
         // Tutorial text and history are optional. Do not keep the training
         // controls unavailable while that secondary request is in flight.
@@ -1853,7 +1866,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     const scoreUnavailableReason = scoring.scoreUnavailableReason
 
     if (resultStored) {
-      await navigateToShortQuestionnaire()
+      await navigateAfterResult()
       return
     }
 
@@ -1908,15 +1921,36 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
       qualityScore,
       summary,
       capturedBy: 'camera',
+      completedAt,
+      countsAsCompletion: scoring.score !== undefined,
       scoreDetails: scoring.scoreDetails ?? null
     })
     useTrainingProgress().invalidate()
     invalidateGrowthOverview()
     resultStored = true
+    resultCountsAsCompletion = scoring.score !== undefined
 
     await completionAudio
     if (disposed || sessionStopping) return
-    await navigateToShortQuestionnaire()
+    await navigateAfterResult()
+  }
+
+  async function navigateAfterResult() {
+    if (resultCountsAsCompletion) {
+      await navigateToShortQuestionnaire()
+      return
+    }
+    completing.value = true
+    completionError.value = ''
+    try {
+      await Promise.resolve(uni.redirectTo({
+        url: `/pages/training/feedback?sessionId=${encodeURIComponent(submission.sessionId)}`
+      }))
+    } catch (error) {
+      reportBackendSyncError('训练反馈跳转', error)
+      completionError.value = '训练结果已保存，请点击继续查看结果'
+      completing.value = false
+    }
   }
 
   async function navigateToShortQuestionnaire() {
@@ -2038,7 +2072,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearStartCountdownTimer()
     clearCacheWarmupTimer()
     ttsPlayer.destroy()
-    trainingSoundscape.stop()
+    trainingSoundscape.destroy?.()
     if (recording.value) {
       recording.value = false
       void capture.value?.stopRecord().catch(() => {})

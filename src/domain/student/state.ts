@@ -10,6 +10,7 @@ import type {
 import { resolveEntryRoute } from './access'
 import { cloneStudentValue } from './clone'
 import { completeGuidedSession, evaluateReminderEligibility } from './training'
+import { toShanghaiDate } from './shanghaiTime'
 
 const EMPTY_PROFILE: StudentProfile = {
   studentId: '',
@@ -25,7 +26,7 @@ const EMPTY_PROFILE: StudentProfile = {
 }
 
 const createDailyAdherence = () => ({
-  date: new Date().toISOString().slice(0, 10),
+  date: toShanghaiDate(),
   validCheckIns: 0,
   rawSessions: 0,
   reminderEligible: false,

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { PoseAngleFrame } from '../uni-app/components/pose/poseAnalysis'
 import {
   buildMissingPoseActionResult,
+  buildSessionScoringResult,
   sampleActionPoseSegmentsForUpload,
   samplePoseFramesForUpload
 } from '../subpackages/training/composables/useVisualTrainingSession'
@@ -35,6 +36,22 @@ describe('visual session resilience', () => {
       feedback: [],
       angleDetails: {},
       frameCount: 0
+    })
+  })
+
+  it('keeps a session unscored when frames exist but none contain usable body angles', () => {
+    const missing = buildMissingPoseActionResult({
+      id: 11,
+      video_id: 21,
+      expected_duration: 15,
+      video: { title: 'No usable body' }
+    }, { action_id: 'standard-action-11' }, 3)
+
+    expect(buildSessionScoringResult([missing], [], [11])).toEqual({
+      score: undefined,
+      summary: '未识别到人体，暂无评分',
+      scoreDetails: undefined,
+      scoreUnavailableReason: '未识别到人体，暂无评分'
     })
   })
 

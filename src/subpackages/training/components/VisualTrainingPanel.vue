@@ -861,12 +861,10 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           {{ poseStatusLabel }}
         </cover-view>
         <cover-view v-if="showPositionGuide" class="visual-session__position-guide">
-          <cover-view class="visual-session__guide-head"></cover-view>
-          <cover-view class="visual-session__guide-torso"></cover-view>
-          <cover-view class="visual-session__guide-arm visual-session__guide-arm--left"></cover-view>
-          <cover-view class="visual-session__guide-arm visual-session__guide-arm--right"></cover-view>
-          <cover-view class="visual-session__guide-leg visual-session__guide-leg--left"></cover-view>
-          <cover-view class="visual-session__guide-leg visual-session__guide-leg--right"></cover-view>
+          <cover-image
+            class="visual-session__guide-image"
+            src="/static/generated/camera-position-guide.png"
+          />
           <cover-view class="visual-session__guide-label">站在框内</cover-view>
         </cover-view>
         <cover-view
@@ -922,6 +920,19 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
       <cover-view v-if="videoEnded" class="visual-session__completion-overlay">
         <cover-view class="visual-session__completion-title">
           {{ completionError ? '结果提交失败' : '训练完成，正在生成结果' }}
+        </cover-view>
+        <cover-view
+          v-if="completing && !completionError"
+          class="visual-session__completion-progress"
+          aria-label="正在提交训练结果"
+        >
+          <cover-view class="visual-session__completion-progress-fill" />
+        </cover-view>
+        <cover-view
+          v-if="completing && !completionError"
+          class="visual-session__completion-progress-label"
+        >
+          正在提交训练数据，请稍候…
         </cover-view>
         <cover-view
           v-if="completionError"
@@ -1848,72 +1859,14 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   margin-top: -180rpx;
   margin-left: -90rpx;
   pointer-events: none;
-  color: rgba(255, 250, 244, 0.84);
 }
 
-.visual-session__guide-head,
-.visual-session__guide-torso,
-.visual-session__guide-arm,
-.visual-session__guide-leg {
+.visual-session__guide-image {
   position: absolute;
-  left: 50%;
-  box-sizing: border-box;
-  border: 3rpx solid currentColor;
-}
-
-.visual-session__guide-head {
-  top: 8rpx;
-  width: 42rpx;
-  height: 42rpx;
-  border-radius: 50%;
-  transform: translateX(-50%);
-}
-
-.visual-session__guide-torso {
-  top: 48rpx;
-  width: 76rpx;
-  height: 140rpx;
-  border-radius: 36rpx 36rpx 22rpx 22rpx;
-  transform: translateX(-50%);
-}
-
-.visual-session__guide-arm,
-.visual-session__guide-leg {
-  width: 6rpx;
-  border: 0;
-  border-radius: 999rpx;
-  background: rgba(255, 250, 244, 0.84);
-  transform-origin: top center;
-}
-
-.visual-session__guide-arm {
-  top: 62rpx;
-  height: 132rpx;
-}
-
-.visual-session__guide-arm--left {
-  margin-left: -38rpx;
-  transform: rotate(13deg);
-}
-
-.visual-session__guide-arm--right {
-  margin-left: 32rpx;
-  transform: rotate(-13deg);
-}
-
-.visual-session__guide-leg {
-  top: 184rpx;
-  height: 144rpx;
-}
-
-.visual-session__guide-leg--left {
-  margin-left: -20rpx;
-  transform: rotate(6deg);
-}
-
-.visual-session__guide-leg--right {
-  margin-left: 14rpx;
-  transform: rotate(-6deg);
+  top: 0;
+  left: 0;
+  width: 180rpx;
+  height: 336rpx;
 }
 
 .visual-session__guide-label {
@@ -1949,6 +1902,40 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   font-size: 30rpx;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.visual-session__completion-progress {
+  position: relative;
+  width: 440rpx;
+  max-width: 72%;
+  height: 12rpx;
+  margin-top: 30rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: rgba(255, 250, 244, 0.24);
+}
+
+.visual-session__completion-progress-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  border-radius: inherit;
+  background: #fffaf4;
+  animation: visual-session-submit-progress 1.15s ease-in-out infinite;
+}
+
+.visual-session__completion-progress-label {
+  margin-top: 16rpx;
+  color: rgba(255, 250, 244, 0.72);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+@keyframes visual-session-submit-progress {
+  from { transform: translateX(0); }
+  to { transform: translateX(325%); }
 }
 
 .visual-session__completion-retry {

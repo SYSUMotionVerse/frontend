@@ -1,6 +1,7 @@
 import type { PhysicalMetricTrend, TrainingModality } from '../../domain/student/types'
 import { buildGrowthAchievementsFromAwardCodes } from '../../domain/student/growth'
 import { buildSessionBadgesFromHistory } from '../../domain/student/sessionBadges'
+import { toShanghaiDate } from '../../domain/student/shanghaiTime'
 import { mapPsychologyRecordSummary } from './psychologyModels'
 import type {
   BackendAchievementAwards,
@@ -52,7 +53,8 @@ function resolveBackendModality(
 }
 
 function formatDate(isoLike: string) {
-  return isoLike.slice(0, 10)
+  // Product statistics and history are consistently grouped by Asia/Shanghai.
+  return toShanghaiDate(isoLike) || isoLike.slice(0, 10)
 }
 
 export function mapBackendTrainingHistory(
@@ -64,23 +66,30 @@ export function mapBackendTrainingHistory(
     .map(record => {
       const score = toNullableNumber(record.score)
       return {
-        createdAt: record.created_at,
+        createdAt: record.completed_at || record.created_at,
         id: record.training_session_id || `visual-${record.id}`,
         modality: resolveExerciseModality(record),
-        date: formatDate(record.created_at),
+        date: formatDate(record.completed_at || record.created_at),
+        durationSeconds: record.duration,
         summary: record.comment || record.video_info?.title || '已完成训练。',
         qualityScore: score === null ? null : Math.round(score),
-        scoreDetails: record.scoreDetails ?? record.poseAnalysis?.scoreDetails ?? null
+        scoreDetails: (() => {
+          const details = record.scoreDetails ?? record.poseAnalysis?.scoreDetails
+          const actionResults = record.actionResults ?? record.poseAnalysis?.actionScores
+          if (!details) return null
+          return actionResults?.length ? { ...details, actionResults } : details
+        })()
       }
     })
 
   const stairSessions = stairRecords.map(record => {
     const score = toNullableNumber(record.acceleration_data?.qualityScore)
     return {
-      createdAt: record.created_at,
+      createdAt: record.completed_at || record.created_at,
       id: record.training_session_id || `stair-${record.id}`,
       modality: 'stair' as const,
-      date: formatDate(record.created_at),
+      date: formatDate(record.completed_at || record.created_at),
+      durationSeconds: record.duration,
       summary: typeof record.acceleration_data?.summary === 'string'
         ? record.acceleration_data.summary
         : '已完成楼梯训练。',
@@ -146,7 +155,8 @@ export function mapBackendAchievementAwards(response: BackendAchievementAwards) 
         id: award.training_session_id,
         modality: resolveBackendModality(award.modality),
         date: award.local_date,
-        qualityScore: award.score
+        qualityScore: award.score,
+        earnedCount: award.count ?? 1
       }))
     )
   }

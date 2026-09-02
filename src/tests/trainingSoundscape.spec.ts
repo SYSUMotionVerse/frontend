@@ -31,7 +31,7 @@ describe('trainingSoundscape', () => {
     vi.useRealTimers()
   })
 
-  it('preloads all CDN players but stays silent during pretraining', () => {
+  it('preloads all CDN players and stays silent outside the pretraining tail', () => {
     const createContext = vi.fn(createAudioContext)
     const soundscape = createTrainingSoundscape(createContext)
 
@@ -49,6 +49,22 @@ describe('trainingSoundscape', () => {
       expect(result.value.play).not.toHaveBeenCalled()
       expect(result.value.playbackRate).toBe(1)
     }
+  })
+
+  it('plays the normal cue in exactly the final three pretraining seconds', () => {
+    const secondContext = createAudioContext()
+    const soundscape = createTrainingSoundscape(vi.fn()
+      .mockReturnValueOnce(secondContext)
+      .mockReturnValueOnce(createAudioContext())
+      .mockReturnValueOnce(createAudioContext()))
+
+    soundscape.play('pretraining', 5)
+    vi.advanceTimersByTime(1999)
+    expect(secondContext.play).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(secondContext.play).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    expect(secondContext.play).toHaveBeenCalledTimes(3)
   })
 
   it('plays one pulse per formal second with prominent first and final pulses', () => {
@@ -116,7 +132,7 @@ describe('trainingSoundscape', () => {
     soundscape.resume()
     vi.advanceTimersByTime(1000)
     expect(secondContext.play).toHaveBeenCalledOnce()
-    soundscape.stop()
+    soundscape.destroy()
 
     expect(secondContext.destroy).toHaveBeenCalledOnce()
     expect(startingBoundaryContext.destroy).toHaveBeenCalledOnce()

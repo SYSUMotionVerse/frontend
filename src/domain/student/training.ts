@@ -1,5 +1,6 @@
 import { cloneStudentValue } from './clone'
 import type { SessionAnalysis, StudentAppState, TrainingModality } from './types'
+import { toShanghaiDate } from './shanghaiTime'
 
 export interface CompletionInput {
   sessionId?: string
@@ -7,6 +8,8 @@ export interface CompletionInput {
   qualityScore: number | null
   summary: string
   capturedBy: SessionAnalysis['capturedBy']
+  completedAt?: string
+  countsAsCompletion?: boolean
   scoreDetails?: SessionAnalysis['scoreDetails']
 }
 
@@ -27,13 +30,19 @@ export function startTrainingDay(state: StudentAppState, date: string): StudentA
 export function completeGuidedSession(state: StudentAppState, input: CompletionInput): StudentAppState {
   const nextState = cloneState(state)
   const sessionNumber = nextState.sessions.length + 1
-  const nextValidCheckIns = Math.min(3, nextState.dailyAdherence.validCheckIns + 1)
-  const validCheckInApplied = nextState.dailyAdherence.validCheckIns < 3
+  const countsAsCompletion = input.countsAsCompletion ?? true
+  const nextValidCheckIns = countsAsCompletion
+    ? Math.min(3, nextState.dailyAdherence.validCheckIns + 1)
+    : nextState.dailyAdherence.validCheckIns
+  const validCheckInApplied = countsAsCompletion && nextState.dailyAdherence.validCheckIns < 3
+  const completedDate = input.completedAt
+    ? toShanghaiDate(input.completedAt) || nextState.dailyAdherence.date
+    : nextState.dailyAdherence.date
 
   nextState.sessions.push({
     id: input.sessionId ?? `session-${sessionNumber}`,
     modality: input.modality,
-    date: nextState.dailyAdherence.date,
+    date: completedDate,
     completed: true,
     validCheckInApplied,
     restartedAfterInterrupt: false,
@@ -46,7 +55,7 @@ export function completeGuidedSession(state: StudentAppState, input: CompletionI
     }
   })
 
-  nextState.dailyAdherence.rawSessions += 1
+  if (countsAsCompletion) nextState.dailyAdherence.rawSessions += 1
   nextState.dailyAdherence.validCheckIns = nextValidCheckIns
   nextState.dailyAdherence.goalReached = nextValidCheckIns >= 3
   nextState.dailyAdherence.reminderEligible = nextValidCheckIns < 3

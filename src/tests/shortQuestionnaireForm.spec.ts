@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest'
 import ShortQuestionnaireForm from '../components/training/ShortQuestionnaireForm.vue'
 
 async function completeCheckIn(wrapper: ReturnType<typeof mount>) {
-  const scores = wrapper.findAll('.short-questionnaire-form__score')
+  const sliders = wrapper.findAll('slider')
 
-  await scores[9].trigger('click')
-  await scores[15].trigger('click')
+  await sliders[0].trigger('change', { detail: { value: 4 } })
+  await sliders[1].trigger('change', { detail: { value: 5 } })
 }
 
 describe('ShortQuestionnaireForm', () => {
@@ -15,7 +15,8 @@ describe('ShortQuestionnaireForm', () => {
     const primaryAction = wrapper.get('button[form-type="submit"]')
 
     expect(wrapper.findAll('.short-questionnaire-form__question')).toHaveLength(2)
-    expect(wrapper.findAll('.short-questionnaire-form__score')).toHaveLength(17)
+    expect(wrapper.findAll('slider')).toHaveLength(2)
+    expect(wrapper.findAll('.short-questionnaire-form__tick')).toHaveLength(17)
     expect(wrapper.text()).toContain('完成 0/2 项后提交')
     expect(primaryAction.attributes('disabled')).toBeDefined()
 
@@ -72,7 +73,7 @@ describe('ShortQuestionnaireForm', () => {
 
     expect(wrapper.text()).toContain('已保存在本机')
     expect(homeAction.text()).toBe('返回训练首页')
-    expect(wrapper.findAll('.short-questionnaire-form__score')[0].attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('slider')[0].attributes('disabled')).toBeDefined()
 
     await homeAction.trigger('click')
 
@@ -96,7 +97,7 @@ describe('ShortQuestionnaireForm', () => {
     expect(wrapper.find('.short-questionnaire-form__status').exists()).toBe(false)
     expect(primaryAction.text()).toContain('正在打开训练反馈')
     expect(primaryAction.attributes('disabled')).toBeDefined()
-    expect(wrapper.findAll('.short-questionnaire-form__score')[0].attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('slider')[0].attributes('disabled')).toBeDefined()
   })
 
   it('offers a feedback-only recovery action when navigation fails after saving', async () => {
@@ -111,7 +112,7 @@ describe('ShortQuestionnaireForm', () => {
     const feedbackAction = wrapper.get('.short-questionnaire-form__primary-action')
 
     expect(feedbackAction.text()).toBe('重新打开训练反馈')
-    expect(wrapper.findAll('.short-questionnaire-form__score')[0].attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('slider')[0].attributes('disabled')).toBeDefined()
 
     await feedbackAction.trigger('click')
 

@@ -31,6 +31,11 @@ vi.mock('../uni-app/composables/useStudentStore', () => ({
 
 describe('training feedback retry', () => {
   beforeEach(() => {
+    vi.stubGlobal('uni', {
+      reLaunch: vi.fn(),
+      switchTab: vi.fn(),
+      getStorageSync: vi.fn()
+    })
     controls.loadTrainingSession.mockReset()
     controls.onLoad.mockReset()
     controls.onShareAppMessage.mockReset()

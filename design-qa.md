@@ -1,47 +1,67 @@
 **Comparison Target**
 
-- Source visual truth: `D:\Res\Downloads\Screenshot_20260830_121947.jpg` plus the seven requested registration-page changes.
-- Focused source region: `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-1914f822-f0ad-42c9-bf41-dc5311eac9b2.png`.
-- Questionnaire progress-card source: `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-f5324668-909f-4f3d-845e-e510af6bd295.png`, together with the requested overview, answering, and completion flow specification.
-- Questionnaire preview-mode sources: `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-07075d05-4eb2-4557-9a82-d1736a78f4c3.png` and `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-34244108-90cc-45fe-b2eb-98679a2276ac.png`.
-- Implementation screenshot: unavailable; this is a native WeChat mini-program route and no connected WeChat DevTools capture surface is available in this task.
-- Viewport: source Android device screenshot, 1080 × 3216 px; CSS viewport and device pixel ratio were not present in the source metadata.
-- Source pixels: 1080 × 3216 px. Focused region: 463 × 308 px.
+- Source visual truth:
+  - `D:\Res\Downloads\Screenshot_20260902_012319.jpg` for the short questionnaire structure.
+  - `D:\Res\Downloads\Screenshot_20260902_013153.jpg` for recent badges.
+  - `D:\Res\Downloads\Screenshot_20260902_013254.jpg` for growth-detail bottom spacing and training history.
+  - `D:\Res\Downloads\Screenshot_20260902_012402.jpg` for the training-feedback information set.
+  - The user's written redesign requirements are the target for the new data visualizations and compact layouts.
+- Implementation screenshot: unavailable; this is a native WeChat mini-program and no connected WeChat DevTools capture surface is available in this task.
+- Viewport: supplied Android screenshots, 1080 × 2388 px for the first three references and 1080 × 3687 px for the feedback reference.
 - Implementation pixels, CSS size, and density normalization: unavailable because a rendered mini-program capture could not be produced.
-- State: first-time account registration, form populated with default health values, upload consent initially unchecked.
-- Questionnaire states: overview before answering, active single-question runner, and all-questionnaires-complete destination choice.
+- State: completed training short questionnaire, growth overview, growth history, and completed visual-training feedback.
 
 **Findings**
 
-- [Resolved P2] Registration TitleBar previously scrolled with page content
-  Location: registration page shell.
-  Evidence: the shared immersive navigation component is now emitted before the independent `scroll-view`; the root shell is fixed to `100vh` with overflow hidden, and the content scroller owns vertical scrolling.
-  Impact: the TitleBar remains fixed while only the registration content moves.
-  Fix: moved scrolling responsibility from the full page to `access-entry__scroller` and retained the shared `ImmersiveNavigationBar` component.
+- [Resolved P2] Short questionnaire used a dense grid instead of a focused answering flow
+  Location: `ShortQuestionnaireForm.vue`.
+  Evidence: both questions are now separate cards with numbered headings, marked native sliders, endpoint labels, explicit completion state, and a dedicated action card.
+  Impact: the form is faster to scan and visually consistent with the full questionnaire flow.
+  Fix: replaced rating-button grids with native sliders while retaining an unanswered state until the user moves each slider.
 
-- [Resolved P2] Registration page had no top opacity transition
-  Location: upper boundary of the registration content scroller.
-  Evidence: the compiled WXSS includes the same `mask-image` transparency ramp used by the immersive page framework, transitioning from transparent to opaque over 32rpx.
-  Impact: content fades as it approaches the fixed TitleBar instead of ending at a hard edge.
-  Fix: applied the standard top alpha mask to `access-entry__scroller`.
+- [Resolved P2] Recent badge cards were oversized and depended on letter-style badge art
+  Location: `SessionBadgeList.vue`.
+  Evidence: the cards now use compact score charts derived from the actual quality score, with reduced width, padding, and copy density.
+  Impact: more badge history is visible without horizontal cards dominating the growth page.
+  Fix: replaced the former badge artwork region with an actual-score chart and tightened the card hierarchy.
+
+- [Resolved P2] Growth detail pages ended with a visually empty bottom band
+  Location: `UniGrowthPageShell.vue` and the last cards on adherence, metrics, and history pages.
+  Evidence: the no-dock shell bottom padding and last-card bottom margins are now zero.
+  Impact: content reaches the natural bottom edge on secondary growth pages.
+  Fix: removed the redundant no-dock clearance while preserving the dock clearance on primary pages.
+
+- [Resolved P2] Training history lacked readable modality, information hierarchy, and progressive disclosure
+  Location: `TrainingHistoryList.vue`.
+  Evidence: modality is now Chinese, quality is promoted to the header, duration is moved to the footer, and only three records render initially; each press of “查看更多” reveals three more.
+  Impact: recent records are easier to compare and long history no longer overwhelms the page.
+  Fix: rebuilt the record card and added local incremental disclosure.
+
+- [Resolved P2] Feedback page presented long score bars without spatial or historical context
+  Location: `feedback.vue`, `TrainingFeedbackBodyMap.vue`, `TrainingFeedbackTrendChart.vue`, and `TrainingFeedbackActionCard.vue`.
+  Evidence: the page now uses the standard training shell, shared TitleBar and decorated background; suite score, enabled-angle callouts, historical trend, summary, expandable per-action analysis, badge, and destinations are separate sections.
+  Impact: users can locate weak body areas, understand score direction over time, and inspect individual actions without reading one uninterrupted list.
+  Fix: preserved real backend and current-session action data, generated a transparent body-map asset, and added canvas-based history charts plus expandable action cards.
+
+- [Resolved P2] Follow-along positioning guide was a disconnected CSS figure
+  Location: `VisualTrainingPanel.vue`.
+  Evidence: the guide now uses a dedicated transparent full-body positioning asset and retains existing visibility through the first formal action start.
+  Impact: the body placement target is more coherent on non-iOS devices and does not imply separated head/torso parts.
+  Fix: replaced CSS anatomy pieces with a generated transparent PNG inside the existing native overlay layer.
 
 - [P2] Rendered visual comparison is unavailable
-  Location: full registration screen, the gender/year picker row, and all three questionnaire states.
-  Evidence: both source images were opened and inspected, but there is no implementation screenshot from WeChat DevTools to place into the same comparison input.
-  Impact: source, tests, generated WXML/WXSS, and a successful mini-program build confirm structure and styles, but cannot prove device-specific picker width, text wrapping, or final vertical rhythm.
-  Fix: open `dist/build/mp-weixin` in WeChat DevTools, enter the first-time registration route on the target Android viewport, and capture the full page plus the gender/year row.
-
-**Open Questions**
-
-- Whether the target Android device applies any native `picker` sizing behavior that differs from the generated `display: block; width: 100%` WXSS.
+  Location: all redesigned screens.
+  Evidence: source references were supplied and inspected, and the generated WXML/WXSS plus packaged assets were checked, but no WeChat DevTools screenshot is available for a same-state comparison.
+  Impact: code, tests, type checking, production build, and asset transparency are verified; device-specific text wrapping, slider thumb placement, canvas density, and overlay scale are not visually proven.
+  Fix: capture the four redesigned states in WeChat DevTools on the target Android viewport and compare them with the supplied references.
 
 **Required Fidelity Surfaces**
 
-- Fonts and typography: source implementation uses the existing mini-program typography scale; rendered wrapping and device font fallback remain unverified.
-- Spacing and layout rhythm: source code now aligns the title to the growth-detail baseline and uses equal 48rpx major section gaps; rendered rhythm remains unverified.
-- Colors and visual tokens: existing cream, coral, gold, and pale-blue tokens are preserved; rendered color appearance remains unverified.
-- Image quality and asset fidelity: the removed heart graphic leaves no new raster or icon asset to verify; standard fixed background decorations are reused.
-- Copy and content: requested title, consent, and helper copy changes are present in generated WXML; removed copy is absent.
+- Fonts and typography: hierarchy and wrapping rules follow the existing mini-program tokens; device font rendering remains unverified.
+- Spacing and layout rhythm: compact card gaps, zero secondary-page bottom clearance, and feedback section rhythm are implemented; rendered vertical rhythm remains unverified.
+- Colors and visual tokens: existing cream, coral, navy, pale-blue, border, and shadow tokens are reused; native slider appearance remains device-dependent.
+- Image quality and asset fidelity: both generated assets are `Format32bppArgb` PNGs with transparent samples. The feedback body map is 480 × 720 px; the camera guide is 220 × 440 px. Final device scaling remains unverified.
+- Copy and content: modalities are user-facing Chinese labels; feedback and questionnaire copy is user-facing; history and charts use real session/backend values.
 
 **Full-view Comparison Evidence**
 
@@ -49,28 +69,25 @@
 
 **Focused Region Comparison Evidence**
 
-- Blocked: the source picker-width crop was inspected, but no corresponding rendered crop is available.
+- Blocked: generated mini-program output confirms the native slider, transparent positioning guide, body-map asset, trend component, Chinese history labels, and “查看更多” control, but source code and WXML are not substitutes for a rendered crop.
 
 **Comparison History**
 
-- Iteration 1: implemented the requested page shell, hierarchy, form-width, consent, spacing, and navigation-stack changes. Source and generated mini-program output checks passed; visual comparison remains blocked by the missing rendered capture.
-- Iteration 2: corrected the registration shell to use a fixed shared immersive TitleBar with an independently scrolling, alpha-masked content region; normalized all label/input spacing, added label insets, updated the student-ID hint, and refined the two-line title. Unit tests, type checking, and the mini-program production build passed; rendered comparison remains blocked by the missing WeChat DevTools capture.
-- Iteration 3: removed the visible defaults from age, height, weight, and resting-heart-rate fields; increased all registration label insets to 24rpx and the two-line registration heading inset to 28rpx. Added a source-level guard proving that every mini-program route reaches the single shared `ImmersiveNavigationBar.vue` implementation through its page shell or a direct import. All 570 tests, type checking, and the mini-program production build passed; rendered comparison remains blocked by the missing WeChat DevTools capture.
-- Iteration 4: changed the age hint to 20 while keeping age, height, weight, and resting-heart-rate values empty. Centered the consent checkbox-and-copy group as one unit, aligned both elements on the same horizontal centerline, and reduced their gap from 16rpx to 8rpx. Focused tests, type checking, and the mini-program production build passed; rendered comparison remains blocked by the missing WeChat DevTools capture.
-- Iteration 5: removed the questionnaire step chip, aligned its heading and preview row to the 32rpx growth-detail inset, removed the page-level back affordance, and changed registration-to-questionnaire navigation to `reLaunch` so the questionnaire cannot return to registration. Removed the reserved 88rpx first-step spacer above the questionnaire counter. Rendered comparison remains blocked by the missing WeChat DevTools capture.
-- Iteration 6: split the questionnaire journey into a backend-driven overview, a focused single-question runner, and a user-facing completion choice. The overview lists every questionnaire with its backend title, description, question count, and estimated time; the runner separates progress, instructions/legend, question, and paired navigation controls; the completion state links to either the training home or training selection page. All 575 tests, type checking, and the `mp-weixin` production build passed. Rendered comparison remains blocked by the missing WeChat DevTools capture.
-- Iteration 7: grouped the questionnaire preview link with its prompt, rewrote both training preview banners in user-facing language, and centered the preview action label with an explicit flex layout. Removed the runner footer's extra 80rpx bottom padding, added an in-card `current / total` question marker, and replaced mini-program-dependent disabled pseudo-class styling with explicit disabled classes for the previous and next controls. Focused tests, type checking, generated WXML/WXSS inspection, and the `mp-weixin` build passed; rendered comparison remains blocked by the missing WeChat DevTools capture.
+- Iteration 1: implemented the short-questionnaire sliders, compact badge charts, growth-detail bottom-spacing removal, progressive training history, redesigned feedback page, and two transparent generated assets.
+- Iteration 2: preserved backend/local per-action scoring details for feedback, added duration mapping, confirmed generated mini-program dependencies, and updated interaction/regression tests.
+- Verification: TypeScript check passed; 193 test suites and 613 tests passed; the `mp-weixin` production build completed; packaged WXML contains native sliders and overlay assets; both generated PNG files retain alpha transparency.
+- Post-fix visual evidence: blocked because no connected WeChat DevTools capture surface is available.
 
 **Implementation Checklist**
 
-- Capture the registration route in WeChat DevTools at the target device size.
-- Capture the questionnaire overview, first question, final question, and completion states in WeChat DevTools.
-- Capture both full and compact preview banners, including their button-label vertical alignment and the first unanswered question's disabled controls.
-- Compare the full page and focused picker row against the supplied references.
-- Correct any P0/P1/P2 device-rendered differences and repeat the capture.
+- Capture the short questionnaire with both sliders answered.
+- Capture the growth page recent-badge region and history page at three and six visible records.
+- Capture feedback with suite body map, expanded action, and at least two historical trend points.
+- Capture the non-iOS positioning guide before the first formal action.
+- Correct any device-rendered P0/P1/P2 differences and repeat the comparison.
 
 **Follow-up Polish**
 
-- Reassess long-title wrapping on narrow Android devices after the first real-device capture.
+- Reassess callout overlap for unusually long backend angle labels after the first real-device capture.
 
 final result: blocked

@@ -577,6 +577,7 @@ export function createStudentBackendSync(
   } satisfies StudentBackendSubmissionOptions
   const shortQuestionnaireOperations = new Map<string, Promise<void>>()
   let pendingShortQuestionnaireRetry: Promise<{ attempted: number; succeeded: number }> | null = null
+  let pendingTrainingRetry: Promise<{ attempted: number; succeeded: number }> | null = null
 
   function enqueueShortQuestionnaireOperation<T>(
     sessionId: string,
@@ -757,8 +758,23 @@ export function createStudentBackendSync(
     }
   }
 
+  function startPendingTrainingRetry() {
+    if (pendingTrainingRetry) return pendingTrainingRetry
+    const retry = retryPendingTrainingSubmissionsNow()
+    pendingTrainingRetry = retry
+    void retry.then(
+      () => {
+        if (pendingTrainingRetry === retry) pendingTrainingRetry = null
+      },
+      () => {
+        if (pendingTrainingRetry === retry) pendingTrainingRetry = null
+      }
+    )
+    return retry
+  }
+
   function retryTrainingBeforeShortQuestionnaires() {
-    void retryPendingTrainingSubmissionsNow().then(
+    void startPendingTrainingRetry().then(
       () => startPendingShortQuestionnaireRetry(),
       () => startPendingShortQuestionnaireRetry()
     )
@@ -1122,7 +1138,7 @@ export function createStudentBackendSync(
       return { synced: true } as const
     },
     async retryPendingTrainingSubmissions() {
-      return retryPendingTrainingSubmissionsNow()
+      return startPendingTrainingRetry()
     },
     async retryPendingShortQuestionnaires() {
       return startPendingShortQuestionnaireRetry()

@@ -265,9 +265,8 @@ describe('VisualTrainingPanel media switch', () => {
 
     await vi.advanceTimersByTimeAsync(500)
     expect(wrapper.find('.visual-session__position-guide').exists()).toBe(true)
-    expect(wrapper.find('.visual-session__guide-head').exists()).toBe(true)
-    expect(wrapper.findAll('.visual-session__guide-arm')).toHaveLength(2)
-    expect(wrapper.findAll('.visual-session__guide-leg')).toHaveLength(2)
+    expect(wrapper.find('.visual-session__guide-image').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__guide-image').attributes('src')).toContain('camera-position-guide.png')
 
     await wrapper.setProps({
       trainingStarted: true,

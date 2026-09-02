@@ -554,6 +554,7 @@ export interface GrowthTrainingHistoryItem {
   id: string
   modality: TrainingModality
   date: string
+  durationSeconds?: number | null
   summary: string
   qualityScore: number | null
   scoreDetails?: ExerciseScoreDetails | null
@@ -679,6 +680,7 @@ export interface BackendSessionBadgeAward {
   local_date: string
   score: number
   awarded_at: string
+  count?: number
 }
 
 export interface BackendAchievementAwards {

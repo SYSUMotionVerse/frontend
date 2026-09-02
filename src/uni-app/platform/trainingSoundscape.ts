@@ -49,10 +49,9 @@ export function createTrainingSoundscape(
   let pulseTimer: ReturnType<typeof setTimeout> | null = null
   let totalPulses = 0
   let nextPulseIndex = 0
-  let formalStartedAtMs = 0
-  let lastPulseAtMs = 0
+  let trackStartedAtMs = 0
   let suspendedAtMs = 0
-  let formalActive = false
+  let activeTrack: TrainingSoundscapeTrack | null = null
   let suspended = false
 
   function clearPulseTimer() {
@@ -126,34 +125,43 @@ export function createTrainingSoundscape(
   }
 
   function emitNextPulse() {
-    if (!formalActive || suspended || nextPulseIndex >= totalPulses) {
+    if (!activeTrack || suspended || nextPulseIndex >= totalPulses) {
       clearPulseTimer()
       return
     }
 
-    const isFirst = nextPulseIndex === 0
-    const isFinal = nextPulseIndex === totalPulses - 1
-    playPulse(
-      isFirst
-        ? startingBoundaryContext
-        : isFinal
-          ? finalBoundaryContext
-          : secondContext
-    )
-    lastPulseAtMs = Date.now()
+    if (activeTrack === 'formal') {
+      const isFirst = nextPulseIndex === 0
+      const isFinal = nextPulseIndex === totalPulses - 1
+      playPulse(
+        isFirst
+          ? startingBoundaryContext
+          : isFinal
+            ? finalBoundaryContext
+            : secondContext
+      )
+    } else if (nextPulseIndex >= Math.max(0, totalPulses - 3)) {
+      playPulse(secondContext)
+    }
     nextPulseIndex += 1
     if (nextPulseIndex >= totalPulses) clearPulseTimer()
   }
 
   function scheduleRemainingPulses() {
     clearPulseTimer()
-    if (!formalActive || suspended || nextPulseIndex >= totalPulses) return
-    // Anchor every pulse to formal-training time rather than chaining one
-    // interval after another. The last-pulse guard prevents a delayed callback
-    // from being followed by a rapid catch-up pulse.
-    const anchoredAt = formalStartedAtMs + nextPulseIndex * 1000
-    const noEarlierThan = lastPulseAtMs + 1000
-    const delay = Math.max(0, Math.max(anchoredAt, noEarlierThan) - Date.now())
+    if (!activeTrack || suspended || nextPulseIndex >= totalPulses) return
+    // Every event is anchored to one immutable phase clock. Never derive the
+    // next beat from the previous callback: native timer/audio latency would
+    // otherwise accumulate and make a nominal 60 BPM cue audibly drift.
+    const now = Date.now()
+    const elapsedWholeSeconds = Math.max(0, Math.floor((now - trackStartedAtMs) / 1000))
+    if (elapsedWholeSeconds > nextPulseIndex) {
+      // When the JS thread was suspended, skip stale beats instead of firing a
+      // rapid catch-up burst. The current logical second remains exact.
+      nextPulseIndex = Math.min(elapsedWholeSeconds, totalPulses - 1)
+    }
+    const anchoredAt = trackStartedAtMs + nextPulseIndex * 1000
+    const delay = Math.max(0, anchoredAt - now)
     pulseTimer = setTimeout(() => {
       pulseTimer = null
       emitNextPulse()
@@ -161,42 +169,37 @@ export function createTrainingSoundscape(
     }, delay)
   }
 
-  function resetFormalState() {
-    formalActive = false
+  function resetTrackState() {
+    activeTrack = null
     suspended = false
     totalPulses = 0
     nextPulseIndex = 0
-    formalStartedAtMs = 0
-    lastPulseAtMs = 0
+    trackStartedAtMs = 0
     suspendedAtMs = 0
     clearPulseTimer()
   }
 
-  function enterPretraining() {
-    // Pretraining is intentionally silent, including the tail of the final
-    // formal-training boundary cue.
+  function stopPlayback() {
     stopActivePulses()
-    resetFormalState()
+    resetTrackState()
   }
 
-  function startFormal(durationSeconds: number) {
-    // The preceding pretraining transition already stopped stale audio. Only
-    // reset scheduling here so the first preloaded player is never subjected
-    // to an immediate stop/play race.
-    resetFormalState()
+  function startTrack(track: TrainingSoundscapeTrack, durationSeconds: number) {
+    // Keep the preloaded player that is about to emit out of an asynchronous
+    // stop/play race. `playPulse` stops only the other tracks at the boundary.
+    resetTrackState()
     ensureContexts()
-    formalActive = true
+    activeTrack = track
     totalPulses = Math.max(1, Math.ceil(durationSeconds))
-    formalStartedAtMs = Date.now()
-    // A duration of N seconds receives exactly N pulses at t=0..N-1. The
-    // first and final pulse use the more prominent boundary sound.
+    trackStartedAtMs = Date.now()
+    // Formal N-second phases emit at t=0..N-1. Pretraining uses the same
+    // independent clock but stays silent until its final three seconds.
     emitNextPulse()
     scheduleRemainingPulses()
   }
 
   function release() {
-    enterPretraining()
-    stopActivePulses()
+    stopPlayback()
     secondContext?.destroy?.()
     startingBoundaryContext?.destroy?.()
     finalBoundaryContext?.destroy?.()
@@ -208,27 +211,24 @@ export function createTrainingSoundscape(
   return {
     preload: ensureContexts,
     play(track: TrainingSoundscapeTrack, durationSeconds = 0) {
-      if (track === 'formal') startFormal(durationSeconds)
-      else {
-        ensureContexts()
-        enterPretraining()
-      }
+      if (durationSeconds > 0) startTrack(track, durationSeconds)
+      else stopPlayback()
     },
     suspend() {
-      if (!formalActive || suspended) return
+      if (!activeTrack || suspended) return
       suspended = true
       suspendedAtMs = Date.now()
       clearPulseTimer()
     },
     resume() {
-      if (!formalActive || !suspended) return
+      if (!activeTrack || !suspended) return
       const suspendedForMs = Math.max(0, Date.now() - suspendedAtMs)
-      formalStartedAtMs += suspendedForMs
-      lastPulseAtMs += suspendedForMs
+      trackStartedAtMs += suspendedForMs
       suspendedAtMs = 0
       suspended = false
       scheduleRemainingPulses()
     },
-    stop: release
+    stop: stopPlayback,
+    destroy: release
   }
 }
