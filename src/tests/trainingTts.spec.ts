@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  configureTrainingAudioOutput,
   createTrainingTtsPlayer,
   trainingTtsPlaybackRate,
   trainingTtsPlaybackTimeoutMs
@@ -23,6 +24,18 @@ function createAudioContext() {
 describe('trainingTts', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('configures the global native output route through wx', () => {
+    const setInnerAudioOption = vi.fn()
+    vi.stubGlobal('wx', { setInnerAudioOption })
+
+    configureTrainingAudioOutput()
+
+    expect(setInnerAudioOption).toHaveBeenCalledWith(expect.objectContaining({
+      obeyMuteSwitch: false,
+      mixWithOther: false
+    }))
   })
 
   it('plays each due cue only once', () => {

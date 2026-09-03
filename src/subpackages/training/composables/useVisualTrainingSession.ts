@@ -27,7 +27,10 @@ import {
   actionStandardLoader,
   mapWithConcurrency
 } from '../../../uni-app/platform/actionStandardLoader'
-import { createTrainingTtsPlayer } from '../../../uni-app/platform/trainingTts'
+import {
+  configureTrainingAudioOutput,
+  createTrainingTtsPlayer
+} from '../../../uni-app/platform/trainingTts'
 import { createTrainingSoundscape } from '../../../uni-app/platform/trainingSoundscape'
 import { createTrainingAudioClock } from '../../../uni-app/platform/trainingAudioClock'
 import { resolveNextWholeSecondDelayMs } from '../../../uni-app/platform/anchoredTimeline'
@@ -1176,6 +1179,9 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   async function startTraining() {
+    // Must run inside the foreground button interaction: on devices, per-player
+    // mute settings alone do not reliably configure the native output route.
+    configureTrainingAudioOutput()
     if (disposed || sessionStopping || sessionSuspended) return
     if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {

@@ -30,9 +30,17 @@ interface AudioRuntime extends AudioDownloadPlatform {
   createInnerAudioContext?: () => InnerAudioContextLike
 }
 
+interface InnerAudioOptionPlatform {
+  setInnerAudioOption?: (options: {
+    obeyMuteSwitch: boolean
+    mixWithOther: boolean
+    fail?: (error: unknown) => void
+  }) => unknown
+}
+
 type WechatAudioFactory = typeof wx & {
   createInnerAudioContext?: () => InnerAudioContextLike
-}
+} & InnerAudioOptionPlatform
 
 const audioDownloadTimeoutMs = 30_000
 const audioPreloadConcurrency = 4
@@ -42,6 +50,26 @@ const audioPreloadConcurrency = 4
 // invisible 12% slowdown that truncates cues at phase boundaries.
 export const trainingTtsPlaybackRate = 1
 export const trainingTtsPlaybackTimeoutMs = 45_000
+
+/** Configure the native output route from a foreground user interaction. */
+export function configureTrainingAudioOutput() {
+  const wechatApi = typeof wx === 'undefined' ? null : wx as WechatAudioFactory
+  const uniApi = typeof uni === 'undefined'
+    ? null
+    : uni as unknown as InnerAudioOptionPlatform
+  const audioPlatform = wechatApi?.setInnerAudioOption ? wechatApi : uniApi
+  try {
+    audioPlatform?.setInnerAudioOption?.({
+      obeyMuteSwitch: false,
+      mixWithOther: false,
+      fail(error) {
+        console.warn('[TrainingTts] unable to configure native audio output:', error)
+      }
+    })
+  } catch (error) {
+    console.warn('[TrainingTts] unable to configure native audio output:', error)
+  }
+}
 
 function normalizeCues(cues: readonly ActionTtsCue[]) {
   return cues
