@@ -50,6 +50,24 @@ describe('PoseDetectionView sampling performance', () => {
     expect(cameraSource).toContain('props.targetFps ?? 5')
   })
 
+  it('runs live inference only for formal training and enforces a completion-based cooldown', () => {
+    const panelSource = readFileSync(
+      resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
+      'utf8'
+    )
+    const viewSource = readFileSync(
+      resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
+      'utf8'
+    )
+
+    expect(panelSource).toContain(':detection-active="recognitionEnabled && trainingStarted && phaseKind === \'active\'"')
+    expect(viewSource).toContain('detectionActive?: boolean')
+    expect(viewSource).toContain('const detectionActive = computed(() => props.detectionActive ?? true)')
+    expect(viewSource).toContain('nextInferenceEligibleAt')
+    expect(viewSource).toContain('Date.now() + getSamplingIntervalMs(effectiveSamplingFps.value)')
+    expect(viewSource).toContain('updateEffectiveSamplingFps(inferMs)')
+  })
+
   it('uses small camera frames and avoids copying full frames into the overlay canvas during live inference', () => {
     const viewSource = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),

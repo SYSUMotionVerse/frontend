@@ -16,11 +16,12 @@ import { load as loadBlazePose } from '@tensorflow-models/pose-detection/dist/bl
 import type { PoseDetector } from '@tensorflow-models/pose-detection/dist/pose_detector';
 import * as tf from '@tensorflow/tfjs-core';
 import * as webgl from '@tensorflow/tfjs-backend-webgl';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { createBlazePoseModelConfig } from './PoseDetectModel';
 import { setupWechatPlatform } from './wechat_platform';
 import { fetchFunc } from './fetch';
 import type { DetectResult, Frame } from './PoseDetectModel';
+import { getSamplingIntervalMs } from './poseSamplingSchedule'
 import { buildPoseAngleFrame } from '../../../../uni-app/components/pose/poseAnalysis'
 import PoseCamera from './PoseCamera.vue';
 
@@ -29,15 +30,19 @@ type PoseMediaSize = Readonly<{
   height: number
 }>
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** Runtime mode: 'production' (default) for training page, 'debug' for spike diagnostics. */
   mode?: 'production' | 'debug';
   initialFps?: 5 | 10;
+  /** Runs frame inference only while the formal training phase needs scores. */
+  detectionActive?: boolean;
   /** Measured preview dimensions for native camera layers, in device px. */
   mediaSize?: PoseMediaSize;
   onResult: (result: DetectResult) => void;
   onStats: (stats: { status: string; loadMs: number; warmMs: number; inferMs: number; fps: number }) => void;
-}>();
+}>(), {
+  detectionActive: true
+});
 
 const SAMPLING_FALLBACK_MAX_SIDE = 256
 const SAMPLING_FALLBACK_CAPTURE_QUALITY: 'low' = 'low'
@@ -82,6 +87,11 @@ const analyzeKeypoints = ref<any[]>([]);
 const analyzeKeypointCount = computed(() => analyzeKeypoints.value.length);
 const isDebugMode = computed(() => props.mode === 'debug');
 const samplingFps = ref<5 | 10>(props.initialFps ?? 5)
+const effectiveSamplingFps = ref<number>(samplingFps.value)
+const detectionActive = computed(() => props.detectionActive ?? true)
+const INFERENCE_LATENCY_WINDOW_SIZE = 10
+const MIN_ADAPTIVE_SAMPLING_FPS = 3
+const inferenceLatencySamples: number[] = []
 
 // Runtime stats (non-reactive internal counters)
 let loadMs = 0;
@@ -91,6 +101,9 @@ let frameCount = 0;
 let lastFrameTime = 0;
 let fps = 0;
 let liveInferenceInFlight = false;
+let inferenceGeneration = 0
+let nextInferenceEligibleAt = 0
+let lastDetectingStatsAt = 0
 let emittedFrameIndex = 0
 let consecutiveLiveInferenceErrors = 0
 const MAX_CONSECUTIVE_LIVE_INFERENCE_ERRORS = 3
@@ -143,17 +156,15 @@ onMounted(async () => {
     // Guard: unmount may have fired during warm-up
     if (!isMounted) return;
 
-    // 4. Start the continuous camera frame listener. Both production and
-    // debug consume CameraContext.onCameraFrame() throttled to the selected
-    // fps via PoseCamera's FrameAdapter. The repeated native takePhoto()
-    // shutter that caused the bright/cream overlay flash is no longer used
-    // for automatic recognition.
-    const frameListenerReady = waitForFrameListenerStart()
-    poseCamera.value?.startCamera()
-    await frameListenerReady
-    if (!isMounted) return
-
+    // 4. Keep the detector warm and camera preview available, but attach the
+    // continuous frame listener only when formal training actually needs pose
+    // scores. Countdown and demonstration inference has no scoring value and
+    // unnecessarily keeps Android CPU/GPU pipelines busy.
     detectorReadyForTraining = true
+    if (detectionActive.value) {
+      await startLiveDetection()
+      if (!isMounted) return
+    }
     emitStats('ready');
   } catch (err: any) {
     if (!isMounted) return;
@@ -172,18 +183,76 @@ onMounted(async () => {
 
 onUnmounted(() => {
   isMounted = false;
+  stopLiveDetection()
   rejectCameraReady?.(new Error('pose detector unmounted before camera ready'))
-  rejectFrameListenerStart(new Error('pose detector unmounted before camera frame listener started'))
   // Dispose the TF.js detector to free WebGL/GPU resources.
   if (detector) {
     try { detector.dispose(); } catch { /* detector may already be disposed */ }
     detector = null;
   }
-  poseCamera.value?.stopCamera();
 });
 
+watch(samplingFps, fps => {
+  effectiveSamplingFps.value = fps
+  inferenceLatencySamples.length = 0
+})
+
+watch(detectionActive, active => {
+  if (!detectorReadyForTraining) return
+  if (!active) {
+    stopLiveDetection()
+    return
+  }
+  void startLiveDetection().catch(handleLiveDetectionFailure)
+})
+
 function emitStats(status: string) {
+  const now = Date.now()
+  if (status === 'detecting' && now - lastDetectingStatsAt < 1000) return
+  if (status === 'detecting') lastDetectingStatsAt = now
   props.onStats({ status, loadMs, warmMs, inferMs, fps });
+}
+
+function updateEffectiveSamplingFps(latencyMs: number) {
+  inferenceLatencySamples.push(latencyMs)
+  if (inferenceLatencySamples.length > INFERENCE_LATENCY_WINDOW_SIZE) {
+    inferenceLatencySamples.shift()
+  }
+  if (inferenceLatencySamples.length < Math.ceil(INFERENCE_LATENCY_WINDOW_SIZE * 0.6)) return
+
+  const sorted = [...inferenceLatencySamples].sort((left, right) => left - right)
+  const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0
+  const requestedIntervalMs = getSamplingIntervalMs(samplingFps.value)
+  if (p95 > requestedIntervalMs) {
+    effectiveSamplingFps.value = Math.min(samplingFps.value, MIN_ADAPTIVE_SAMPLING_FPS)
+  } else if (p95 <= requestedIntervalMs * 0.75) {
+    effectiveSamplingFps.value = samplingFps.value
+  }
+}
+
+async function startLiveDetection() {
+  if (!isMounted || !detectorReadyForTraining || !detectionActive.value || frameListenerStarted) return
+  const listenerReady = waitForFrameListenerStart()
+  poseCamera.value?.startCamera()
+  await listenerReady
+}
+
+function stopLiveDetection() {
+  inferenceGeneration += 1
+  nextInferenceEligibleAt = 0
+  if (!frameListenerStarted && !frameListenerWaiter) return
+  frameListenerStarted = false
+  rejectFrameListenerStart(new Error('camera frame listener stopped'))
+  frameListenerStartPromise = null
+  poseCamera.value?.stopCamera()
+}
+
+function handleLiveDetectionFailure(error: unknown) {
+  if (!isMounted || !detectionActive.value || !detectorReadyForTraining) return
+  detectorReadyForTraining = false
+  cameraError.value = error instanceof Error ? error.message : 'camera frame listener failed'
+  stopLiveDetection()
+  emitStats('failed')
 }
 
 function waitForCameraReady() {
@@ -198,6 +267,7 @@ function waitForFrameListenerStart() {
     const timeoutId = setTimeout(() => {
       if (frameListenerWaiter?.timeoutId !== timeoutId) return
       frameListenerWaiter = null
+      frameListenerStartPromise = null
       reject(new Error('camera frame listener start timed out'))
     }, FRAME_LISTENER_READY_TIMEOUT_MS)
     frameListenerWaiter = { resolve, reject, timeoutId }
@@ -207,6 +277,7 @@ function waitForFrameListenerStart() {
 
 function resolveFrameListenerStart() {
   frameListenerStarted = true
+  frameListenerStartPromise = null
   if (!frameListenerWaiter) return
   clearTimeout(frameListenerWaiter.timeoutId)
   const { resolve } = frameListenerWaiter
@@ -215,6 +286,8 @@ function resolveFrameListenerStart() {
 }
 
 function rejectFrameListenerStart(error: Error) {
+  frameListenerStarted = false
+  frameListenerStartPromise = null
   if (!frameListenerWaiter) return
   clearTimeout(frameListenerWaiter.timeoutId)
   const { reject } = frameListenerWaiter
@@ -347,9 +420,11 @@ async function runPhotoInference() {
 
 /** Called by PoseCamera for every camera frame (throttled to ~10 fps). */
 async function onFrame(frame: Frame) {
-  if (!detector || liveInferenceInFlight) return;
-  liveInferenceInFlight = true;
+  if (!detector || liveInferenceInFlight || !detectionActive.value) return;
   const t = Date.now();
+  if (t < nextInferenceEligibleAt) return
+  const generation = inferenceGeneration
+  liveInferenceInFlight = true;
   try {
     // RGBA → RGB tensor (manual extraction, no tf.slice)
     const data = frame.data;
@@ -368,6 +443,12 @@ async function onFrame(frame: Frame) {
       rgbTensor.dispose();
     }
     inferMs = Date.now() - t;
+    updateEffectiveSamplingFps(inferMs)
+
+    // A completed inference may race with page hide, phase transitions, or
+    // unmount. Do not draw or publish results after its capture boundary is
+    // no longer valid.
+    if (!isMounted || !detectionActive.value || generation !== inferenceGeneration) return
 
     // Rolling FPS
     frameCount++;
@@ -406,6 +487,10 @@ async function onFrame(frame: Frame) {
       emitStats('failed')
     }
   } finally {
+    // Schedule from inference completion, not frame arrival. On a slow device
+    // this creates an actual cooling interval instead of immediately starting
+    // another WebGL job as soon as the previous one returns.
+    nextInferenceEligibleAt = Date.now() + getSamplingIntervalMs(effectiveSamplingFps.value)
     liveInferenceInFlight = false;
   }
 }
@@ -481,8 +566,10 @@ function onCameraStatus(evt: { type: string; detail?: string }) {
 // ───────────────────────────────────────────
 
 defineExpose({
-  startDetect: () => poseCamera.value?.startCamera(),
-  stopDetect: () => poseCamera.value?.stopCamera(),
+  startDetect: () => {
+    if (detectionActive.value) void startLiveDetection().catch(handleLiveDetectionFailure)
+  },
+  stopDetect: stopLiveDetection,
   startRecord: () => poseCamera.value?.startRecord?.(),
   stopRecord: () => poseCamera.value?.stopRecord?.()
 });
@@ -496,7 +583,7 @@ defineExpose({
     :on-frame="onFrame"
     :on-status="onCameraStatus"
     :show-overlay="overlayEnabled"
-    :target-fps="samplingFps"
+    :target-fps="effectiveSamplingFps"
     :media-size="props.mediaSize"
   />
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, shallowRef } from 'vue'
+import { onHide } from '@dcloudio/uni-app'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
@@ -178,36 +179,37 @@ async function finishSession() {
   })
 }
 
-function interruptSession() {
+function stopActiveCapture() {
   clearTimer()
+  const wasRunning = isRunning.value
   isRunning.value = false
-  sensorStatus.value = 'ready'
-  resetLiveMetrics()
   const activeSession = captureSession
   captureSession = null
 
   if (activeSession) {
     void activeSession.stop({
       durationSeconds: 30 - secondsLeft.value,
-      completedIntervals: 0
-    })
+      completedIntervals: wasRunning ? 1 : 0
+    }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
   }
+}
+
+function interruptSession() {
+  stopActiveCapture()
+  sensorStatus.value = 'ready'
+  resetLiveMetrics()
 
   void uni.switchTab({
     url: '/pages/training/select'
   })
 }
 
-onBeforeUnmount(() => {
-  clearTimer()
+onHide(() => {
+  stopActiveCapture()
+})
 
-  if (captureSession) {
-    void captureSession.stop({
-      durationSeconds: 30 - secondsLeft.value,
-      completedIntervals: isRunning.value ? 1 : 0
-    })
-    captureSession = null
-  }
+onBeforeUnmount(() => {
+  stopActiveCapture()
 })
 </script>
 

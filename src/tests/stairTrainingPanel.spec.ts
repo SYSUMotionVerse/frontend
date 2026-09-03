@@ -74,6 +74,18 @@ describe('stair training panel', () => {
     expect(wrapper.emitted('interrupt')).toHaveLength(1)
   })
 
+  it('stops an active sensor capture when the page hides instead of waiting for unmount', () => {
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/pages/training/stair-session.vue'),
+      'utf8'
+    )
+
+    expect(pageSource).toContain("import { onHide } from '@dcloudio/uni-app'")
+    expect(pageSource).toContain('function stopActiveCapture()')
+    expect(pageSource).toMatch(/onHide\(\(\) => \{[\s\S]*stopActiveCapture\(\)/)
+    expect(pageSource).toMatch(/onBeforeUnmount\(\(\) => \{[\s\S]*stopActiveCapture\(\)/)
+  })
+
   it('stretches the stair session card to consume the available page height above the dock', () => {
     const panelSource = readFileSync(
       resolve(process.cwd(), 'src/components/training/StairTrainingPanel.vue'),

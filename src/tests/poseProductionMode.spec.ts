@@ -21,9 +21,10 @@ describe('PoseDetectionView production mode', () => {
     )
 
     expect(source).toContain('samplingFps')
-    expect(source).toContain(':target-fps="samplingFps"')
+    expect(source).toContain(':target-fps="effectiveSamplingFps"')
     expect(source).toContain("initialFps?: 5 | 10")
     expect(source).toContain("const samplingFps = ref<5 | 10>(props.initialFps ?? 5)")
+    expect(source).toContain('const effectiveSamplingFps = ref<number>(samplingFps.value)')
     expect(source).toContain('5 fps')
     expect(source).toContain('10 fps')
   })

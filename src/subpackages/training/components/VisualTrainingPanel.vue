@@ -869,6 +869,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           class="visual-session__pose-view"
           mode="production"
           :initial-fps="recognitionFps"
+          :detection-active="recognitionEnabled && trainingStarted && phaseKind === 'active'"
           :media-size="comparisonPoseMediaSize"
           :on-result="result => emit('poseResult', result)"
           :on-stats="stats => emit('poseStats', stats)"
