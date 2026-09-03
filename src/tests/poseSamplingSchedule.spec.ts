@@ -14,15 +14,16 @@ describe('sampled pose inference schedule', () => {
     expect(getNextSamplingDelayMs(10, 140)).toBe(0)
   })
 
-  it('does not use the sampling schedule for automatic production inference', () => {
+  it('does not use the timer-based sampling schedule for automatic production inference', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/pose/PoseDetectionView.vue'),
       'utf8'
     )
 
-    // The continuous frame path throttles via PoseCamera's targetFps prop,
-    // not via the sampling schedule's getNextSamplingDelayMs timer.
+    // The continuous frame path throttles via PoseCamera's targetFps prop
+    // (adaptive effectiveSamplingFps) plus a completion-based cooldown, not
+    // via the sampling schedule's getNextSamplingDelayMs timer.
     expect(source).not.toContain('getNextSamplingDelayMs')
-    expect(source).toContain(':target-fps="samplingFps"')
+    expect(source).toContain(':target-fps="effectiveSamplingFps"')
   })
 })
