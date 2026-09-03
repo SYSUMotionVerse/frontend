@@ -86,6 +86,24 @@ describe('stair training panel', () => {
     expect(pageSource).toMatch(/onBeforeUnmount\(\(\) => \{[\s\S]*stopActiveCapture\(\)/)
   })
 
+  it('resets the panel to a clean ready state and credits no interval when capture stops early', () => {
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/pages/training/stair-session.vue'),
+      'utf8'
+    )
+    const stopSource = pageSource.slice(
+      pageSource.indexOf('function stopActiveCapture()'),
+      pageSource.indexOf('function interruptSession()')
+    )
+
+    expect(stopSource).toContain('if (isFinishing.value) return')
+    expect(stopSource).toContain('completedIntervals: 0')
+    expect(stopSource).not.toContain('wasRunning')
+    expect(stopSource).toContain('secondsLeft.value = 30')
+    expect(stopSource).toContain("sensorStatus.value = 'ready'")
+    expect(stopSource).toContain('resetLiveMetrics()')
+  })
+
   it('stretches the stair session card to consume the available page height above the dock', () => {
     const panelSource = readFileSync(
       resolve(process.cwd(), 'src/components/training/StairTrainingPanel.vue'),

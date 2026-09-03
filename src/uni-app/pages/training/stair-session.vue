@@ -180,24 +180,33 @@ async function finishSession() {
 }
 
 function stopActiveCapture() {
+  // Natural completion owns the capture from this point; a hide or unmount
+  // racing the finish flow must not clobber its final state.
+  if (isFinishing.value) return
+
   clearTimer()
-  const wasRunning = isRunning.value
   isRunning.value = false
   const activeSession = captureSession
   captureSession = null
 
+  // The 30-second interval was interrupted, so it is not credited as a
+  // completed interval — only a timer-driven finish may report one.
   if (activeSession) {
     void activeSession.stop({
       durationSeconds: 30 - secondsLeft.value,
-      completedIntervals: wasRunning ? 1 : 0
+      completedIntervals: 0
     }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
   }
+
+  // Leave the panel in a clean ready state for the next run — the truncated
+  // capture cannot resume, so stale countdown/metric values would mislead.
+  secondsLeft.value = 30
+  sensorStatus.value = 'ready'
+  resetLiveMetrics()
 }
 
 function interruptSession() {
   stopActiveCapture()
-  sensorStatus.value = 'ready'
-  resetLiveMetrics()
 
   void uni.switchTab({
     url: '/pages/training/select'
