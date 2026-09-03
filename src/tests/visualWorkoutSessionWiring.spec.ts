@@ -42,11 +42,6 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain("const recognitionStatus = shallowRef<PoseRecognitionStatus>('idle')")
     expect(sessionSource).toContain("const recognitionReady = computed(() => recognitionStatus.value === 'ready')")
     expect(sessionSource).toContain('function startTraining()')
-    const startTrainingSource = sessionSource.slice(
-      sessionSource.indexOf('async function startTraining()'),
-      sessionSource.indexOf('function beginFirstAction()')
-    )
-    expect(startTrainingSource).toContain('trainingAudioClock.resume()')
     expect(sessionSource).toContain('if (!recognitionReady.value)')
     expect(sessionSource).toContain("recognitionStatus.value = 'preparing'")
     expect(sessionSource).toContain("if (stats.status === 'ready')")

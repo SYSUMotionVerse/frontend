@@ -1183,9 +1183,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
   async function startTraining() {
     if (disposed || sessionStopping || sessionSuspended) return
-    // Real devices begin a Web Audio context suspended. Resume it in the
-    // start interaction before every TTS/soundscape timeline is scheduled.
-    trainingAudioClock.resume()
     if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {
         void uni.showToast({
