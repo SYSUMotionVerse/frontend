@@ -33,6 +33,22 @@ describe('trainingSoundscape', () => {
     vi.useRealTimers()
   })
 
+  it('does not allocate or play sound effects when disabled for voice-led training', async () => {
+    const createContext = vi.fn(createAudioContext)
+    const soundscape = createTrainingSoundscape(
+      createContext,
+      undefined,
+      undefined,
+      false
+    )
+
+    await soundscape.preload()
+    soundscape.play('formal', 10)
+    vi.advanceTimersByTime(10_000)
+
+    expect(createContext).not.toHaveBeenCalled()
+  })
+
   it('preloads all CDN players and stays silent outside the pretraining tail', () => {
     const createContext = vi.fn(createAudioContext)
     const soundscape = createTrainingSoundscape(createContext)
