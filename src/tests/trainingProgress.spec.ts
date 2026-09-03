@@ -82,8 +82,8 @@ describe('authoritative training progress', () => {
       dailyCount: 1,
       goalCompleted: false,
       modalities: [
-        { id: 'wushu', label: '武术跟练', completed: true },
-        { id: 'hiit', label: 'HIIT 跟练', completed: false },
+        { id: 'wushu', label: '传统体育养生跟练', completed: true },
+        { id: 'hiit', label: '自重抗阻跟练', completed: false },
         { id: 'stair', label: '楼梯训练', completed: false }
       ],
       week: {
@@ -148,8 +148,8 @@ describe('authoritative training progress', () => {
     expect(launchRows).toHaveLength(3)
     expect(launchRows[0].text()).toContain('自重抗阻')
     expect(launchRows[0].text()).toContain('推荐')
-    expect(launchRows[1].text()).toContain('武术')
-    expect(launchRows[1].text()).not.toContain('Wushu')
+    expect(launchRows[1].text()).toContain('传统体育养生')
+    expect(launchRows[1].text()).not.toContain('武术')
     expect(launchRows[1].text()).toContain('已完成')
     expect(launchRows[2].text()).toContain('跑楼梯')
     expect(launchRows[2].text()).not.toContain('Stairs')

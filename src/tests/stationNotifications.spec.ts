@@ -60,7 +60,7 @@ describe('station notifications', () => {
           id: 17,
           notification_type: 'TRAINING_REMINDER',
           title: '晚间训练提醒',
-          content: '今天已完成 1/3 项，还差 HIIT 跟练、楼梯训练。',
+          content: '今天已完成 1/3 项，还差自重抗阻跟练、楼梯训练。',
           is_read: false,
           reminder_slot: '18:00',
           action_target: '/pages/training/home',
@@ -181,7 +181,7 @@ describe('station notifications', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('晚间训练提醒')
     expect(wrapper.text()).toContain('18:00')
-    expect(wrapper.text()).toContain('HIIT 跟练、楼梯训练')
+    expect(wrapper.text()).toContain('自重抗阻跟练、楼梯训练')
     expect(wrapper.text()).toContain('7月16日 18:00')
 
     await wrapper.get('[data-notification-id="17"]').trigger('click')

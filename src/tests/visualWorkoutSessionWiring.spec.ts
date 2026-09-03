@@ -145,7 +145,7 @@ describe('visual workout session wiring', () => {
     expect(pageSource).toContain('@video-play="session.handleVideoPlay"')
     expect(pageSource).toContain('@video-pause="session.handleVideoPause"')
     expect(pageSource).toContain('@video-waiting="session.handleVideoWaiting"')
-    expect(pageSource).toContain("return modality.value === 'hiit' ? '自重抗阻跟练' : '武术跟练'")
+    expect(pageSource).toContain("return modality.value === 'hiit' ? '自重抗阻跟练' : '传统体育养生跟练'")
     expect(pageSource).toContain('arrangementId.value = Number.isInteger(parsedArrangementId)')
     expect(sessionSource).toContain('options.arrangementId.value ?? undefined')
     expect(sessionSource).toContain('watch([options.modality, options.arrangementId]')

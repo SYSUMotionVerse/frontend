@@ -18,7 +18,7 @@ const refreshing = ref(false)
 const errorMessage = ref('')
 let loadRequestId = 0
 
-const modalityLabel = computed(() => modality.value === 'hiit' ? '自重抗阻' : '武术')
+const modalityLabel = computed(() => modality.value === 'hiit' ? '自重抗阻' : '传统体育养生')
 const pageTitle = computed(() => `选择${modalityLabel.value}套组`)
 const accentTone = computed(() => modality.value === 'hiit' ? 'teal' : 'coral')
 

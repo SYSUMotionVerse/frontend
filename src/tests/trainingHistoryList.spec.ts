@@ -18,7 +18,7 @@ describe('TrainingHistoryList', () => {
     })
 
     expect(wrapper.findAll('.history-item')).toHaveLength(7)
-    expect(wrapper.text()).toContain('武术')
+    expect(wrapper.text()).toContain('传统体育养生')
     expect(wrapper.text()).toContain('自重抗阻')
     expect(wrapper.text()).toContain('跑楼梯')
     expect(wrapper.text()).toContain('训练时长')

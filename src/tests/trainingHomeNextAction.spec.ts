@@ -69,8 +69,8 @@ type Modality = 'wushu' | 'hiit' | 'stair'
 
 function setProgress(completed: Record<Modality, boolean>) {
   const modalities = [
-    { id: 'wushu' as const, label: '武术跟练', completed: completed.wushu },
-    { id: 'hiit' as const, label: 'HIIT 跟练', completed: completed.hiit },
+    { id: 'wushu' as const, label: '传统体育养生跟练', completed: completed.wushu },
+    { id: 'hiit' as const, label: '自重抗阻跟练', completed: completed.hiit },
     { id: 'stair' as const, label: '楼梯训练', completed: completed.stair }
   ]
   const completedCount = modalities.filter(item => item.completed).length
@@ -125,7 +125,7 @@ describe('training home next action', () => {
     const wrapper = await mountHome()
 
     expect(wrapper.get('.home-next-action__eyebrow').text()).toBe('今日下一项')
-    expect(wrapper.get('.home-next-action__title').text()).toBe('HIIT 跟练')
+    expect(wrapper.get('.home-next-action__title').text()).toBe('自重抗阻跟练')
     expect(wrapper.get('.home-next-action__button').text()).toContain('开始')
 
     await wrapper.get('.home-next-action__button').trigger('click')

@@ -27,8 +27,8 @@ export interface SessionBadgeHistoryItem {
 }
 
 const MODALITY_LABELS: Record<TrainingModality, string> = {
-  wushu: '武术训练',
-  hiit: 'HIIT 训练',
+  wushu: '传统体育养生训练',
+  hiit: '自重抗阻训练',
   stair: '楼梯训练'
 }
 

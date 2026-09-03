@@ -73,7 +73,7 @@ describe('student growth summaries', () => {
         description: '本次质量考评 86 分，动作控制和完成度都很稳定。',
         scoreLabel: '86 分',
         sessionDate: '2026-03-18',
-        modalityLabel: '武术训练',
+        modalityLabel: '传统体育养生训练',
         svgName: 'stable-star',
         shareTitle: '我在 Sport Snack 获得了「动作稳定星」',
         sharePath: '/pages/access/startup',
@@ -126,7 +126,7 @@ describe('student growth summaries', () => {
       level: 'platinum',
       title: '满格表现章',
       scoreLabel: '94 分',
-      modalityLabel: 'HIIT 训练',
+      modalityLabel: '自重抗阻训练',
       svgName: 'full-power',
       shareTitle: '我在 Sport Snack 获得了「满格表现章」',
       sharePath: '/pages/access/startup'

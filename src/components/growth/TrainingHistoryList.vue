@@ -6,7 +6,7 @@ const props = defineProps<{
 }>()
 
 const modalityLabels: Record<GrowthTrainingHistoryItem['modality'], string> = {
-  wushu: '武术',
+  wushu: '传统体育养生',
   hiit: '自重抗阻',
   stair: '跑楼梯'
 }

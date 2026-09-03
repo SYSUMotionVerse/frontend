@@ -88,7 +88,7 @@ watch(
 )
 const navigationTitle = computed(() => {
   if (session.tutorialMode.value) return '动作讲解'
-  return modality.value === 'hiit' ? '自重抗阻跟练' : '武术跟练'
+  return modality.value === 'hiit' ? '自重抗阻跟练' : '传统体育养生跟练'
 })
 
 const comparisonMediaSize = computed(() => {

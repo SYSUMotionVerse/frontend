@@ -8,8 +8,8 @@ import type {
 } from './studentBackendTypes'
 
 const modalityView: Record<BackendTrainingModality, Pick<TrainingProgressModalityView, 'id' | 'label'>> = {
-  MARTIAL_ARTS: { id: 'wushu', label: '武术跟练' },
-  HIIT: { id: 'hiit', label: 'HIIT 跟练' },
+  MARTIAL_ARTS: { id: 'wushu', label: '传统体育养生跟练' },
+  HIIT: { id: 'hiit', label: '自重抗阻跟练' },
   STAIRS: { id: 'stair', label: '楼梯训练' }
 }
 

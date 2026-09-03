@@ -53,7 +53,7 @@ const modeActionLabels: Record<TrainingModeStatus, string> = {
 const trainingModes: TrainingModeSummary[] = [
   {
     modality: 'wushu',
-    title: '武术',
+    title: '传统体育养生',
     actionHint: '跟镜头出招',
     routeLabel: '镜头跟练',
     icon: 'camera-filled',

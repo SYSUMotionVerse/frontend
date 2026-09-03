@@ -200,7 +200,7 @@ onShareAppMessage((options) => {
       </view>
 
       <template v-else>
-        <UniPageHeading inset eyebrow="训练已记录" :title="`${modalityLabel}训练完成`" :description="`${statusText}，结果已经为你保存。`" />
+        <UniPageHeading inset eyebrow="训练已记录" :title="`${modalityLabel}完成`" :description="`${statusText}，结果已经为你保存。`" />
 
         <section class="feedback-page__overview-card">
           <view class="feedback-page__overview-head">

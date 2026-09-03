@@ -202,7 +202,7 @@ describe('growth backend read models', () => {
       id: 'session-88-badge',
       level: 'gold',
       scoreLabel: '88 分',
-      modalityLabel: 'HIIT 训练'
+      modalityLabel: '自重抗阻训练'
     })
   })
 

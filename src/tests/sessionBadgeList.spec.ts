@@ -15,7 +15,7 @@ describe('SessionBadgeList', () => {
           description: '动作控制和完成度都很稳定。',
           scoreLabel: '88 分',
           sessionDate: '2026-09-02',
-          modalityLabel: '武术训练',
+          modalityLabel: '传统体育养生训练',
           svgName: 'stable-star',
           shareTitle: '分享徽章',
           sharePath: '/pages/access/startup',
@@ -34,7 +34,7 @@ describe('SessionBadgeList', () => {
     expect(wrapper.text()).toContain('动作稳定星')
     expect(wrapper.text()).toContain('累计 3 次')
     expect(wrapper.text()).toContain('动作控制和完成度都很稳定。')
-    expect(wrapper.text()).not.toContain('武术训练')
+    expect(wrapper.text()).not.toContain('传统体育养生训练')
     expect(wrapper.text()).not.toContain('88 分')
     expect(wrapper.get('.session-badge__share').text()).toBe('')
     expect(wrapper.get('.session-badge__share').attributes('aria-label')).toBe('分享徽章')
