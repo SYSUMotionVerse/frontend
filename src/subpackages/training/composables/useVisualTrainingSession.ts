@@ -332,12 +332,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const trainingSoundscape = createTrainingSoundscape(
     undefined,
     trainingAudioClock.runtime,
-    createDefaultTrainingWebAudioRuntime(sharedWebAudioContext),
-    false
+    createDefaultTrainingWebAudioRuntime(sharedWebAudioContext)
   )
-  // Speech guidance has priority. The former per-second soundscape competed
-  // with TTS on mini-program audio channels, so this session intentionally
-  // keeps it disabled.
+  // Decode the two effect assets before training so Web Audio can submit the
+  // complete sample-clock timeline as soon as a phase begins.
+  void trainingSoundscape.preload()
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setTimeout> | null = null
   let mediaStartWatchdogTimer: ReturnType<typeof setTimeout> | null = null

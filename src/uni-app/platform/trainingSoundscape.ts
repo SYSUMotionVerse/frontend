@@ -196,8 +196,7 @@ export function createTrainingSoundscape(
     return uniApi?.createInnerAudioContext?.()
   },
   timelineRuntime?: AnchoredTimelineRuntime,
-  webAudioRuntime = createDefaultTrainingWebAudioRuntime(),
-  enabled = true
+  webAudioRuntime = createDefaultTrainingWebAudioRuntime()
 ) {
   const secondContexts: Array<PulseAudioContextLike | undefined> = [undefined, undefined]
   let nextSecondContextIndex = 0
@@ -487,7 +486,6 @@ export function createTrainingSoundscape(
 
   return {
     preload() {
-      if (!enabled) return Promise.resolve()
       if (!webAudioRuntime) {
         ensureContexts()
         return Promise.resolve()
@@ -495,7 +493,6 @@ export function createTrainingSoundscape(
       return preloadWebAudio().then(() => undefined)
     },
     play(track: TrainingSoundscapeTrack, durationSeconds = 0, elapsedSeconds = 0) {
-      if (!enabled) return
       if (durationSeconds > 0) startTrack(track, durationSeconds, elapsedSeconds)
       else stopPlayback()
     },
