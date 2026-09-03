@@ -32,6 +32,7 @@ interface PulseAudioContextLike {
   stop?: () => void
   seek?: (position: number) => void
   destroy?: () => void
+  onEnded?: (callback: () => void) => void
   onError?: (callback: (error: unknown) => void) => void
 }
 
@@ -284,6 +285,11 @@ export function createTrainingSoundscape(
     context.playbackRate = 1
     context.obeyMuteSwitch = false
     context.src = src
+    context.onEnded?.(() => {
+      // Native playback has already finished. Clearing this reference avoids
+      // calling stop() on an idle player immediately before the next beat.
+      if (activePulseContext === context) activePulseContext = undefined
+    })
     context.onError?.(error => {
       console.warn('[TrainingSoundscape] playback failed:', error)
     })

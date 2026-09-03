@@ -20,6 +20,7 @@ function createAudioContext() {
     stop: vi.fn(),
     seek: vi.fn(),
     destroy: vi.fn(),
+    onEnded: vi.fn(),
     onError: vi.fn()
   }
 }
@@ -123,6 +124,27 @@ describe('trainingSoundscape', () => {
     expect(secondSecondContext.play).toHaveBeenCalledTimes(1)
     expect(startingBoundaryContext.play).toHaveBeenCalledTimes(1)
     expect(finalBoundaryContext.play).not.toHaveBeenCalled()
+  })
+
+  it('does not stop an already-ended pulse before the next beat', () => {
+    const firstSecondContext = createAudioContext()
+    const secondSecondContext = createAudioContext()
+    const startingBoundaryContext = createAudioContext()
+    const finalBoundaryContext = createAudioContext()
+    const soundscape = createTrainingSoundscape(vi.fn()
+      .mockReturnValueOnce(firstSecondContext)
+      .mockReturnValueOnce(secondSecondContext)
+      .mockReturnValueOnce(startingBoundaryContext)
+      .mockReturnValueOnce(finalBoundaryContext))
+
+    soundscape.play('formal', 4)
+    startingBoundaryContext.onEnded.mock.calls[0][0]()
+    vi.advanceTimersByTime(1000)
+    firstSecondContext.onEnded.mock.calls[0][0]()
+    vi.advanceTimersByTime(1000)
+
+    expect(secondSecondContext.play).toHaveBeenCalledOnce()
+    expect(firstSecondContext.stop).not.toHaveBeenCalled()
   })
 
   it('does not lose an ordinary cue when a native player rejects consecutive play calls', () => {
