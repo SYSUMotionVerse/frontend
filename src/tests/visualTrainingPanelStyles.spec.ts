@@ -60,7 +60,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('visual-session__secondary-switch')
     expect(source).toContain("@tap.stop=\"selectMedia('camera')\"")
     expect(source).toContain("@tap.stop=\"selectMedia('demonstration')\"")
-    expect(source).toContain('visual-session__secondary-space')
+    expect(source).not.toContain('visual-session__secondary-space')
     expect(source).not.toContain('visual-session__media-switch')
     expect(source).not.toContain('visual-session__recording-badge')
     expect(source).toContain('defineExpose({ startRecord, stopRecord, startDetect, stopDetect })')
@@ -90,6 +90,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain('camera-position-guide.png')
     expect(source).toMatch(/\.visual-session__guide-image\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*336rpx;/)
     expect(source).toContain('站在框内')
+    expect(source).toMatch(/\.visual-session__guide-label\s*\{[\s\S]*color:\s*#fff;/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__media-label"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__start-overlay"/)
     expect(source).toMatch(/<cover-view[\s\S]*class="visual-session__position-guide"/)
@@ -97,7 +98,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).not.toContain('visual-session__completion-error-detail')
   })
 
-  it('uses a stable portrait 4:3 media stage followed by the training information', () => {
+  it('uses a one-screen portrait layout with a 3:4 primary and equal lower panes', () => {
     const panelSource = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -119,16 +120,16 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(pageSource).toContain('class="visual-session-page"')
     expect(pageSource).toContain('class="visual-session-page__panel"')
     expect(pageSource).toMatch(
-      /\.visual-session-page\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*auto;[\s\S]*min-height:\s*calc\(100vh - 24rpx\);/
+      /\.visual-session-page\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*overflow:\s*hidden;/
     )
     expect(pageSource).toMatch(
-      /\.visual-session-page__panel\s*\{[\s\S]*display:\s*block;[\s\S]*height:\s*auto;[\s\S]*min-height:\s*calc\(100vh - 24rpx\);/
+      /\.visual-session-page__panel\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*overflow:\s*hidden;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session\s*\{[\s\S]*height:\s*auto;[\s\S]*min-height:\s*calc\(100vh - 24rpx\);/
+      /\.visual-session\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;[\s\S]*overflow:\s*hidden;[\s\S]*padding:\s*28rpx 28rpx 64rpx;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__stage\s*\{[\s\S]*height:\s*936rpx;[\s\S]*aspect-ratio:\s*3\s*\/\s*4;[\s\S]*flex:\s*0\s+0\s+auto;[\s\S]*min-height:\s*0;/
+      /\.visual-session__stage\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100%;[\s\S]*flex:\s*1;[\s\S]*flex-wrap:\s*wrap;[\s\S]*align-content:\s*flex-start;[\s\S]*min-height:\s*0;/
     )
     expect(panelSource).toMatch(
       /\.visual-session__tutorial-media\s*\{[\s\S]*width:\s*100%;[\s\S]*aspect-ratio:\s*4\s*\/\s*3;/
@@ -137,13 +138,13 @@ describe('VisualTrainingPanel mini-program styles', () => {
       /\.visual-session__tutorial-video\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*514rpx;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__lower-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*430rpx;[\s\S]*min-height:\s*430rpx;[\s\S]*flex:\s*0 0 430rpx;[\s\S]*gap:\s*24rpx;/
+      /\.visual-session__media-stage--primary\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*925\.333rpx;[\s\S]*flex:\s*0 0 100%;[\s\S]*margin-bottom:\s*24rpx;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__media-stage--secondary\s*\{[\s\S]*top:\s*calc\(100% \+ 30rpx\);[\s\S]*right:\s*0;[\s\S]*width:\s*330rpx;[\s\S]*height:\s*430rpx;/
+      /\.visual-session__media-stage--secondary\s*\{[\s\S]*order:\s*3;[\s\S]*width:\s*0;[\s\S]*height:\s*calc\(100% - 949\.333rpx\);[\s\S]*flex:\s*1 1 0;/
     )
     expect(panelSource).toMatch(
-      /\.visual-session__secondary-space\s*\{[\s\S]*width:\s*330rpx;[\s\S]*height:\s*430rpx;[\s\S]*flex:\s*0 0 330rpx;/
+      /\.visual-session__info-panel\s*\{[\s\S]*order:\s*2;[\s\S]*width:\s*0;[\s\S]*height:\s*calc\(100% - 949\.333rpx\);[\s\S]*flex:\s*1 1 0;[\s\S]*margin-right:\s*24rpx;/
     )
     expect(panelSource).toContain('object-fit="cover"')
     expect(panelSource).toMatch(/\.visual-session__secondary[\s\S]*border-radius:\s*9999px;/)
@@ -158,7 +159,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
       'utf8'
     )
 
-    expect(source).toContain('v-if="showStartAction && !comparisonMode && (startActionDisabled || recognitionStatus === \'failed\')"')
+    expect(source).toContain('v-if="showStartOverlay && !comparisonMode"')
     expect(source).toContain("'visual-session--comparison': comparisonMode")
     expect(source).toContain("'visual-session--tutorial': tutorialMode && !comparisonMode")
     expect(source).not.toContain('@media (orientation: landscape)')
@@ -174,6 +175,12 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain("value: '准备中'")
     expect(source).toContain(':style="comparisonMediaStyle"')
     expect(source).toMatch(/\.visual-session__video,[\s\S]*?\.visual-session__video-state\s*\{[\s\S]*display:\s*block;/)
+    expect(source).toMatch(
+      /\.visual-session__demonstration-stage\.visual-session__media-stage--primary[\s\S]*?\.visual-session__video--active\s*\{[\s\S]*inset:\s*-8rpx;[\s\S]*width:\s*calc\(100% \+ 16rpx\);[\s\S]*height:\s*calc\(100% \+ 16rpx\);/
+    )
+    expect(source).toMatch(
+      /\.visual-session__demonstration-stage\s*\{[\s\S]*isolation:\s*isolate;[\s\S]*backface-visibility:\s*hidden;[\s\S]*-webkit-clip-path:\s*inset\(0 round 30rpx\);[\s\S]*clip-path:\s*inset\(0 round 30rpx\);/
+    )
     expect(source).toContain('v-if="startCountdown > 0 && !comparisonMode"')
     expect(source).toContain('v-if="phaseCueCount && !comparisonMode"')
     expect(source).toContain("phaseKind === 'active' && !comparisonMode")

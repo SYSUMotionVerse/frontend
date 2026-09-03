@@ -4,11 +4,13 @@ import { defineComponent, h, nextTick } from 'vue'
 import { createInitialStudentState } from '../domain/student/state'
 
 vi.mock('../uni-app/platform/trainingSoundscape', () => ({
+  createDefaultTrainingWebAudioRuntime: () => undefined,
   createTrainingSoundscape: () => ({
     preload: vi.fn(),
     play: vi.fn(),
     suspend: vi.fn(),
     resume: vi.fn(),
+    finish: vi.fn(),
     stop: vi.fn()
   })
 }))
@@ -1158,7 +1160,7 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
-  it('renders loaded adherence stats and the backend calendar with a capped daily count', async () => {
+  it('renders loaded adherence stats and the selectable current-month calendar with a capped daily count', async () => {
     const { invalidateGrowthOverview } = await import('../uni-app/composables/useGrowthOverview')
     invalidateGrowthOverview()
     studentBackendSync.loadAdherenceData.mockResolvedValue({
@@ -1199,9 +1201,11 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('3/3')
     expect(wrapper.text()).not.toContain('4/3')
     expect(wrapper.text()).toContain('75%')
-    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(2)
-    expect(wrapper.find('.adherence-cell--partial').attributes('title')).toContain('2026-07-01')
-    expect(wrapper.find('.adherence-cell--met').attributes('title')).toContain('2026-07-02')
+    const now = new Date()
+    const currentMonthDayCount = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(currentMonthDayCount)
+    expect(wrapper.findAll('.adherence-cell__date')).toHaveLength(currentMonthDayCount)
+    expect(wrapper.find('.adherence-cell--selected').exists()).toBe(true)
   })
 
   it('keeps the local adherence heatmap fallback when backend data is unavailable', async () => {
@@ -1222,7 +1226,9 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
 
     expect(wrapper.find('.detail-page__stats').exists()).toBe(false)
-    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(28)
+    const now = new Date()
+    const currentMonthDayCount = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    expect(wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')).toHaveLength(currentMonthDayCount)
   })
 
   it('keeps a short questionnaire visibly pending instead of claiming server completion', async () => {
@@ -1554,7 +1560,7 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
-  it('plays database-configured action guidance from in-session demonstration media progress only', async () => {
+  it('runs pretraining guidance and transition from the configured phase clock', async () => {
     vi.useFakeTimers()
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 3,
@@ -1669,9 +1675,17 @@ describe('page-level backend sync wiring', () => {
       await wrapper.get('.start-training').trigger('click')
       await flushPromises()
 
-      expect(createInnerAudioContext).not.toHaveBeenCalled()
-      // Some WeChat runtimes omit the native play event after context.play();
-      // positive video progress must still start guidance playback.
+      // Configured second 1 is the module-entry instant, so it does not wait
+      // for native video play/progress events.
+      expect(createInnerAudioContext).toHaveBeenCalledOnce()
+      expect(audioContext.src).toBe('https://cdn.example.com/database-guidance-01.mp3')
+      expect(audioContext.play).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(1_000)
+      await flushPromises()
+
+      expect(createInnerAudioContext).toHaveBeenCalledOnce()
+
+      // A media progress event must not restart or duplicate that cue.
       await wrapper.get('.demo-guidance').trigger('click')
       await flushPromises()
 
@@ -1683,12 +1697,11 @@ describe('page-level backend sync wiring', () => {
       // than cutting it off at the configured video boundary.
       audioContext.onEnded.mock.calls[0][0]()
 
-      await wrapper.get('.end-video').trigger('click')
-      await flushPromises()
-      // The native media ended early, but the configured five-second
-      // pretraining window remains authoritative.
+      // The native video is eight seconds long, but the configured
+      // pretraining window is five seconds. Do not emit videoEnded: the
+      // configured clock must still move to the next phase on time.
       expect(wrapper.get('.phase-kind').text()).toBe('demonstration')
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(4_000)
       await flushPromises()
       expect(audioContext.src).toBe('https://cdn.example.com/pretraining-complete.mp3')
       expect(audioContext.play).toHaveBeenCalledTimes(2)
@@ -1810,7 +1823,7 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
-  it('keeps a countdown visible until its configured prompt has finished', async () => {
+  it('ends a countdown at its configured deadline even while its prompt finishes', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 5,
@@ -1895,7 +1908,7 @@ describe('page-level backend sync wiring', () => {
 
       await vi.advanceTimersByTimeAsync(3_200)
       await flushPromises()
-      expect(wrapper.get('.phase-kind').text()).toBe('countdown')
+      expect(wrapper.get('.phase-kind').text()).toBe('active')
 
       audioContext.onEnded.mock.calls[0][0]()
       await flushPromises()
@@ -1907,7 +1920,7 @@ describe('page-level backend sync wiring', () => {
     }
   })
 
-  it('resumes the formal action clock when buffering is followed by progress without a play event', async () => {
+  it('keeps the formal action clock advancing while native video buffers', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.loadVisualExerciseArrangement.mockResolvedValue({
       id: 5,
@@ -1982,17 +1995,17 @@ describe('page-level backend sync wiring', () => {
 
       await wrapper.get('.video-waiting').trigger('click')
       await flushPromises()
-      const pausedRemaining = Number(wrapper.get('.phase-remaining').text())
+      const bufferingRemaining = Number(wrapper.get('.phase-remaining').text())
       await vi.advanceTimersByTimeAsync(2_000)
-      expect(Number(wrapper.get('.phase-remaining').text())).toBe(pausedRemaining)
+      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(bufferingRemaining)
 
       // Some WeChat versions resume emitting timeupdate but omit a second
-      // native play event after buffering. Progress must restart the clock.
+      // native play event after buffering. Progress must not reset the clock.
       await wrapper.get('.video-progress').trigger('click')
       await vi.advanceTimersByTimeAsync(1_100)
       await flushPromises()
 
-      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(pausedRemaining)
+      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(bufferingRemaining)
     } finally {
       wrapper.unmount()
       vi.useRealTimers()
@@ -2076,9 +2089,15 @@ describe('page-level backend sync wiring', () => {
       await wrapper.get('.start-recognition').trigger('click')
       await wrapper.get('.start-training').trigger('click')
       await flushPromises()
-      await wrapper.get('.play-video').trigger('click')
+      const initialRemaining = Number(wrapper.get('.phase-remaining').text())
 
-      await vi.advanceTimersByTimeAsync(2_100)
+      // The logical action starts immediately. A late/missing native play
+      // event must not add an extra frozen second at 00:00.
+      await vi.advanceTimersByTimeAsync(1_100)
+      await flushPromises()
+      expect(Number(wrapper.get('.phase-remaining').text())).toBeLessThan(initialRemaining)
+
+      await vi.advanceTimersByTimeAsync(1_000)
       await flushPromises()
       expect(wrapper.get('.phase-kind').text()).toBe('countdown')
       const countdownRemaining = Number(wrapper.get('.phase-remaining').text())
@@ -2454,29 +2473,41 @@ describe('page-level backend sync wiring', () => {
       await vi.advanceTimersByTimeAsync(4000)
       await flushPromises()
 
+      // The first action's four-second formal phase is also configuration
+      // driven; videoEnded cannot skip either phase.
+      await vi.advanceTimersByTimeAsync(4000)
+      await flushPromises()
+
       expect(playedUrls).not.toContain('https://cdn.example.com/database-rest-go.mp3')
       expect(playedUrls).not.toContain('https://cdn.example.com/action-2-next.mp3')
 
-      const secondDemoAudioStart = playedUrls.length
-      const secondDemoCompletedStart = completedUrls.length
-      // The next action's in-session demonstration only speaks after its
-      // native video has actually started.
+      // The next action's configured start cue begins at phase entry. Native
+      // video startup latency must not push it past the phase deadline.
+      expect(playedUrls).toContain(
+        'https://cdn.example.com/database-action-2-guidance.mp3'
+      )
+      await vi.advanceTimersByTimeAsync(60)
+      expect(completedUrls).toContain(
+        'https://cdn.example.com/database-action-2-guidance.mp3'
+      )
+      const secondDemoAudioCount = playedUrls.filter(url => (
+        url === 'https://cdn.example.com/database-action-2-guidance.mp3'
+      )).length
       await wrapper.get('.play-video').trigger('click')
       await vi.advanceTimersByTimeAsync(60)
 
-      expect(playedUrls.slice(secondDemoAudioStart)).toContain(
-        'https://cdn.example.com/database-action-2-guidance.mp3'
-      )
-      expect(completedUrls.slice(secondDemoCompletedStart)).toContain(
-        'https://cdn.example.com/database-action-2-guidance.mp3'
-      )
-      expect(playedUrls.slice(secondDemoAudioStart)).not.toContain(
-        'https://cdn.example.com/action-2-next.mp3'
-      )
+      expect(playedUrls.filter(url => (
+        url === 'https://cdn.example.com/database-action-2-guidance.mp3'
+      ))).toHaveLength(secondDemoAudioCount)
+      expect(playedUrls).not.toContain('https://cdn.example.com/action-2-next.mp3')
 
       const countdownStart = playedUrls.length
       const countdownCompletedStart = completedUrls.length
       await wrapper.get('.end-video').trigger('click')
+      // 120 ms of this configured pretraining phase elapsed while its start
+      // cue completed and the duplicate video play event was checked.
+      await vi.advanceTimersByTimeAsync(3_880)
+      await flushPromises()
       // In a five-second module countdown, 3/2/1 must wait until the last
       // three seconds rather than playing immediately at the five-second mark.
       await vi.advanceTimersByTimeAsync(1_900)
@@ -2626,8 +2657,16 @@ describe('page-level backend sync wiring', () => {
     await flushPromises()
     await wrapper.get('.play-video').trigger('click')
     await flushPromises()
+    // 42 seconds of configured pretraining followed by 42 seconds formal.
+    // Flush the phase hand-off between the two immutable clock windows. The
+    // earlier videoEnded event must not shorten either phase.
+    await vi.advanceTimersByTimeAsync(42_000)
+    await flushPromises()
+    await wrapper.get('.play-video').trigger('click')
     await wrapper.get('.pose-result').trigger('click')
-    vi.advanceTimersByTime(42000)
+    await vi.advanceTimersByTimeAsync(42_000)
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
     await flushPromises()
 
     expect(studentBackendSync.syncVisualSession).toHaveBeenCalledWith(expect.objectContaining({

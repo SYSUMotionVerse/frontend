@@ -1,5 +1,6 @@
 import type { ActionTtsCue } from '../../domain/training/actionScoringTypes'
 import type {
+  ExerciseArrangementDetail,
   ExerciseArrangementItem,
   TrainingCountdownTtsCue,
   TrainingTtsCue,
@@ -8,15 +9,6 @@ import type {
 
 export interface TrainingTtsPhaseTiming {
   phaseDurationSeconds: number
-}
-
-const scheduledTtsLeadSeconds = 0.1
-
-function applyGeneratedAudioLead(time: number) {
-  // edge-tts MP3 files contain a short leading silent pad. Start every
-  // scheduled (non-zero) cue 100 ms early so the audible speech lands on the
-  // configured timeline marker; true phase-start cues must remain at zero.
-  return time > 0 ? Math.max(0, time - scheduledTtsLeadSeconds) : 0
 }
 
 function toNonNegativeSeconds(value: number | null | undefined) {
@@ -37,7 +29,9 @@ function resolveCueTime(cue: TrainingTtsCue, timing: TrainingTtsPhaseTiming) {
     case 'START':
       return 0
     case 'AFTER_OFFSET':
-      return offset < duration ? offset : null
+      // Configured action seconds are one-based. A cue configured for second
+      // 17 fires at elapsed 16s, exactly when the visible clock becomes 00:17.
+      return offset >= 1 && offset <= duration ? offset - 1 : null
     case 'BEFORE_END':
       // A zero-offset "before end" cue should still have a chance to start;
       // an exact-at-end cue belongs to the explicit COMPLETE option instead.
@@ -66,7 +60,6 @@ export function resolveTrainingPhaseTtsCues(
     .filter(cue => cue.phase === phase && isUsableCue(cue))
     .map(cue => ({ cue, time: resolveCueTime(cue, timing) }))
     .filter((entry): entry is { cue: TrainingTtsCue; time: number } => entry.time !== null)
-    .map(entry => ({ ...entry, time: applyGeneratedAudioLead(entry.time) }))
     .sort((left, right) => (
       left.time - right.time
       || left.cue.order - right.cue.order
@@ -198,7 +191,7 @@ export function resolveTrainingCountdownTtsCues(
     .slice()
     .sort((left, right) => right.seconds_remaining - left.seconds_remaining)
     .map(cue => ({
-      time: applyGeneratedAudioLead(duration - cue.seconds_remaining),
+      time: duration - cue.seconds_remaining,
       text: cue.text,
       audio_url: cue.audio_url
     }))
@@ -244,4 +237,108 @@ export function resolveArrangementTtsAudioUrls(items: readonly ExerciseArrangeme
       ...formalAudioUrls
     ]
   })
+}
+
+export type TrainingAudioPhaseSlot =
+  | 'pretraining-countdown'
+  | 'pretraining'
+  | 'formal-countdown'
+  | 'formal-training'
+
+export interface TrainingSpeechPhasePlan {
+  itemId: number
+  slot: TrainingAudioPhaseSlot
+  durationSeconds: number
+  cues: ActionTtsCue[]
+  completionAudioUrls: string[]
+}
+
+export interface TrainingAudioPlan {
+  phases: TrainingSpeechPhasePlan[]
+  speechAudioUrls: string[]
+}
+
+function countdownPlanCues(
+  item: ExerciseArrangementItem,
+  phase: TrainingTtsPhase,
+  globalCountdownCues: readonly TrainingCountdownTtsCue[] | null | undefined
+) {
+  const resolved = resolveTrainingCountdownPhaseAudio(item, phase, globalCountdownCues)
+  return [
+    ...resolved.phaseStartAudioUrls.map(audio_url => ({
+      time: 0,
+      text: '',
+      audio_url
+    })),
+    ...resolved.globalCues
+  ]
+}
+
+/** Build both speech order and phase timing once, immediately after API load. */
+export function buildTrainingAudioPlan(
+  arrangement: ExerciseArrangementDetail
+): TrainingAudioPlan {
+  const phases = arrangement.items.flatMap<TrainingSpeechPhasePlan>(item => {
+    const itemPhases: TrainingSpeechPhasePlan[] = []
+    if (item.pretraining_mode !== 'NONE') {
+      const countdownDuration = toNonNegativeSeconds(item.pretraining_countdown_duration)
+      if (countdownDuration > 0) {
+        itemPhases.push({
+          itemId: item.id,
+          slot: 'pretraining-countdown',
+          durationSeconds: countdownDuration,
+          cues: countdownPlanCues(item, 'PRETRAINING', arrangement.countdown_tts_cues),
+          completionAudioUrls: []
+        })
+      }
+      const duration = resolvePretrainingDurationForTts(item)
+      itemPhases.push({
+        itemId: item.id,
+        slot: 'pretraining',
+        durationSeconds: duration,
+        cues: resolveTrainingPhaseTtsCues(item, 'PRETRAINING', {
+          phaseDurationSeconds: duration
+        }),
+        completionAudioUrls: resolveTrainingPhaseCompletionAudioUrls(item, 'PRETRAINING')
+      })
+    }
+
+    const formalCountdownDuration = toNonNegativeSeconds(item.formal_countdown_duration)
+    if (formalCountdownDuration > 0) {
+      itemPhases.push({
+        itemId: item.id,
+        slot: 'formal-countdown',
+        durationSeconds: formalCountdownDuration,
+        cues: countdownPlanCues(item, 'FORMAL', arrangement.countdown_tts_cues),
+        completionAudioUrls: []
+      })
+    }
+    const formalDuration = Math.max(1, toNonNegativeSeconds(item.expected_duration))
+    itemPhases.push({
+      itemId: item.id,
+      slot: 'formal-training',
+      durationSeconds: formalDuration,
+      cues: resolveTrainingPhaseTtsCues(item, 'FORMAL', {
+        phaseDurationSeconds: formalDuration
+      }),
+      completionAudioUrls: resolveTrainingPhaseCompletionAudioUrls(item, 'FORMAL')
+    })
+    return itemPhases
+  })
+
+  return {
+    phases,
+    speechAudioUrls: [...new Set(phases.flatMap(phase => [
+      ...phase.cues.map(cue => cue.audio_url),
+      ...phase.completionAudioUrls
+    ]))]
+  }
+}
+
+export function resolveTrainingAudioPhasePlan(
+  plan: TrainingAudioPlan | null | undefined,
+  itemId: number | null | undefined,
+  slot: TrainingAudioPhaseSlot
+) {
+  return plan?.phases.find(phase => phase.itemId === itemId && phase.slot === slot) ?? null
 }

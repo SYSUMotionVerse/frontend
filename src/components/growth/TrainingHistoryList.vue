@@ -1,15 +1,9 @@
 <script setup lang="ts">
-import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
-import { computed, ref } from 'vue'
 import type { GrowthTrainingHistoryItem } from '../../uni-app/api/studentBackendTypes'
 
 const props = defineProps<{
   sessions: GrowthTrainingHistoryItem[]
 }>()
-
-const visibleCount = ref(3)
-const visibleSessions = computed(() => props.sessions.slice(0, visibleCount.value))
-const hasMore = computed(() => visibleCount.value < props.sessions.length)
 
 const modalityLabels: Record<GrowthTrainingHistoryItem['modality'], string> = {
   wushu: '武术',
@@ -24,9 +18,6 @@ function formatDuration(durationSeconds?: number | null) {
   return minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`
 }
 
-function showMore() {
-  visibleCount.value += 3
-}
 </script>
 
 <template>
@@ -34,7 +25,7 @@ function showMore() {
     <text v-if="sessions.length === 0" class="history__empty block">暂无已完成训练。</text>
 
     <view v-else class="history__list">
-      <view v-for="session in visibleSessions" :key="session.id" class="history-item">
+      <view v-for="session in sessions" :key="session.id" class="history-item">
         <view class="history-item__head">
           <view class="history-item__identity">
             <text class="history-item__headline">{{ modalityLabels[session.modality] }}</text>
@@ -52,10 +43,6 @@ function showMore() {
         </view>
       </view>
 
-      <button v-if="hasMore" class="history__more" type="button" @click="showMore">
-        <uni-icons type="bottom" size="18" color="#718096" />
-        <text>查看更多</text>
-      </button>
     </view>
   </view>
 </template>
@@ -91,8 +78,7 @@ function showMore() {
 .history-item__head,
 .history-item__identity,
 .history-item__score,
-.history-item__meta,
-.history__more {
+.history-item__meta {
   display: flex;
 }
 
@@ -155,21 +141,4 @@ function showMore() {
   font-weight: 700;
 }
 
-.history__more {
-  min-height: 68rpx;
-  align-items: center;
-  justify-content: center;
-  gap: 10rpx;
-  margin: 2rpx 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #718096;
-  font-size: 23rpx;
-  font-weight: 800;
-}
-
-.history__more::after {
-  display: none;
-}
 </style>

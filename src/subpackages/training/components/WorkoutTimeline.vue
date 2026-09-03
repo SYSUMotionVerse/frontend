@@ -16,17 +16,8 @@ const phaseDurationSeconds = computed(() => Math.max(
   props.state.current.endSeconds - props.state.current.startSeconds
 ))
 
-const phaseElapsedSeconds = computed(() => Math.min(
-  phaseDurationSeconds.value,
-  Math.max(0, Math.round(
-    phaseDurationSeconds.value * props.state.phaseProgressPercent / 100
-  ))
-))
-
-const sessionElapsedSeconds = computed(() => Math.max(
-  0,
-  Math.round(props.state.current.startSeconds + phaseElapsedSeconds.value)
-))
+const phaseElapsedSeconds = computed(() => props.state.phaseElapsedSeconds)
+const sessionElapsedSeconds = computed(() => props.state.sessionElapsedSeconds)
 
 const phaseProgressStyle = computed(() => ({
   transform: `scaleX(${props.state.phaseProgressPercent / 100})`

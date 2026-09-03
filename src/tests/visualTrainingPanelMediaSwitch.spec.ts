@@ -23,6 +23,8 @@ const workoutState: VisualWorkoutState = {
   actionNumber: 1,
   totalActions: 1,
   remainingSeconds: 15,
+  phaseElapsedSeconds: 0,
+  sessionElapsedSeconds: 0,
   phaseProgressPercent: 0,
   sessionProgressPercent: 0
 }
@@ -65,6 +67,8 @@ function mountPanel(
       workoutTimelineReady: true,
       videoAutoplay,
       trainingStarted: false,
+      preparingTraining: false,
+      trainingPreparationLabel: '',
       startCountdown: 0,
       phaseKind: 'preview',
       phaseSlot: 'preview',
@@ -239,7 +243,7 @@ describe('VisualTrainingPanel media switch', () => {
     })
 
     expect(wrapper.get('.visual-session__demonstration-label').text()).toContain('预训练示范')
-    expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__info-panel').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(false)
   })
 
@@ -257,6 +261,21 @@ describe('VisualTrainingPanel media switch', () => {
     expect(wrapper.find('.visual-session__start-button').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('摄像头已就绪，轻触画面开始训练')
     expect(wrapper.emitted('startTraining')).toHaveLength(1)
+
+    await wrapper.setProps({
+      preparingTraining: true,
+      trainingPreparationLabel: '正在加载动作与语音资源…'
+    })
+
+    expect(wrapper.get('.visual-session__start-overlay').text())
+      .toContain('正在加载动作与语音资源')
+
+    await wrapper.setProps({
+      trainingStarted: true,
+      preparingTraining: false
+    })
+
+    expect(wrapper.find('.visual-session__start-overlay').exists()).toBe(false)
   })
 
   it('keeps the full-body position guide visible until the first formal action starts', async () => {
@@ -637,6 +656,6 @@ describe('VisualTrainingPanel media switch', () => {
       .toContain('visual-session__media-stage--primary')
     expect(wrapper.find('.visual-session__camera-stage').classes())
       .toContain('visual-session__media-stage--secondary')
-    expect(wrapper.find('.visual-session__secondary-space').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__info-panel').exists()).toBe(true)
   })
 })

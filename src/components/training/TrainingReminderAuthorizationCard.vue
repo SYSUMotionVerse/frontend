@@ -36,7 +36,7 @@ const emit = defineEmits<{ authorize: [] }>()
   padding: 24rpx 26rpx;
   border: 2rpx solid rgba(255, 139, 139, 0.2);
   border-radius: 32rpx;
-  background: rgba(255, 248, 246, 0.96);
+  background: rgba(255, 255, 255, 0.94);
   box-sizing: border-box;
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }

@@ -168,6 +168,7 @@ describe('ui review fixes', () => {
     expect(selectionPage).toContain('问卷未解锁')
     expect(selectionPage).toContain('进度同步中')
     expect(selectionPage).toContain('完成任一训练后，将更新今日达标状态。')
+    expect(selectionPage).not.toContain('type="info"')
     expect(selectionPage).toContain('trainingModes')
     expect(selectionPage).toContain("title: '自重抗阻'")
     expect(selectionPage).toContain('/pages/training/exercise-sets?modality=${modality}')
@@ -182,11 +183,11 @@ describe('ui review fixes', () => {
     expect(selectionPage).not.toContain('select-page__launch-trail')
     expect(selectionPage).not.toContain('select-page__launch-action--wushu')
     expect(selectionPage).toContain('min-height: 164rpx;')
-    expect(selectionPage).toContain('border: 2rpx solid rgba(255, 211, 132, 0.22);')
+    expect(selectionPage).toContain('border: 2rpx solid rgba(196, 151, 78, 0.42);')
+    expect(selectionPage).toContain('0 10rpx 24rpx rgba(71, 56, 39, 0.1)')
     expect(selectionPage).not.toContain('width: 112rpx;')
     expect(selectionPage).not.toContain('TrainingModeCard')
     expect(selectionPage).toContain('select-page__streak-note')
-    expect(selectionPage).toContain('<uni-icons type="info"')
     expect(selectionPage).not.toContain('<uni-icons type="info-filled"')
   })
 
@@ -353,7 +354,7 @@ describe('ui review fixes', () => {
     expect(selectPage).toMatch(/\.select-page__hero-copy\s*\{[\s\S]*font-size:\s*25rpx;/)
     expect(selectPage).toMatch(/\.select-page__launch-hint\s*\{[\s\S]*font-size:\s*24rpx;/)
     expect(selectPage).toMatch(/\.select-page__launch-route\s*\{[\s\S]*font-size:\s*23rpx;/)
-    expect(selectPage).toMatch(/\.select-page__streak-note\s*\{[\s\S]*font-size:\s*24rpx;/)
+    expect(selectPage).toMatch(/\.select-page__streak-note\s*\{[\s\S]*justify-content:\s*center;[\s\S]*color:\s*rgba\(113, 128, 150, 0\.72\);[\s\S]*font-size:\s*22rpx;[\s\S]*text-align:\s*center;/)
   })
 
   it('keeps source wrapper pages for registered miniapp growth detail routes', () => {
@@ -845,8 +846,8 @@ describe('ui review fixes', () => {
     )
 
     expect(homePage).toContain('class="home-page"')
-    expect(homePage).toContain('gap: 34rpx;')
-    expect(homePage).toContain('gap: 16rpx;')
+    expect(homePage).toContain('--home-card-gap: 38rpx;')
+    expect(homePage).toContain('gap: var(--home-card-gap);')
   })
 
 
@@ -992,8 +993,8 @@ describe('ui review fixes', () => {
     expect(uniGrowthShell).toContain('padding: 16rpx 32rpx 0;')
     expect(uniGrowthShell).toContain('class="growth-shell__dock-clearance"')
     expect(uniGrowthShell).toContain('gap: 40rpx;')
-    expect(miniappHomePage).toContain('gap: 34rpx;')
-    expect(miniappHomePage).toContain('gap: 16rpx;')
+    expect(miniappHomePage).toContain('--home-card-gap: 38rpx;')
+    expect(miniappHomePage).toContain('gap: var(--home-card-gap);')
     expect(miniappGrowthPage).toContain('--growth-space-4: 26rpx;')
     expect(miniappGrowthPage).toContain('padding: 24rpx;')
   })

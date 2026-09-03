@@ -12,27 +12,16 @@ const sessions = Array.from({ length: 7 }, (_, index) => ({
 }))
 
 describe('TrainingHistoryList', () => {
-  it('localizes modalities and reveals training history three rows at a time', async () => {
+  it('localizes modalities and renders every session supplied by the selected day', () => {
     const wrapper = mount(TrainingHistoryList, {
-      props: { sessions },
-      global: {
-        stubs: {
-          UniIcons: { template: '<i />' }
-        }
-      }
+      props: { sessions }
     })
 
-    expect(wrapper.findAll('.history-item')).toHaveLength(3)
+    expect(wrapper.findAll('.history-item')).toHaveLength(7)
     expect(wrapper.text()).toContain('武术')
     expect(wrapper.text()).toContain('自重抗阻')
     expect(wrapper.text()).toContain('跑楼梯')
     expect(wrapper.text()).toContain('训练时长')
-
-    await wrapper.get('.history__more').trigger('click')
-    expect(wrapper.findAll('.history-item')).toHaveLength(6)
-
-    await wrapper.get('.history__more').trigger('click')
-    expect(wrapper.findAll('.history-item')).toHaveLength(7)
     expect(wrapper.find('.history__more').exists()).toBe(false)
   })
 })

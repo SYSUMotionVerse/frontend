@@ -2,8 +2,19 @@
 import { computed } from 'vue'
 import type { GrowthCalendarDay } from '../../features/growth/summary'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   days: GrowthCalendarDay[]
+  selectable?: boolean
+  selectedDate?: string
+  showDateLabels?: boolean
+}>(), {
+  selectable: false,
+  selectedDate: '',
+  showDateLabels: false
+})
+
+const emit = defineEmits<{
+  select: [date: string]
 }>()
 
 const legendLevels = [0, 1, 2, 3] as const
@@ -51,12 +62,22 @@ function cellClass(day: GrowthCalendarDay): string {
       ? 'adherence-cell--partial'
       : 'adherence-cell--none'
 
-  return `adherence-cell ${statusClass} adherence-cell--level-${level}`
+  const selectedClass = props.selectedDate === day.date ? ' adherence-cell--selected' : ''
+  const datedClass = props.showDateLabels ? ' adherence-cell--dated' : ''
+  return `adherence-cell ${statusClass} adherence-cell--level-${level}${selectedClass}${datedClass}`
+}
+
+function dateNumber(date: string) {
+  return Number(date.slice(-2))
+}
+
+function selectDay(day: GrowthCalendarDay) {
+  if (props.selectable) emit('select', day.date)
 }
 </script>
 
 <template>
-  <view class="adherence-shell">
+  <view :class="['adherence-shell', { 'adherence-shell--dated': showDateLabels }]">
     <view class="adherence-chart">
       <view class="adherence-weekdays" aria-hidden="true">
         <text v-for="label in weekdayLabels" :key="label">{{ label }}</text>
@@ -67,13 +88,20 @@ function cellClass(day: GrowthCalendarDay): string {
           :key="weekIndex"
           class="adherence-week"
         >
-          <view
+          <button
             v-for="(day, dayIndex) in week"
             :key="day?.date ?? `empty-${weekIndex}-${dayIndex}`"
-            :class="day ? cellClass(day) : 'adherence-cell adherence-cell--empty'"
+            :class="day
+              ? cellClass(day)
+              : ['adherence-cell', 'adherence-cell--empty', { 'adherence-cell--dated': showDateLabels }]"
             :aria-label="day ? `${day.date}：已完成 ${day.completedSessions} 次训练` : undefined"
             :title="day ? `${day.date}：已完成 ${day.completedSessions} 次训练` : undefined"
-          />
+            :disabled="!day || !selectable"
+            type="button"
+            @click="day && selectDay(day)"
+          >
+            <text v-if="day && showDateLabels" class="adherence-cell__date">{{ dateNumber(day.date) }}</text>
+          </button>
         </view>
       </view>
     </view>
@@ -139,10 +167,21 @@ function cellClass(day: GrowthCalendarDay): string {
 }
 
 .adherence-cell {
+  display: inline-flex;
   width: 32rpx;
   height: 32rpx;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
   border-radius: 9999px;
+  line-height: 1;
 }
+
+.adherence-cell::after { display: none; }
+.adherence-cell[disabled] { opacity: 1; }
 
 .adherence-cell--empty {
   visibility: hidden;
@@ -166,6 +205,55 @@ function cellClass(day: GrowthCalendarDay): string {
 .adherence-cell--level-3,
 .adherence-legend__swatch--level-3 {
   background: #FF8B8B;
+}
+
+.adherence-shell--dated {
+  align-items: flex-end;
+  gap: 28rpx;
+  overflow: visible;
+}
+
+.adherence-shell--dated .adherence-chart,
+.adherence-shell--dated .adherence-week,
+.adherence-shell--dated .adherence {
+  overflow: visible;
+}
+
+.adherence-shell--dated .adherence {
+  max-height: none;
+  padding: 6rpx 8rpx;
+  box-sizing: border-box;
+}
+
+.adherence-shell--dated .adherence-weekdays {
+  padding: 0 8rpx;
+  box-sizing: border-box;
+}
+
+.adherence-shell--dated .adherence-weekdays text {
+  width: 48rpx;
+  height: 32rpx;
+}
+
+.adherence-cell--dated {
+  width: 48rpx;
+  height: 48rpx;
+  color: #64748b;
+}
+
+.adherence-cell--dated.adherence-cell--level-2,
+.adherence-cell--dated.adherence-cell--level-3 {
+  color: #7f4242;
+}
+
+.adherence-cell--selected {
+  box-shadow: 0 0 0 4rpx #203042;
+}
+
+.adherence-cell__date {
+  font-size: 18rpx;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .adherence-legend {

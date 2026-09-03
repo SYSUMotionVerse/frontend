@@ -1,4 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const controls = vi.hoisted(() => ({
@@ -170,5 +172,24 @@ describe('training home next action', () => {
 
     expect(wrapper.find('.home-next-action__button').exists()).toBe(false)
     expect(wrapper.text()).toContain('今日训练已完成')
+  })
+
+  it('uses the coach quote milk-white surface for every home card', () => {
+    const sources = [
+      'src/uni-app/pages/training/home.vue',
+      'src/components/training/TrainingHomeCoachCard.vue',
+      'src/components/training/TrainingHomeProgressOverview.vue',
+      'src/components/training/TrainingReminderAuthorizationCard.vue',
+      'src/components/access/QuestionnaireUnlockBanner.vue'
+    ].map(path => readFileSync(resolve(process.cwd(), path), 'utf8'))
+
+    sources.forEach(source => {
+      expect(source).toContain('rgba(255, 255, 255, 0.94)')
+    })
+
+    expect(sources[0]).toContain('--home-card-gap: 38rpx;')
+    expect(sources[0]).toContain('gap: var(--home-card-gap);')
+    expect(sources[0]).toMatch(/\.home-page__section\s*\{[\s\S]*gap:\s*var\(--home-card-gap\);[\s\S]*padding-top:\s*0;/)
+    expect(sources[0]).toMatch(/\.home-page__feed\s*\{[\s\S]*gap:\s*var\(--home-card-gap\);/)
   })
 })

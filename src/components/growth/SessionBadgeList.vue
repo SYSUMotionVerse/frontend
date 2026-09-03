@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import type { SessionBadge } from '../../features/growth/summary'
 
 defineProps<{
   badges: SessionBadge[]
 }>()
 
-function badgeScore(scoreLabel: string) {
-  const score = Number.parseInt(scoreLabel, 10)
-  return Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0
+const badgeIconColors: Record<SessionBadge['level'], string> = {
+  platinum: '#397565',
+  gold: '#a76c1c',
+  silver: '#2b7cb8',
+  bronze: '#c76b5b'
 }
 </script>
 
@@ -25,55 +28,57 @@ function badgeScore(scoreLabel: string) {
       <view
         v-for="badge in badges"
         :key="badge.id"
-        :class="['session-badge', `session-badge--${badge.level}`]"
+        class="session-badge"
       >
-        <view class="session-badge__topline">
-          <view class="session-badge__chart" aria-label="本次质量得分">
-            <view class="session-badge__chart-track">
-              <view
-                class="session-badge__chart-fill"
-                :class="`session-badge__chart-fill--${badge.level}`"
-                :style="{ height: `${badgeScore(badge.scoreLabel)}%` }"
-              />
-            </view>
-            <view class="session-badge__chart-copy">
-              <text class="session-badge__chart-value">{{ badgeScore(badge.scoreLabel) }}</text>
-              <text class="session-badge__chart-unit">质量分</text>
-            </view>
+        <view class="session-badge__summary">
+          <view :class="['session-badge__icon', `session-badge__icon--${badge.level}`]">
+            <uni-icons type="medal-filled" size="24" :color="badgeIconColors[badge.level]" />
           </view>
-
-          <view class="session-badge__body">
+          <view class="session-badge__heading">
             <text class="session-badge__title">{{ badge.title }}</text>
-            <text class="session-badge__meta">{{ badge.modalityLabel }}</text>
-            <text class="session-badge__count">累计获得 {{ badge.earnedCount }} 次</text>
+            <text class="session-badge__count">累计 {{ badge.earnedCount }} 次</text>
           </view>
         </view>
 
-        <view class="session-badge__footer">
-          <text class="session-badge__description">{{ badge.description }}</text>
-          <button
-            class="session-badge__share"
-            type="button"
-            open-type="share"
-            :data-share-title="badge.shareTitle"
-            :data-share-path="badge.sharePath"
-          >
-            <text>分享</text>
-          </button>
-        </view>
+        <text class="session-badge__description">{{ badge.description }}</text>
+
+        <button
+          class="session-badge__share"
+          type="button"
+          open-type="share"
+          aria-label="分享徽章"
+          :data-share-title="badge.shareTitle"
+          :data-share-path="badge.sharePath"
+        >
+          <uni-icons type="redo" size="18" color="#718096" />
+        </button>
       </view>
     </view>
 
     <view v-else class="session-badges__empty">
-      <text class="session-badges__empty-title">完成一次训练后生成徽章</text>
-      <text class="session-badges__empty-copy">徽章会记录分数、训练类型，并支持转发给好友。</text>
+      <view class="session-badges__empty-icon">
+        <uni-icons type="medal-filled" size="22" color="#8a97a8" />
+      </view>
+      <view class="session-badges__empty-copy-group">
+        <text class="session-badges__empty-title">完成一次训练后生成徽章</text>
+        <text class="session-badges__empty-copy">徽章会记录你的阶段成果，并支持转发给好友。</text>
+      </view>
     </view>
   </view>
 </template>
 
 <style scoped>
-.session-badges {
+.session-badges,
+.session-badges__rail,
+.session-badge,
+.session-badge__summary,
+.session-badge__heading,
+.session-badges__empty,
+.session-badges__empty-copy-group {
   display: flex;
+}
+
+.session-badges {
   flex-direction: column;
   gap: 18rpx;
   margin-top: 14rpx;
@@ -91,7 +96,7 @@ function badgeScore(scoreLabel: string) {
 .session-badges__eyebrow,
 .session-badges__hint {
   display: block;
-  color: #2B7CB8;
+  color: #2b7cb8;
   font-size: 22rpx;
   font-weight: 900;
   letter-spacing: 0.14em;
@@ -100,201 +105,134 @@ function badgeScore(scoreLabel: string) {
 .session-badges__title {
   display: block;
   margin-top: 6rpx;
-  color: #1A202C;
+  color: #1a202c;
   font-size: 32rpx;
   font-weight: 900;
 }
 
 .session-badges__hint {
-  color: #64748B;
+  color: #64748b;
   font-size: 21rpx;
   letter-spacing: 0;
   text-align: right;
 }
 
 .session-badges__rail {
-  display: flex;
-  gap: 16rpx;
+  gap: 14rpx;
   overflow-x: auto;
-  padding-bottom: 8rpx;
+  padding: 2rpx 2rpx 8rpx;
 }
 
 .session-badge {
-  flex: 0 0 336rpx;
-  display: flex;
+  position: relative;
+  flex: 0 0 318rpx;
+  align-items: stretch;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 14rpx;
   padding: 20rpx;
-  border-radius: 28rpx;
-  border: 2rpx solid rgba(255, 211, 132, 0.26);
-  background: #fffaf2;
-  box-shadow: 0 8rpx 18rpx rgba(71, 56, 39, 0.05);
-}
-
-.session-badge--platinum {
-  background: linear-gradient(145deg, #f5fbff 0%, #fff6df 100%);
-}
-
-.session-badge--gold {
-  background: linear-gradient(145deg, #fff7db 0%, #fffaf2 100%);
-}
-
-.session-badge--silver {
-  background: linear-gradient(145deg, #f3f8ff 0%, #fffaf2 100%);
-}
-
-.session-badge--bronze {
-  background: linear-gradient(145deg, #fff0df 0%, #fffaf2 100%);
-}
-
-.session-badge__topline,
-.session-badge__chart,
-.session-badge__chart-copy,
-.session-badge__footer {
-  display: flex;
-}
-
-.session-badge__topline {
-  align-items: center;
-  gap: 16rpx;
-}
-
-.session-badge__chart {
-  width: 88rpx;
-  height: 104rpx;
-  flex: none;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 8rpx;
-  padding: 10rpx;
-  border-radius: 20rpx;
-  background: rgba(255, 255, 255, 0.72);
+  border: 0;
+  border-radius: 24rpx;
+  background: #fcf7f0;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
-.session-badge__chart-track {
-  position: relative;
-  width: 18rpx;
-  height: 76rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: #e7eef3;
-}
-
-.session-badge__chart-fill {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  min-height: 4rpx;
-  border-radius: inherit;
-  background: #ff8b8b;
-}
-
-.session-badge__chart-fill--platinum { background: #5aa996; }
-.session-badge__chart-fill--gold { background: #d49a42; }
-.session-badge__chart-fill--silver { background: #5a9bc8; }
-.session-badge__chart-fill--bronze { background: #c76b5b; }
-
-.session-badge__chart-copy {
-  flex-direction: column;
+.session-badge__icon,
+.session-badges__empty-icon {
+  display: inline-flex;
+  width: 58rpx;
+  height: 58rpx;
+  flex: none;
   align-items: center;
-  gap: 2rpx;
+  justify-content: center;
+  border-radius: 18rpx;
 }
 
-.session-badge__chart-value {
-  color: #203042;
-  font-size: 28rpx;
-  font-weight: 900;
-  line-height: 1;
-}
+.session-badge__icon--platinum { background: #e4f2ed; }
+.session-badge__icon--gold { background: #fff1cf; }
+.session-badge__icon--silver { background: #e0f1f8; }
+.session-badge__icon--bronze { background: #ffe8e5; }
 
-.session-badge__chart-unit {
-  color: #8a97a8;
-  font-size: 16rpx;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.session-badge__body {
+.session-badge__summary {
   display: flex;
-  flex-direction: column;
+  min-width: 0;
+  align-items: center;
+  gap: 14rpx;
+  padding-right: 34rpx;
+}
+
+.session-badge__heading {
   min-width: 0;
   flex: 1;
-  gap: 8rpx;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5rpx;
 }
 
 .session-badge__title {
-  color: #1A202C;
-  font-size: 28rpx;
+  color: #1a202c;
+  font-size: 27rpx;
   font-weight: 900;
+  line-height: 1.25;
 }
 
-.session-badge__meta {
-  color: #2B7CB8;
-  font-size: 21rpx;
-  font-weight: 900;
+.session-badge__count {
+  color: #c76b5b;
+  font-size: 19rpx;
+  font-weight: 800;
 }
 
 .session-badge__description,
 .session-badges__empty-copy {
-  color: #64748B;
+  color: #718096;
   font-size: 20rpx;
-  font-weight: 700;
-  line-height: 1.55;
-}
-
-.session-badge__footer {
-  align-items: flex-end;
-  gap: 12rpx;
-}
-
-.session-badge__count {
-  color: #7a8798;
-  font-size: 19rpx;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .session-badge__description {
   display: -webkit-box;
-  min-width: 0;
-  flex: 1;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .session-badge__share {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
   display: inline-flex;
-  min-width: 82rpx;
-  min-height: 56rpx;
+  width: 48rpx;
+  height: 48rpx;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 9999px;
-  background: #1A202C;
-  color: #fffaf2;
-  padding: 0 18rpx;
-  font-size: 21rpx;
-  font-weight: 900;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  line-height: 1;
 }
 
-.session-badge__share::after {
-  display: none;
-}
+.session-badge__share::after { display: none; }
 
 .session-badges__empty {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  padding: 22rpx 24rpx;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx;
   border-radius: 24rpx;
-  background: rgba(241, 245, 249, 0.66);
+  background: #fcf7f0;
+}
+
+.session-badges__empty-icon { background: #eef3f6; }
+
+.session-badges__empty-copy-group {
+  flex-direction: column;
+  gap: 6rpx;
 }
 
 .session-badges__empty-title {
-  color: #1A202C;
-  font-size: 26rpx;
+  color: #1a202c;
+  font-size: 25rpx;
   font-weight: 900;
 }
 </style>

@@ -1,4 +1,16 @@
+import {
+  createAnchoredTimelineScheduler,
+  type AnchoredTimelineRuntime
+} from './anchoredTimeline'
+
 export type TrainingSoundscapeTrack = 'pretraining' | 'formal'
+export type TrainingSoundEffect = 'second' | 'boundary'
+
+export interface TrainingSoundEffectSlot {
+  atMs: number
+  second: number
+  effect: TrainingSoundEffect | null
+}
 
 export const trainingSecondSoundUrl =
   'https://cdn.sysusports.cn/training-tts/sounds/formal-second.mp3'
@@ -27,7 +39,148 @@ interface SoundscapeRuntime {
   createInnerAudioContext?: () => PulseAudioContextLike
 }
 
-type WechatSoundscapeFactory = typeof wx & SoundscapeRuntime
+interface WebAudioBufferSourceLike {
+  buffer?: unknown
+  onended?: (() => void) | null
+  connect: (destination: unknown) => void
+  disconnect?: () => void
+  start: (when?: number) => void
+  stop: (when?: number) => void
+}
+
+interface WebAudioGainLike {
+  gain: { value: number }
+  connect: (destination: unknown) => void
+  disconnect?: () => void
+}
+
+export interface TrainingWebAudioContextLike {
+  currentTime: number
+  destination: unknown
+  createBufferSource: () => WebAudioBufferSourceLike
+  createGain?: () => WebAudioGainLike
+  decodeAudioData: (
+    data: ArrayBuffer,
+    success?: (buffer: unknown) => void,
+    failure?: (error: unknown) => void
+  ) => Promise<unknown> | void
+  resume?: () => Promise<void> | void
+  suspend?: () => Promise<void> | void
+  close?: () => Promise<void> | void
+}
+
+export interface TrainingWebAudioRuntime {
+  createContext: () => TrainingWebAudioContextLike | undefined
+  loadArrayBuffer: (url: string) => Promise<ArrayBuffer>
+  ownsContext?: boolean
+}
+
+interface BinaryAudioPlatform {
+  downloadFile?: (options: {
+    url: string
+    timeout?: number
+    success?: (result: { tempFilePath: string; statusCode: number }) => void
+    fail?: (error: unknown) => void
+  }) => unknown
+  request?: (options: {
+    url: string
+    responseType: 'arraybuffer'
+    success?: (result: { data: ArrayBuffer; statusCode: number }) => void
+    fail?: (error: unknown) => void
+  }) => unknown
+}
+
+interface BinaryFileSystem {
+  readFile?: (options: {
+    filePath: string
+    success?: (result: { data: ArrayBuffer }) => void
+    fail?: (error: unknown) => void
+  }) => unknown
+}
+
+type WechatSoundscapeFactory = typeof wx & SoundscapeRuntime & BinaryAudioPlatform & {
+  createWebAudioContext?: () => TrainingWebAudioContextLike
+  getFileSystemManager?: () => BinaryFileSystem
+}
+
+export function createDefaultTrainingWebAudioRuntime(
+  sharedContext?: TrainingWebAudioContextLike
+): TrainingWebAudioRuntime | undefined {
+  const wechatApi = typeof wx === 'undefined' ? null : wx as WechatSoundscapeFactory
+  const uniApi = typeof uni === 'undefined' ? null : uni as unknown as BinaryAudioPlatform
+  if (!sharedContext && !wechatApi?.createWebAudioContext) return undefined
+
+  return {
+    ownsContext: !sharedContext,
+    createContext: () => sharedContext ?? wechatApi?.createWebAudioContext?.(),
+    loadArrayBuffer(url) {
+      const downloadApi = uniApi?.downloadFile ? uniApi : wechatApi
+      const fileSystem = wechatApi?.getFileSystemManager?.()
+      if (downloadApi?.downloadFile && fileSystem?.readFile) {
+        return new Promise<ArrayBuffer>((resolve, reject) => {
+          downloadApi.downloadFile?.({
+            url,
+            timeout: 30_000,
+            success(result) {
+              if (result.statusCode < 200 || result.statusCode >= 300) {
+                reject(new Error(`sound download returned ${result.statusCode}`))
+                return
+              }
+              fileSystem.readFile?.({
+                filePath: result.tempFilePath,
+                success: (file: { data: ArrayBuffer }) => resolve(file.data),
+                fail: reject
+              })
+            },
+            fail: reject
+          })
+        })
+      }
+
+      if (wechatApi?.request) {
+        return new Promise<ArrayBuffer>((resolve, reject) => {
+          wechatApi?.request?.({
+            url,
+            responseType: 'arraybuffer',
+            success(result: { data: ArrayBuffer; statusCode: number }) {
+              if (result.statusCode >= 200 && result.statusCode < 300) resolve(result.data)
+              else reject(new Error(`sound request returned ${result.statusCode}`))
+            },
+            fail: reject
+          })
+        })
+      }
+      return Promise.reject(new Error('binary audio loading is unavailable'))
+    }
+  }
+}
+
+/** Precompute every logical second, including intentionally silent seconds. */
+export function buildTrainingSoundEffectTrack(
+  track: TrainingSoundscapeTrack,
+  durationSeconds: number
+): TrainingSoundEffectSlot[] {
+  const seconds = Math.max(0, Math.ceil(durationSeconds))
+  return Array.from({ length: seconds }, (_, index) => {
+    // Public action seconds are one-based: a 15-second action occupies
+    // [1, 16), while its scheduling offset remains [0, 15).
+    const second = index + 1
+    // A shared boundary belongs exclusively to the following phase's first
+    // second. The preceding phase must not schedule a second copy at its end.
+    const isBoundary = second === 1
+    const shouldPlaySecond = track === 'formal'
+      || second >= Math.max(2, seconds - 2)
+    return {
+      atMs: index * 1000,
+      second,
+      effect: isBoundary
+        ? 'boundary'
+        : shouldPlaySecond
+          ? 'second'
+          : null
+    }
+  })
+}
 
 export function createTrainingSoundscape(
   createAudioContext = () => {
@@ -41,23 +194,79 @@ export function createTrainingSoundscape(
       ? null
       : uni as unknown as SoundscapeRuntime
     return uniApi?.createInnerAudioContext?.()
-  }
+  },
+  timelineRuntime?: AnchoredTimelineRuntime,
+  webAudioRuntime = createDefaultTrainingWebAudioRuntime()
 ) {
-  let secondContext: PulseAudioContextLike | undefined
+  const secondContexts: Array<PulseAudioContextLike | undefined> = [undefined, undefined]
+  let nextSecondContextIndex = 0
   let startingBoundaryContext: PulseAudioContextLike | undefined
   let finalBoundaryContext: PulseAudioContextLike | undefined
-  let pulseTimer: ReturnType<typeof setTimeout> | null = null
-  let totalPulses = 0
-  let nextPulseIndex = 0
-  let trackStartedAtMs = 0
-  let suspendedAtMs = 0
+  let activePulseContext: PulseAudioContextLike | undefined
+  const timeline = createAnchoredTimelineScheduler<TrainingSoundEffectSlot>(timelineRuntime)
   let activeTrack: TrainingSoundscapeTrack | null = null
   let suspended = false
+  let endBoundaryPlayed = false
+  let webAudioContext: TrainingWebAudioContextLike | undefined
+  let secondBuffer: unknown
+  let boundaryBuffer: unknown
+  let webAudioPreload: Promise<boolean> | undefined
+  let webAudioTrackActive = false
+  const scheduledWebAudioSources = new Set<{
+    source: WebAudioBufferSourceLike
+    startsAt: number
+  }>()
 
-  function clearPulseTimer() {
-    if (!pulseTimer) return
-    clearTimeout(pulseTimer)
-    pulseTimer = null
+  function decodeAudioData(context: TrainingWebAudioContextLike, data: ArrayBuffer) {
+    return new Promise<unknown>((resolve, reject) => {
+      let settled = false
+      const succeed = (buffer: unknown) => {
+        if (settled) return
+        settled = true
+        resolve(buffer)
+      }
+      const fail = (error: unknown) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      }
+      try {
+        const result = context.decodeAudioData(data, succeed, fail)
+        if (result && typeof result.then === 'function') result.then(succeed, fail)
+      } catch (error) {
+        fail(error)
+      }
+    })
+  }
+
+  function preloadWebAudio() {
+    if (!webAudioRuntime) return Promise.resolve(false)
+    if (webAudioPreload) return webAudioPreload
+    webAudioPreload = (async () => {
+      try {
+        const context = webAudioRuntime.createContext()
+        if (!context) return false
+        webAudioContext = context
+        const [secondData, boundaryData] = await Promise.all([
+          webAudioRuntime.loadArrayBuffer(trainingSecondSoundUrl),
+          webAudioRuntime.loadArrayBuffer(trainingBoundarySoundUrl)
+        ])
+        ;[secondBuffer, boundaryBuffer] = await Promise.all([
+          decodeAudioData(context, secondData),
+          decodeAudioData(context, boundaryData)
+        ])
+        return Boolean(secondBuffer && boundaryBuffer)
+      } catch (error) {
+        console.warn('[TrainingSoundscape] Web Audio preload failed, using native fallback:', error)
+        if (webAudioRuntime.ownsContext !== false) void webAudioContext?.close?.()
+        webAudioContext = undefined
+        secondBuffer = undefined
+        boundaryBuffer = undefined
+        ensureContexts()
+        return false
+      }
+    })()
+    return webAudioPreload
   }
 
   function createPulseContext(src: string, volume: number) {
@@ -82,10 +291,12 @@ export function createTrainingSoundscape(
   }
 
   function ensureContexts() {
-    secondContext ??= createPulseContext(
-      trainingSecondSoundUrl,
-      trainingSoundscapeVolumes.second
-    )
+    for (let index = 0; index < secondContexts.length; index += 1) {
+      secondContexts[index] ??= createPulseContext(
+        trainingSecondSoundUrl,
+        trainingSoundscapeVolumes.second
+      )
+    }
     startingBoundaryContext ??= createPulseContext(
       trainingBoundarySoundUrl,
       trainingSoundscapeVolumes.boundary
@@ -99,135 +310,205 @@ export function createTrainingSoundscape(
   }
 
   function stopActivePulses() {
-    secondContext?.stop?.()
+    for (const context of secondContexts) context?.stop?.()
     startingBoundaryContext?.stop?.()
     finalBoundaryContext?.stop?.()
-  }
-
-  function stopOtherPulses(active: PulseAudioContextLike) {
-    if (secondContext !== active) secondContext?.stop?.()
-    if (startingBoundaryContext !== active) startingBoundaryContext?.stop?.()
-    if (finalBoundaryContext !== active) finalBoundaryContext?.stop?.()
+    activePulseContext = undefined
   }
 
   function playPulse(context: PulseAudioContextLike | undefined) {
     if (!context) return
     try {
       // Never let the longer boundary cue overlap the following whole-second
-      // cue. Overlap sounds like an unstable or double-speed metronome.
-      // Do not stop the player that is about to play: stop/play is an
-      // asynchronous state transition on real WeChat devices and can race.
-      stopOtherPulses(context)
+      // cue. Only stop the context that actually played the preceding pulse.
+      // Stopping an idle preloaded context can leave WeChat's native player in
+      // a pending state and make its first play() call one second later vanish.
+      if (activePulseContext && activePulseContext !== context) {
+        activePulseContext.stop?.()
+      }
+      activePulseContext = context
       context.play?.()
     } catch (error) {
       console.warn('[TrainingSoundscape] playback setup failed:', error)
     }
   }
 
-  function emitNextPulse() {
-    if (!activeTrack || suspended || nextPulseIndex >= totalPulses) {
-      clearPulseTimer()
-      return
-    }
-
-    if (activeTrack === 'formal') {
-      const isFirst = nextPulseIndex === 0
-      const isFinal = nextPulseIndex === totalPulses - 1
-      playPulse(
-        isFirst
-          ? startingBoundaryContext
-          : isFinal
-            ? finalBoundaryContext
-            : secondContext
-      )
-    } else if (nextPulseIndex >= Math.max(0, totalPulses - 3)) {
-      playPulse(secondContext)
-    }
-    nextPulseIndex += 1
-    if (nextPulseIndex >= totalPulses) clearPulseTimer()
+  function playSecondPulse() {
+    const context = secondContexts[nextSecondContextIndex]
+    nextSecondContextIndex = (nextSecondContextIndex + 1) % secondContexts.length
+    // WeChat can ignore play() when the same InnerAudioContext has not yet
+    // completed its previous native state transition. Alternating two
+    // preloaded contexts ensures the selected player was stopped on the
+    // preceding beat and is ready before this beat arrives.
+    playPulse(context)
   }
 
-  function scheduleRemainingPulses() {
-    clearPulseTimer()
-    if (!activeTrack || suspended || nextPulseIndex >= totalPulses) return
-    // Every event is anchored to one immutable phase clock. Never derive the
-    // next beat from the previous callback: native timer/audio latency would
-    // otherwise accumulate and make a nominal 60 BPM cue audibly drift.
-    const now = Date.now()
-    const elapsedWholeSeconds = Math.max(0, Math.floor((now - trackStartedAtMs) / 1000))
-    if (elapsedWholeSeconds > nextPulseIndex) {
-      // When the JS thread was suspended, skip stale beats instead of firing a
-      // rapid catch-up burst. The current logical second remains exact.
-      nextPulseIndex = Math.min(elapsedWholeSeconds, totalPulses - 1)
+  function stopWebAudioSources(includeActive = true) {
+    if (!webAudioContext) return
+    const now = webAudioContext.currentTime
+    for (const scheduled of [...scheduledWebAudioSources]) {
+      if (!includeActive && scheduled.startsAt <= now + 0.001) continue
+      try {
+        scheduled.source.stop(now)
+      } catch {
+        // A source may already have ended naturally.
+      }
+      scheduled.source.disconnect?.()
+      scheduledWebAudioSources.delete(scheduled)
     }
-    const anchoredAt = trackStartedAtMs + nextPulseIndex * 1000
-    const delay = Math.max(0, anchoredAt - now)
-    pulseTimer = setTimeout(() => {
-      pulseTimer = null
-      emitNextPulse()
-      scheduleRemainingPulses()
-    }, delay)
+  }
+
+  function scheduleWebAudioPulse(effect: TrainingSoundEffect, startsAt: number) {
+    if (!webAudioContext) return
+    const buffer = effect === 'second' ? secondBuffer : boundaryBuffer
+    if (!buffer) return
+    const source = webAudioContext.createBufferSource()
+    source.buffer = buffer
+    const gain = webAudioContext.createGain?.()
+    if (gain) {
+      gain.gain.value = effect === 'second'
+        ? trainingSoundscapeVolumes.second
+        : trainingSoundscapeVolumes.boundary
+      source.connect(gain)
+      gain.connect(webAudioContext.destination)
+    } else {
+      source.connect(webAudioContext.destination)
+    }
+    const scheduled = { source, startsAt }
+    scheduledWebAudioSources.add(scheduled)
+    source.onended = () => {
+      scheduledWebAudioSources.delete(scheduled)
+      source.disconnect?.()
+      gain?.disconnect?.()
+    }
+    source.start(startsAt)
+  }
+
+  function scheduleWebAudioTrack(
+    slots: readonly TrainingSoundEffectSlot[],
+    elapsedSeconds: number
+  ) {
+    if (!webAudioContext || !secondBuffer || !boundaryBuffer) return false
+    stopWebAudioSources()
+    void webAudioContext.resume?.()
+    const now = webAudioContext.currentTime
+    const origin = now - elapsedSeconds
+    const audibleSlots = slots.filter(slot => (
+      slot.effect && slot.atMs / 1000 + 0.001 >= elapsedSeconds
+    )) as Array<TrainingSoundEffectSlot & { effect: TrainingSoundEffect }>
+    audibleSlots.forEach(slot => {
+      const startsAt = Math.max(now, origin + slot.atMs / 1000)
+      // Let every one-shot buffer end naturally. On WeChat, calling stop()
+      // immediately after start(futureTime) can end the source before its
+      // scheduled start. That left only the already-started first cue and the
+      // final cue (which had no following stop) audible on real devices.
+      scheduleWebAudioPulse(slot.effect, startsAt)
+    })
+    webAudioTrackActive = true
+    return true
   }
 
   function resetTrackState() {
     activeTrack = null
     suspended = false
-    totalPulses = 0
-    nextPulseIndex = 0
-    trackStartedAtMs = 0
-    suspendedAtMs = 0
-    clearPulseTimer()
+    endBoundaryPlayed = false
+    nextSecondContextIndex = 0
+    timeline.stop()
   }
 
   function stopPlayback() {
     stopActivePulses()
+    stopWebAudioSources()
+    webAudioTrackActive = false
     resetTrackState()
   }
 
-  function startTrack(track: TrainingSoundscapeTrack, durationSeconds: number) {
+  function finishTrack(playFinalBoundary = false) {
+    // Cancel only future scheduling. An end-boundary sound that has just
+    // reached the native player must be allowed to finish across the phase
+    // hand-off.
+    if (webAudioTrackActive) stopWebAudioSources(false)
+    if (activeTrack && playFinalBoundary && !endBoundaryPlayed) {
+      endBoundaryPlayed = true
+      if (webAudioTrackActive && webAudioContext && boundaryBuffer) {
+        stopWebAudioSources()
+        scheduleWebAudioPulse('boundary', webAudioContext.currentTime)
+      } else {
+        playPulse(finalBoundaryContext)
+      }
+    }
+    timeline.stop()
+    activeTrack = null
+    suspended = false
+    webAudioTrackActive = false
+  }
+
+  function startTrack(
+    track: TrainingSoundscapeTrack,
+    durationSeconds: number,
+    elapsedSeconds = 0
+  ) {
     // Keep the preloaded player that is about to emit out of an asynchronous
     // stop/play race. `playPulse` stops only the other tracks at the boundary.
     resetTrackState()
-    ensureContexts()
     activeTrack = track
-    totalPulses = Math.max(1, Math.ceil(durationSeconds))
-    trackStartedAtMs = Date.now()
-    // Formal N-second phases emit at t=0..N-1. Pretraining uses the same
-    // independent clock but stays silent until its final three seconds.
-    emitNextPulse()
-    scheduleRemainingPulses()
+    endBoundaryPlayed = false
+    const slots = buildTrainingSoundEffectTrack(track, durationSeconds)
+    if (scheduleWebAudioTrack(slots, Math.max(0, elapsedSeconds))) return
+    ensureContexts()
+    timeline.start(
+      slots.map(slot => ({ atMs: slot.atMs, value: slot })),
+      slot => {
+        // The scheduler deliberately visits silent slots too: the rule is
+        // evaluated exactly once for every logical second.
+        if (slot.effect === 'second') playSecondPulse()
+        if (slot.effect === 'boundary') {
+          playPulse(startingBoundaryContext)
+        }
+      },
+      { elapsedMs: Math.max(0, elapsedSeconds) * 1000 }
+    )
   }
 
   function release() {
     stopPlayback()
-    secondContext?.destroy?.()
+    for (const context of secondContexts) context?.destroy?.()
     startingBoundaryContext?.destroy?.()
     finalBoundaryContext?.destroy?.()
-    secondContext = undefined
+    secondContexts.fill(undefined)
     startingBoundaryContext = undefined
     finalBoundaryContext = undefined
+    if (webAudioRuntime?.ownsContext !== false) void webAudioContext?.close?.()
+    webAudioContext = undefined
+    secondBuffer = undefined
+    boundaryBuffer = undefined
   }
 
   return {
-    preload: ensureContexts,
-    play(track: TrainingSoundscapeTrack, durationSeconds = 0) {
-      if (durationSeconds > 0) startTrack(track, durationSeconds)
+    preload() {
+      if (!webAudioRuntime) {
+        ensureContexts()
+        return Promise.resolve()
+      }
+      return preloadWebAudio().then(() => undefined)
+    },
+    play(track: TrainingSoundscapeTrack, durationSeconds = 0, elapsedSeconds = 0) {
+      if (durationSeconds > 0) startTrack(track, durationSeconds, elapsedSeconds)
       else stopPlayback()
     },
     suspend() {
       if (!activeTrack || suspended) return
       suspended = true
-      suspendedAtMs = Date.now()
-      clearPulseTimer()
+      if (webAudioTrackActive) void webAudioContext?.suspend?.()
+      else timeline.suspend()
     },
     resume() {
       if (!activeTrack || !suspended) return
-      const suspendedForMs = Math.max(0, Date.now() - suspendedAtMs)
-      trackStartedAtMs += suspendedForMs
-      suspendedAtMs = 0
       suspended = false
-      scheduleRemainingPulses()
+      if (webAudioTrackActive) void webAudioContext?.resume?.()
+      else timeline.resume()
     },
+    finish: finishTrack,
     stop: stopPlayback,
     destroy: release
   }

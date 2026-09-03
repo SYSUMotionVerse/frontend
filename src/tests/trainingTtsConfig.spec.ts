@@ -3,6 +3,7 @@ import type { ExerciseArrangementItem } from '../uni-app/api/studentBackendTypes
 import {
   resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
+  buildTrainingAudioPlan,
   resolveTrainingPhaseCompletionAudioUrls,
   resolveTrainingPhaseCountdownStartAudioUrls,
   resolveTrainingPhaseDelayedTtsCues,
@@ -77,7 +78,7 @@ describe('trainingTtsConfig', () => {
       'https://cdn.example.com/pre-start.mp3'
     ])
     expect(resolveTrainingPhaseDelayedTtsCues(cues)).toEqual([
-      expect.objectContaining({ time: 4.9, audio_url: 'https://cdn.example.com/pre-5.mp3' })
+      expect.objectContaining({ time: 4, audio_url: 'https://cdn.example.com/pre-5.mp3' })
     ])
   })
 
@@ -167,9 +168,9 @@ describe('trainingTtsConfig', () => {
     expect(resolveTrainingCountdownAudioUrls([], 3)).toEqual([])
 
     expect(resolveTrainingCountdownTtsCues(countdownCues, 5)).toEqual([
-      expect.objectContaining({ time: 1.9, audio_url: 'https://cdn.example.com/3.mp3' }),
-      expect.objectContaining({ time: 2.9, audio_url: 'https://cdn.example.com/2.mp3' }),
-      expect.objectContaining({ time: 3.9, audio_url: 'https://cdn.example.com/1.mp3' })
+      expect.objectContaining({ time: 2, audio_url: 'https://cdn.example.com/3.mp3' }),
+      expect.objectContaining({ time: 3, audio_url: 'https://cdn.example.com/2.mp3' }),
+      expect.objectContaining({ time: 4, audio_url: 'https://cdn.example.com/1.mp3' })
     ])
   })
 
@@ -220,6 +221,59 @@ describe('trainingTtsConfig', () => {
       [moduleOwnedCountdownItem],
       countdownCues
     )).toEqual([])
+  })
+
+  it('maps configured visible second 17 to elapsed second 16', () => {
+    const secondSeventeenItem = {
+      ...item,
+      training_tts_cues: [{
+        id: 17,
+        phase: 'FORMAL' as const,
+        timing: 'AFTER_OFFSET' as const,
+        offset_seconds: 17,
+        text: '第十七秒提示',
+        audio_url: 'https://cdn.example.com/formal-17.mp3',
+        order: 0
+      }]
+    }
+
+    expect(resolveTrainingPhaseTtsCues(secondSeventeenItem, 'FORMAL', {
+      phaseDurationSeconds: 20
+    })).toEqual([
+      expect.objectContaining({ time: 16, audio_url: 'https://cdn.example.com/formal-17.mp3' })
+    ])
+  })
+
+  it('pre-arranges every reachable speech phase immediately after data loading', () => {
+    const plan = buildTrainingAudioPlan({
+      id: 1,
+      title: '今日训练',
+      exercise_type: 'HIIT',
+      item_count: 1,
+      total_duration: 63,
+      is_active: true,
+      order: 1,
+      configuration_fingerprint: 'fingerprint',
+      countdown_tts_cues: [
+        { seconds_remaining: 3, text: '三', audio_url: 'https://cdn.example.com/3.mp3' },
+        { seconds_remaining: 2, text: '二', audio_url: 'https://cdn.example.com/2.mp3' },
+        { seconds_remaining: 1, text: '一', audio_url: 'https://cdn.example.com/1.mp3' }
+      ],
+      items: [item]
+    })
+
+    expect(plan.phases.map(phase => phase.slot)).toEqual([
+      'pretraining',
+      'formal-countdown',
+      'formal-training'
+    ])
+    expect(plan.phases.find(phase => phase.slot === 'formal-countdown')?.cues)
+      .toEqual([
+        expect.objectContaining({ time: 0, audio_url: 'https://cdn.example.com/3.mp3' }),
+        expect.objectContaining({ time: 1, audio_url: 'https://cdn.example.com/2.mp3' }),
+        expect.objectContaining({ time: 2, audio_url: 'https://cdn.example.com/1.mp3' })
+      ])
+    expect(plan.speechAudioUrls).toContain('https://cdn.example.com/formal-complete.mp3')
   })
 
 })

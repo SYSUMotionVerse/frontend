@@ -1,4 +1,8 @@
 import type { ActionTtsCue } from '../../domain/training/actionScoringTypes'
+import {
+  createAnchoredTimelineScheduler,
+  type AnchoredTimelineRuntime
+} from './anchoredTimeline'
 
 interface InnerAudioContextLike {
   src: string
@@ -66,7 +70,8 @@ export function createTrainingTtsPlayer(
     typeof uni === 'undefined'
       ? null
       : uni as unknown as AudioDownloadPlatform
-  )
+  ),
+  timelineRuntime?: AnchoredTimelineRuntime
 ) {
   let audioContext: InnerAudioContextLike | undefined
   let stopCurrentPlayback: (() => void) | undefined
@@ -80,16 +85,17 @@ export function createTrainingTtsPlayer(
   let playbackGeneration = 0
   const preloadedSources = new Map<string, string>()
   const pendingPreloads = new Map<string, Promise<void>>()
+  const timeline = createAnchoredTimelineScheduler<ActionTtsCue>(timelineRuntime)
 
   function resolveIdleWaiters() {
-    if (audioContext || queuedAudioUrls.length > 0 || suspended) return
+    if (audioContext || queuedAudioUrls.length > 0 || suspended || timeline.isRunning()) return
     const waiters = idleWaiters
     idleWaiters = []
     waiters.forEach(resolve => resolve())
   }
 
   function waitForIdle() {
-    if (!audioContext && queuedAudioUrls.length === 0 && !suspended) {
+    if (!audioContext && queuedAudioUrls.length === 0 && !suspended && !timeline.isRunning()) {
       return Promise.resolve()
     }
     return new Promise<void>(resolve => idleWaiters.push(resolve))
@@ -302,11 +308,13 @@ export function createTrainingTtsPlayer(
     reset() {
       playbackGeneration += 1
       suspended = false
+      timeline.stop()
       clearQueuedAudio()
       stopAudio()
       playedCueIndexes = new Set()
     },
     resetTimeline(options: { interrupt?: boolean } = {}) {
+      timeline.stop()
       if (options.interrupt) {
         playbackGeneration += 1
         suspended = false
@@ -321,6 +329,7 @@ export function createTrainingTtsPlayer(
     // module enqueues its own start guidance.
     advanceTimeline() {
       playbackGeneration += 1
+      timeline.stop()
       clearQueuedAudio()
       playedCueIndexes = new Set()
     },
@@ -330,7 +339,22 @@ export function createTrainingTtsPlayer(
     // visible 3/2/1 overlay has gone away.
     cancelPendingPlayback() {
       playbackGeneration += 1
+      timeline.stop()
       clearQueuedAudio()
+    },
+    schedule(cues: readonly ActionTtsCue[], elapsedSeconds = 0) {
+      playedCueIndexes = new Set()
+      const normalized = normalizeCues(cues)
+      timeline.start(
+        normalized.map(cue => ({ atMs: cue.time * 1000, value: cue })),
+        cue => {
+          enqueueAudioUrls([cue.audio_url])
+        },
+        {
+          elapsedMs: Math.max(0, elapsedSeconds) * 1000,
+          onComplete: resolveIdleWaiters
+        }
+      )
     },
     sync(cues: readonly ActionTtsCue[], elapsedSeconds: number) {
       if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) return
@@ -366,24 +390,27 @@ export function createTrainingTtsPlayer(
     pause() {
       playbackGeneration += 1
       suspended = false
+      timeline.stop()
       clearQueuedAudio()
       stopAudio()
     },
     suspend() {
+      const hasScheduledTimeline = timeline.isRunning()
+      timeline.suspend()
       if (audioContext) {
-        if (!audioContext.pause) return
         suspended = true
-        audioContext.pause()
+        audioContext.pause?.()
         return
       }
       // Keep a not-yet-started queue suspended as well. This can happen when
       // buffering wins a race with audio-context creation; resume() will then
       // drain it once the video reports progress again.
-      if (queuedAudioUrls.length > 0) suspended = true
+      if (queuedAudioUrls.length > 0 || hasScheduledTimeline) suspended = true
     },
     resume() {
       if (!suspended) return
       suspended = false
+      timeline.resume()
       if (audioContext) {
         audioContext.play?.()
       } else {
@@ -393,6 +420,7 @@ export function createTrainingTtsPlayer(
     destroy() {
       playbackGeneration += 1
       suspended = false
+      timeline.stop()
       clearQueuedAudio()
       stopAudio()
       playedCueIndexes = new Set()

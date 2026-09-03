@@ -222,7 +222,7 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
   })
 
-  it('loads only adherence data on the adherence detail page', async () => {
+  it('loads adherence and history data for the interactive day detail page', async () => {
     const AdherencePage = (await import('../pages/growth/adherence.vue')).default
     mount(AdherencePage, {
       global: {
@@ -235,7 +235,7 @@ describe('production growth reads', () => {
 
     await flushPromises()
 
-    expect(studentBackendSync.loadGrowthHistory).not.toHaveBeenCalled()
+    expect(studentBackendSync.loadGrowthHistory).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadAdherenceData).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.loadPhysicalMetrics).not.toHaveBeenCalled()
     expect(studentBackendSync.loadVisualScoreTrend).not.toHaveBeenCalled()

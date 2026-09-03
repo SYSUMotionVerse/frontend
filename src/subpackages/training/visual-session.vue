@@ -306,6 +306,8 @@ function setCapture(instance: unknown) {
         :video-event-token="session.videoEventToken.value"
         :video-element-id="session.videoElementId.value"
         :training-started="session.trainingStarted.value"
+        :preparing-training="session.preparingTraining.value"
+        :training-preparation-label="session.trainingPreparationLabel.value"
         :start-countdown="session.startCountdown.value"
         :phase-kind="session.phaseKind.value"
         :phase-slot="session.phaseSlot.value"
@@ -351,19 +353,19 @@ function setCapture(instance: unknown) {
 .visual-session-page {
   display: flex;
   width: 100%;
-  height: auto;
-  min-height: calc(100vh - 24rpx);
+  height: 100%;
+  min-height: 0;
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .visual-session-page__panel {
-  display: block;
+  display: flex;
   width: 100%;
-  height: auto;
-  min-height: calc(100vh - 24rpx);
+  height: 100%;
+  min-height: 0;
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .visual-session-page--comparison {

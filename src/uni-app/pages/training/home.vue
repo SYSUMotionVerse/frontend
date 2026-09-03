@@ -298,10 +298,11 @@ function authorizeTrainingReminders() {
 .home-page {
   --home-ink: #203042;
   --home-muted: #718096;
-  --home-surface: #fffaf4;
+  --home-surface: rgba(255, 255, 255, 0.94);
+  --home-card-gap: 38rpx;
   display: flex;
   flex-direction: column;
-  gap: 34rpx;
+  gap: var(--home-card-gap);
   padding-bottom: 20rpx;
 }
 
@@ -423,8 +424,8 @@ function authorizeTrainingReminders() {
 .home-page__section {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
-  padding-top: 4rpx;
+  gap: var(--home-card-gap);
+  padding-top: 0;
 }
 
 .home-page__progress-status {
@@ -465,7 +466,7 @@ function authorizeTrainingReminders() {
 .home-page__feed {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: var(--home-card-gap);
 }
 
 </style>

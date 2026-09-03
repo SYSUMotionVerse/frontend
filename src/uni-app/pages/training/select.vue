@@ -267,7 +267,6 @@ async function chooseMode(modality: TrainingModality) {
       </view>
 
       <view class="select-page__streak-note">
-        <uni-icons type="info" size="16" color="#8795a8" />
         <text>完成任一训练后，将更新今日达标状态。</text>
       </view>
     </view>
@@ -323,12 +322,15 @@ async function chooseMode(modality: TrainingModality) {
   gap: 24rpx;
   box-sizing: border-box;
   padding: 26rpx 28rpx;
-  border: 2rpx solid rgba(255, 211, 132, 0.22);
+  border: 2rpx solid rgba(196, 151, 78, 0.42);
   border-radius: 28rpx;
   background: rgba(255, 250, 244, 0.9);
+  box-shadow:
+    0 10rpx 24rpx rgba(71, 56, 39, 0.1),
+    0 2rpx 0 rgba(196, 151, 78, 0.12);
   color: #203042;
   text-align: left;
-  transition: background-color 160ms ease-out, transform 160ms ease-out, opacity 160ms ease-out;
+  transition: background-color 160ms ease-out, box-shadow 160ms ease-out, transform 160ms ease-out, opacity 160ms ease-out;
 }
 
 .select-page__launch-action::after {
@@ -336,22 +338,23 @@ async function chooseMode(modality: TrainingModality) {
 }
 
 .select-page__launch-action--recommended {
-  border-color: rgba(255, 139, 139, 0.22);
+  border-color: rgba(214, 99, 99, 0.42);
   background: rgba(255, 226, 225, 0.78);
 }
 
 .select-page__launch-action--teal:not(.select-page__launch-action--recommended) {
-  border-color: rgba(120, 184, 220, 0.12);
+  border-color: rgba(72, 143, 183, 0.34);
   background: rgba(243, 249, 252, 0.9);
 }
 
 .select-page__launch-action--gold:not(.select-page__launch-action--recommended) {
-  border-color: rgba(255, 211, 132, 0.3);
+  border-color: rgba(196, 151, 78, 0.42);
   background: rgba(255, 250, 239, 0.92);
 }
 
 .select-page__launch-action:active {
   opacity: 0.76;
+  box-shadow: 0 4rpx 12rpx rgba(71, 56, 39, 0.08);
   transform: scale(0.985);
 }
 
@@ -451,11 +454,12 @@ async function chooseMode(modality: TrainingModality) {
 .select-page__streak-note {
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  justify-content: center;
   padding: 12rpx 8rpx 0;
-  color: #718096;
-  font-size: 24rpx;
+  color: rgba(113, 128, 150, 0.72);
+  font-size: 22rpx;
   font-weight: 600;
   line-height: 1.5;
+  text-align: center;
 }
 </style>

@@ -38,7 +38,7 @@ const emit = defineEmits<{
   gap: 24rpx;
   border: 2rpx solid rgba(40, 118, 106, 0.22);
   border-radius: 28rpx;
-  background: #e7f0ed;
+  background: rgba(255, 255, 255, 0.94);
   padding: 28rpx 30rpx;
 }
 

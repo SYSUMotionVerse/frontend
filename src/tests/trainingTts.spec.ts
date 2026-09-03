@@ -381,6 +381,33 @@ describe('trainingTts', () => {
     expect(context.destroy).toHaveBeenCalledOnce()
   })
 
+  it('does not report idle until the final scheduled cue has finished', async () => {
+    vi.useFakeTimers()
+    const context = createAudioContext()
+    const player = createTrainingTtsPlayer(() => context)
+
+    player.schedule([{
+      time: 1,
+      text: '动作完成',
+      audio_url: 'https://cdn.example.com/complete.mp3'
+    }])
+    const idle = player.waitForIdle()
+    const observed = vi.fn()
+    void idle.then(observed)
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(context.play).not.toHaveBeenCalled()
+    expect(observed).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(context.play).toHaveBeenCalledOnce()
+    expect(observed).not.toHaveBeenCalled()
+
+    context.onEnded.mock.calls[0][0]()
+    await expect(idle).resolves.toBeUndefined()
+    vi.useRealTimers()
+  })
+
   it('releases a stalled native audio context after the playback watchdog', async () => {
     vi.useFakeTimers()
     const context = createAudioContext()

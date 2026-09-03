@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed, ref } from 'vue'
 import AdherenceHeatmap from '../../../components/growth/AdherenceHeatmap.vue'
 import GrowthLoadStatus from '../../../components/growth/GrowthLoadStatus.vue'
+import TrainingHistoryList from '../../../components/growth/TrainingHistoryList.vue'
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
 
-const { adherenceCalendar, adherenceData, loadState, refresh } = useGrowthOverview({
-  sections: ['adherence']
+const { adherenceData, loadState, refresh, sessions } = useGrowthOverview({
+  sections: ['adherence', 'history']
 })
 const complianceLoaded = computed(() => adherenceData.value !== null)
 const complianceTodayCount = computed(() => {
@@ -19,6 +21,63 @@ const complianceRatePercent = computed(() =>
 )
 const complianceTrend = computed(() => adherenceData.value?.trend.slice(-8) ?? [])
 const isRefreshing = ref(false)
+
+function toIsoDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const today = new Date()
+const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+const monthCursor = ref(currentMonth)
+const selectedDate = ref(toIsoDate(today))
+
+const monthTitle = computed(() => {
+  const [year, month] = monthCursor.value.split('-').map(Number)
+  return `${year} 年 ${month} 月`
+})
+
+const monthCalendar = computed(() => {
+  const [year, month] = monthCursor.value.split('-').map(Number)
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const counts = sessions.value.reduce<Record<string, number>>((result, session) => {
+    result[session.date] = (result[session.date] ?? 0) + 1
+    return result
+  }, {})
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`
+    const completedSessions = counts[date] ?? 0
+    return {
+      date,
+      completedSessions,
+      status: completedSessions >= 3 ? 'met-goal' as const : completedSessions > 0 ? 'partial' as const : 'none' as const
+    }
+  })
+})
+
+const earliestMonth = computed(() => sessions.value.map(session => session.date.slice(0, 7)).sort()[0] ?? currentMonth)
+const canGoPreviousMonth = computed(() => monthCursor.value > earliestMonth.value)
+const canGoNextMonth = computed(() => monthCursor.value < currentMonth)
+const selectedSessions = computed(() => sessions.value.filter(session => session.date === selectedDate.value))
+const selectedDateTitle = computed(() => {
+  const [, month, day] = selectedDate.value.split('-').map(Number)
+  return `${month} 月 ${day} 日`
+})
+
+function moveMonth(offset: number) {
+  if (offset < 0 && !canGoPreviousMonth.value) return
+  if (offset > 0 && !canGoNextMonth.value) return
+  const [year, month] = monthCursor.value.split('-').map(Number)
+  const next = new Date(year, month - 1 + offset, 1)
+  const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`
+  if (nextMonth < earliestMonth.value) return
+  if (nextMonth > currentMonth) return
+  monthCursor.value = nextMonth
+  selectedDate.value = `${nextMonth}-01`
+}
 
 async function handlePullDownRefresh() {
   if (isRefreshing.value) return
@@ -91,9 +150,51 @@ async function handlePullDownRefresh() {
     </section>
 
     <section class="detail-page__card">
-      <h2 class="detail-page__section-title">近期热力图</h2>
-      <AdherenceHeatmap :days="adherenceCalendar" />
-      <p class="detail-page__note">每个方块代表一天，训练次数越多颜色越深，3 次即达标。</p>
+      <view class="month-browser__navigator">
+        <button
+          class="month-browser__arrow"
+          :class="{ 'month-browser__arrow--disabled': !canGoPreviousMonth }"
+          type="button"
+          aria-label="上个月"
+          :disabled="!canGoPreviousMonth"
+          @click="moveMonth(-1)"
+        >
+          <uni-icons type="left" size="20" :color="canGoPreviousMonth ? '#203042' : '#c5ccd5'" />
+        </button>
+        <view class="month-browser__title-group">
+          <text class="month-browser__eyebrow">月度打卡</text>
+          <text class="month-browser__title">{{ monthTitle }}</text>
+        </view>
+        <button
+          class="month-browser__arrow"
+          :class="{ 'month-browser__arrow--disabled': !canGoNextMonth }"
+          type="button"
+          aria-label="下个月"
+          :disabled="!canGoNextMonth"
+          @click="moveMonth(1)"
+        >
+          <uni-icons type="right" size="20" :color="canGoNextMonth ? '#203042' : '#c5ccd5'" />
+        </button>
+      </view>
+      <AdherenceHeatmap
+        :days="monthCalendar"
+        selectable
+        show-date-labels
+        :selected-date="selectedDate"
+        @select="selectedDate = $event"
+      />
+      <p class="detail-page__note">点击日期查看当天记录，颜色越深代表训练次数越多，3 次即达标。</p>
+    </section>
+
+    <section class="detail-page__card">
+      <view class="selected-records__head">
+        <view>
+          <text class="selected-records__eyebrow">当天记录</text>
+          <h2 class="detail-page__section-title selected-records__title">{{ selectedDateTitle }}</h2>
+        </view>
+        <text class="selected-records__count">{{ selectedSessions.length }} 次</text>
+      </view>
+      <TrainingHistoryList :sessions="selectedSessions" />
     </section>
   </UniGrowthPageShell>
 </template>
@@ -108,8 +209,6 @@ async function handlePullDownRefresh() {
   background: rgba(255, 255, 255, 0.94);
   margin-bottom: 28rpx;
 }
-
-.detail-page__card:last-child { margin-bottom: 0; }
 
 .detail-page__stats {
   display: flex;
@@ -176,4 +275,75 @@ async function handlePullDownRefresh() {
 }
 
 .detail-page__note { margin: 20rpx 0 0; color: #718096; font-size: 22rpx; line-height: 1.5; }
+
+.month-browser__navigator,
+.month-browser__title-group,
+.selected-records__head {
+  display: flex;
+}
+
+.month-browser__navigator {
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 24rpx;
+}
+
+.month-browser__arrow {
+  display: inline-flex;
+  width: 66rpx;
+  height: 66rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 20rpx;
+  background: #fcf7f0;
+}
+
+.month-browser__arrow::after { display: none; }
+.month-browser__arrow--disabled { opacity: 0.62; }
+
+.month-browser__title-group {
+  flex: 1;
+  align-items: center;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.month-browser__eyebrow,
+.selected-records__eyebrow {
+  color: #8a97a8;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.month-browser__title {
+  color: #203042;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.selected-records__head {
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.selected-records__eyebrow,
+.selected-records__title {
+  display: block;
+}
+
+.selected-records__title {
+  margin: 5rpx 0 0;
+}
+
+.selected-records__count {
+  color: #c76b5b;
+  font-size: 22rpx;
+  font-weight: 900;
+}
 </style>

@@ -56,4 +56,29 @@ describe('AdherenceHeatmap', () => {
     expect(componentSource).toContain('background: #eef7ff;')
     expect(componentSource).not.toContain('background: #f1f5f9;')
   })
+
+  it('shows date numbers and emits a selected day in interactive month mode', async () => {
+    const wrapper = mount(AdherenceHeatmap, {
+      props: {
+        days: [
+          { date: '2026-09-01', completedSessions: 1, status: 'partial' },
+          { date: '2026-09-02', completedSessions: 3, status: 'met-goal' }
+        ],
+        selectable: true,
+        showDateLabels: true,
+        selectedDate: '2026-09-01'
+      }
+    })
+
+    expect(wrapper.text()).toContain('1')
+    expect(wrapper.text()).toContain('2')
+    expect(wrapper.get('.adherence-cell--selected').attributes('aria-label')).toContain('2026-09-01')
+    expect(wrapper.findAll('.adherence-week').at(0)?.findAll('.adherence-cell--dated')).toHaveLength(7)
+    await wrapper.findAll('.adherence-cell:not(.adherence-cell--empty)')[1].trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['2026-09-02']])
+
+    const componentSource = readFileSync(resolve('src/components/growth/AdherenceHeatmap.vue'), 'utf8')
+    expect(componentSource).toContain('.adherence-shell--dated .adherence-weekdays text')
+    expect(componentSource).toMatch(/\.adherence-shell--dated \.adherence\s*\{[\s\S]*overflow:\s*visible;/)
+  })
 })

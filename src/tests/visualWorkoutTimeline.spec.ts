@@ -176,15 +176,63 @@ describe('visual workout timeline', () => {
     const timeline = buildVisualWorkoutTimeline(items)
     const beforeBoundary = resolveVisualWorkoutState(timeline, 29.9)
     const atBoundary = resolveVisualWorkoutState(timeline, 30)
+    const heldAtCompletedPhase = resolveVisualWorkoutState(timeline, 30, {
+      itemIndex: 0,
+      slot: 'formal-training'
+    })
 
     expect(beforeBoundary.current.slot).toBe('formal-training')
     expect(beforeBoundary.next?.slot).toBe('pretraining-countdown')
     expect(beforeBoundary.remainingSeconds).toBe(1)
     expect(atBoundary.current.slot).toBe('pretraining-countdown')
     expect(atBoundary.phaseProgressPercent).toBe(0)
+    expect(atBoundary.phaseElapsedSeconds).toBe(1)
+    expect(heldAtCompletedPhase.current.slot).toBe('formal-training')
+    expect(heldAtCompletedPhase.phaseElapsedSeconds).toBe(15)
     expect(resolveVisualWorkoutState(timeline, -10).sessionProgressPercent).toBe(0)
     expect(resolveVisualWorkoutState(timeline, 1_000).next).toBeNull()
     expect(resolveVisualWorkoutState(timeline, 1_000).sessionProgressPercent).toBe(100)
+  })
+
+  it('reports exact elapsed seconds without reconstructing them from rounded percentages', () => {
+    const timeline = buildVisualWorkoutTimeline([{
+      ...items[0],
+      pretraining_mode: 'NONE',
+      pretraining_countdown_duration: 0,
+      formal_countdown_duration: 0,
+      expected_duration: 300
+    }])
+
+    const state = resolveVisualWorkoutState(timeline, 1.08)
+
+    expect(state.phaseProgressPercent).toBe(0)
+    expect(state.phaseElapsedSeconds).toBe(2)
+    expect(state.sessionElapsedSeconds).toBe(2)
+  })
+
+  it('displays a 15-second action as [1, 16) without ever exposing second zero', () => {
+    const timeline = buildVisualWorkoutTimeline([{
+      ...items[0],
+      pretraining_mode: 'NONE',
+      pretraining_countdown_duration: 0,
+      formal_countdown_duration: 0,
+      expected_duration: 15
+    }, {
+      ...items[0],
+      id: 2,
+      order: 2,
+      pretraining_mode: 'NONE',
+      pretraining_countdown_duration: 0,
+      formal_countdown_duration: 0,
+      expected_duration: 15
+    }])
+
+    expect(resolveVisualWorkoutState(timeline, 0).phaseElapsedSeconds).toBe(1)
+    expect(resolveVisualWorkoutState(timeline, 14.999).phaseElapsedSeconds).toBe(15)
+    const nextAction = resolveVisualWorkoutState(timeline, 15)
+    expect(nextAction.current.itemIndex).toBe(1)
+    expect(nextAction.phaseElapsedSeconds).toBe(1)
+    expect(nextAction.sessionElapsedSeconds).toBe(16)
   })
 
   it('omits zero-length optional modules and rejects an empty workout', () => {

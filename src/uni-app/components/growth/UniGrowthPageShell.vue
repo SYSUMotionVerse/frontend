@@ -77,6 +77,11 @@ onMounted(() => {
             class="growth-shell__dock-clearance"
             aria-hidden="true"
           />
+          <view
+            v-else
+            class="growth-shell__secondary-clearance"
+            aria-hidden="true"
+          />
         </view>
       </scroll-view>
     </view>
@@ -87,6 +92,11 @@ onMounted(() => {
           <view
             v-if="props.showDock"
             class="growth-shell__dock-clearance"
+            aria-hidden="true"
+          />
+          <view
+            v-else
+            class="growth-shell__secondary-clearance"
             aria-hidden="true"
           />
         </view>
@@ -194,6 +204,14 @@ onMounted(() => {
   height: var(--floating-dock-content-clearance, 100px);
   min-height: var(--floating-dock-content-clearance, 100px);
   flex: 0 0 var(--floating-dock-content-clearance, 100px);
+  pointer-events: none;
+}
+
+.growth-shell__secondary-clearance {
+  width: 100%;
+  height: calc(56rpx + env(safe-area-inset-bottom));
+  min-height: calc(56rpx + env(safe-area-inset-bottom));
+  flex: 0 0 calc(56rpx + env(safe-area-inset-bottom));
   pointer-events: none;
 }
 

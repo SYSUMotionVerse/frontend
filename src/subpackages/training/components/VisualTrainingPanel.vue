@@ -38,6 +38,8 @@ const props = defineProps<{
   videoEventToken?: string
   videoElementId?: string
   trainingStarted: boolean
+  preparingTraining?: boolean
+  trainingPreparationLabel?: string
   startCountdown: number
   phaseKind: VisualWorkoutPhaseKind
   phaseSlot: VisualWorkoutPhaseSlot
@@ -131,6 +133,14 @@ const showStartAction = computed(() =>
   && !props.trainingStarted
   && props.startCountdown === 0
 )
+const showStartOverlay = computed(() => (
+  showStartAction.value
+  && (
+    props.preparingTraining
+    || startActionDisabled.value
+    || props.recognitionStatus === 'failed'
+  )
+))
 const showTutorialDemonstrationControls = computed(() => (
   props.tutorialMode
   && !props.tutorialLoading
@@ -166,6 +176,14 @@ const comparisonStatus = computed(() => {
       label: '相机未就绪',
       value: '暂不可用',
       detail: '请退出训练后重试'
+    }
+  }
+
+  if (showStartAction.value && props.preparingTraining) {
+    return {
+      label: '正在准备训练',
+      value: '加载中',
+      detail: props.trainingPreparationLabel || '正在加载动作与音频资源'
     }
   }
 
@@ -402,6 +420,7 @@ function handleTrainingVideoCanPlay(slot: TrainingVideoSlot) {
     promoteTrainingVideo(slot)
     return
   }
+
   if (slot !== activeTrainingVideoSlot.value) return
   // Native autoplay can be ignored when the source element has only just been
   // recreated. Re-issuing play after canplay is harmless and fixes that race
@@ -781,7 +800,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           :autoplay="videoAutoplay && activeTrainingVideoSlot === 'primary'"
           :initial-time="0"
           :muted="true"
-          :loop="phaseKind !== 'demonstration'"
+          :loop="trainingStarted"
           :controls="false"
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
@@ -809,7 +828,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           :autoplay="videoAutoplay && activeTrainingVideoSlot === 'buffer'"
           :initial-time="0"
           :muted="true"
-          :loop="phaseKind !== 'demonstration'"
+          :loop="trainingStarted"
           :controls="false"
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
@@ -874,6 +893,12 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           @tap.stop="selectMedia('camera')"
         />
       </view>
+      <view v-if="!comparisonMode" class="visual-session__info-panel">
+        <WorkoutTimeline
+          v-if="!videoLoading && !videoError && videoUrl && workoutTimelineReady"
+          :state="workoutState"
+        />
+      </view>
       <cover-view
         v-if="demonstrationPrimary && !comparisonMode && !videoLoading && !videoError && videoUrl && phaseKind === 'preview' && trainingStarted && startCountdown === 0 && !phaseCueCount"
         class="visual-session__phase-overlay"
@@ -890,13 +915,15 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
         <cover-view>语音讲解与示范视频同步播放</cover-view>
       </cover-view>
       <cover-view
-        v-if="showStartAction && !comparisonMode && (startActionDisabled || recognitionStatus === 'failed')"
+        v-if="showStartOverlay && !comparisonMode"
         class="visual-session__start-overlay"
       >
         <cover-view class="visual-session__start-hint">
           {{ recognitionStatus === 'failed'
             ? '相机未就绪，请退出训练后重试'
-            : '正在准备摄像头…' }}
+            : preparingTraining
+              ? (trainingPreparationLabel || '正在加载动作与音频资源…')
+              : '正在准备摄像头…' }}
         </cover-view>
       </cover-view>
       <cover-view
@@ -976,16 +1003,6 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           </button>
         </view>
       </view>
-    </view>
-
-    <view v-if="!comparisonMode && !tutorialMode" class="visual-session__lower-grid">
-      <view class="visual-session__info-panel">
-        <WorkoutTimeline
-          v-if="!videoLoading && !videoError && videoUrl && workoutTimelineReady"
-          :state="workoutState"
-        />
-      </view>
-      <view v-if="!comparisonMode" class="visual-session__secondary-space" aria-hidden="true" />
     </view>
 
   </view>
@@ -1397,12 +1414,15 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 
 .visual-session {
   display: flex;
-  height: auto;
-  min-height: calc(100vh - 24rpx);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 26rpx;
+  gap: 0;
+  overflow: hidden;
   box-sizing: border-box;
-  padding: 28rpx 28rpx 40rpx;
+  padding: 28rpx 28rpx 64rpx;
   background: transparent;
 }
 
@@ -1423,23 +1443,31 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 
 .visual-session__stage {
   position: relative;
+  display: flex;
   width: 100%;
-  height: 936rpx;
-  aspect-ratio: 3 / 4;
-  flex: 0 0 auto;
+  height: 100%;
+  flex: 1;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: stretch;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
   border-radius: 16rpx;
   background: transparent;
 }
 
 .visual-session__comparison-layout {
+  display: flex;
   width: 100%;
-  flex: 0 0 auto;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
 }
 
 .visual-session__stage--comparison {
   display: flex;
+  flex-wrap: nowrap;
+  align-content: normal;
   aspect-ratio: auto;
   overflow: hidden;
   background: #17263b;
@@ -1456,22 +1484,40 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   transition: opacity 180ms ease-out;
 }
 
+.visual-session__demonstration-stage {
+  isolation: isolate;
+  background: #fcf7f0;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-clip-path: inset(0 round 30rpx);
+  clip-path: inset(0 round 30rpx);
+  -webkit-mask-image: -webkit-radial-gradient(#fff, #000);
+}
+
 .visual-session__media-stage--primary {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  inset: auto;
   z-index: 2;
+  order: 1;
   width: 100%;
-  height: 100%;
+  /* 694rpx content width (750 - 2 * 28) at an exact 3:4 ratio. */
+  height: 925.333rpx;
+  min-height: 925.333rpx;
+  flex: 0 0 100%;
+  margin-bottom: 24rpx;
   box-shadow: 0 12rpx 30rpx rgba(47, 39, 31, 0.14);
 }
 
 .visual-session__media-stage--secondary {
-  position: absolute;
-  top: calc(100% + 30rpx);
-  right: 0;
+  position: relative;
+  inset: auto;
   z-index: 5;
-  width: 330rpx;
-  height: 430rpx;
+  order: 3;
+  width: 0;
+  height: calc(100% - 949.333rpx);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
   border: 2rpx solid #20344f;
   box-shadow: 0 10rpx 24rpx rgba(47, 39, 31, 0.1);
 }
@@ -1488,17 +1534,34 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #20344f;
+  background: #fcf7f0;
 }
 
 .visual-session__video-stack .visual-session__video {
   position: absolute;
   inset: 0;
+  border-radius: 0;
+  background: #fcf7f0;
 }
 
 .visual-session__video--active {
   inset: 0;
   z-index: 2;
+}
+
+/*
+ * WeChat composites the native video surface separately from its rounded
+ * parent. When both boxes end at exactly the same sub-pixel, antialiasing can
+ * expose the stage's dark fallback background only around the curved corners.
+ * Overscan the primary video beneath the parent's mask and clip so the native
+ * surface remains safely outside every antialiased edge. The visible geometry
+ * is unchanged.
+ */
+.visual-session__demonstration-stage.visual-session__media-stage--primary
+  .visual-session__video--active {
+  inset: -8rpx;
+  width: calc(100% + 16rpx);
+  height: calc(100% + 16rpx);
 }
 
 .visual-session__video--standby {
@@ -1515,6 +1578,9 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   inset: auto;
   z-index: auto;
   min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
+  margin: 0;
   border: 0;
   box-shadow: none;
 }
@@ -1573,7 +1639,8 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 .visual-session__demonstration-label {
   position: absolute;
   left: 20rpx;
-  bottom: 20rpx;
+  top: 905.333rpx;
+  bottom: auto;
   z-index: 8;
   display: flex;
   align-items: flex-start;
@@ -1584,6 +1651,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   font-size: 20rpx;
   font-weight: 700;
   padding: 14rpx 18rpx;
+  transform: translateY(-100%);
 }
 
 .visual-session__demonstration-kicker {
@@ -1595,7 +1663,8 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 .visual-session__phase-overlay {
   position: absolute;
   left: 20rpx;
-  bottom: 20rpx;
+  top: 905.333rpx;
+  bottom: auto;
   z-index: 6;
   display: flex;
   align-items: flex-start;
@@ -1605,6 +1674,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   background: rgba(15, 27, 43, 0.78);
   color: #fffaf4;
   padding: 16rpx 20rpx;
+  transform: translateY(-100%);
 }
 
 .visual-session__phase-kicker {
@@ -1632,7 +1702,8 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 .visual-session__start-overlay,
 .visual-session__start-countdown {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
+  height: 925.333rpx;
   z-index: 7;
   display: flex;
   align-items: center;
@@ -1697,7 +1768,8 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 
 .visual-session__cue-overlay {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
+  height: 925.333rpx;
   z-index: 7;
   display: flex;
   align-items: center;
@@ -1764,7 +1836,9 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 .visual-session__lesson-label {
   position: absolute;
   left: 20rpx;
-  bottom: 20rpx;
+  top: 905.333rpx;
+  bottom: auto;
+  transform: translateY(-100%);
   display: flex;
   align-items: center;
   gap: 8rpx;
@@ -1775,21 +1849,15 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   white-space: nowrap;
 }
 
-.visual-session__lower-grid {
-  display: flex;
-  height: 430rpx;
-  min-height: 430rpx;
-  flex: 0 0 430rpx;
-  align-items: stretch;
-  gap: 24rpx;
-}
-
 .visual-session__info-panel {
   display: flex;
+  order: 2;
+  width: 0;
   min-width: 0;
-  height: 430rpx;
+  height: calc(100% - 949.333rpx);
   min-height: 0;
-  flex: 1;
+  flex: 1 1 0;
+  margin-right: 24rpx;
   flex-direction: column;
   justify-content: flex-start;
   box-sizing: border-box;
@@ -1797,6 +1865,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   border-radius: 30rpx;
   background: rgba(255, 250, 244, 0.94);
   padding: 24rpx 26rpx;
+  overflow: hidden;
 }
 
 .visual-session--tutorial {
@@ -1805,13 +1874,6 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   gap: 0;
   overflow: hidden;
   padding: 0;
-}
-
-.visual-session__secondary-space {
-  width: 330rpx;
-  height: 430rpx;
-  min-height: 0;
-  flex: 0 0 330rpx;
 }
 
 .visual-session__pose-view {
@@ -1874,6 +1936,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   left: 0;
   right: 0;
   bottom: 0;
+  color: #fff;
   font-size: 16rpx;
   font-weight: 900;
   text-align: center;
@@ -1882,7 +1945,9 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 
 .visual-session__completion-overlay {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 925.333rpx;
   z-index: 10;
   display: flex;
   align-items: center;

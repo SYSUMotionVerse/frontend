@@ -45,6 +45,8 @@ export interface VisualWorkoutState {
   actionNumber: number
   totalActions: number
   remainingSeconds: number
+  phaseElapsedSeconds: number
+  sessionElapsedSeconds: number
   phaseProgressPercent: number
   sessionProgressPercent: number
 }
@@ -175,7 +177,8 @@ export function buildVisualWorkoutTimeline(items: ExerciseArrangementItem[]): Vi
 
 export function resolveVisualWorkoutState(
   timeline: VisualWorkoutPhase[],
-  currentSeconds: number
+  currentSeconds: number,
+  activePhase?: Pick<VisualWorkoutPhase, 'itemIndex' | 'slot'>
 ): VisualWorkoutState {
   if (timeline.length === 0) {
     throw new Error('Visual workout timeline requires at least one phase.')
@@ -187,10 +190,17 @@ export function resolveVisualWorkoutState(
     0,
     duration
   )
-  let currentIndex = 0
-  for (let index = 1; index < timeline.length; index += 1) {
-    if (currentTime < timeline[index].startSeconds) break
-    currentIndex = index
+  let currentIndex = activePhase
+    ? timeline.findIndex(phase => (
+        phase.itemIndex === activePhase.itemIndex && phase.slot === activePhase.slot
+      ))
+    : -1
+  if (currentIndex < 0) {
+    currentIndex = 0
+    for (let index = 1; index < timeline.length; index += 1) {
+      if (currentTime < timeline[index].startSeconds) break
+      currentIndex = index
+    }
   }
   const current = timeline[currentIndex]
   const phaseDuration = Math.max(1, current.endSeconds - current.startSeconds)
@@ -204,6 +214,16 @@ export function resolveVisualWorkoutState(
     actionNumber: current.actionNumber,
     totalActions: current.totalActions,
     remainingSeconds: Math.max(0, Math.ceil(current.endSeconds - currentTime)),
+    // Display logical seconds as [1, duration + 1). At elapsed 0 the action
+    // is already in its first second; elapsed 15 belongs to the next phase.
+    phaseElapsedSeconds: Math.min(
+      phaseDuration,
+      Math.floor(elapsedInPhase + 0.000_001) + 1
+    ),
+    sessionElapsedSeconds: Math.min(
+      duration,
+      Math.floor(currentTime + 0.000_001) + 1
+    ),
     phaseProgressPercent: Math.round((elapsedInPhase / phaseDuration) * 100),
     sessionProgressPercent: Math.round((currentTime / duration) * 100)
   }

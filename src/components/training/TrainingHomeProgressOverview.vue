@@ -57,7 +57,7 @@ const qualifyingStartIndex = computed(() => Math.max(0, weekdays.length - props.
   padding: 30rpx 32rpx;
   border: 2rpx solid rgba(255, 211, 132, 0.3);
   border-radius: 44rpx;
-  background: #fffaf4;
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
 }
 

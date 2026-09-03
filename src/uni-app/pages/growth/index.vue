@@ -172,7 +172,9 @@ onShareAppMessage((options) => {
           </view>
           <navigator class="growth-page__link" url="/pages/growth/adherence">查看详情</navigator>
         </view>
-        <AdherenceHeatmap :days="adherenceCalendar" />
+        <view class="growth-page__heatmap">
+          <AdherenceHeatmap :days="adherenceCalendar" />
+        </view>
         <SessionBadgeList :badges="sessionBadges" />
       </view>
 
@@ -284,7 +286,7 @@ onShareAppMessage((options) => {
   padding: 22rpx 20rpx;
   border: 2rpx solid rgba(255, 211, 132, 0.24);
   border-radius: 28rpx;
-  background: rgba(255, 250, 244, 0.94);
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 18rpx rgba(71, 56, 39, 0.035);
 }
 
@@ -349,7 +351,12 @@ onShareAppMessage((options) => {
 }
 
 .growth-page__section-shell--adherence {
-  background: #fffaf4;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.growth-page__heatmap {
+  margin-left: 24rpx;
+  margin-bottom: 24rpx;
 }
 
 .growth-page__section-shell--explore {

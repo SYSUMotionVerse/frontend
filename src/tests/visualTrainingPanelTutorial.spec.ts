@@ -26,6 +26,8 @@ const workoutState: VisualWorkoutState = {
   actionNumber: 1,
   totalActions: 1,
   remainingSeconds: 15,
+  phaseElapsedSeconds: 0,
+  sessionElapsedSeconds: 0,
   phaseProgressPercent: 0,
   sessionProgressPercent: 0
 }
@@ -124,7 +126,7 @@ describe('VisualTrainingPanel tutorial layout', () => {
 
     expect(wrapper.find('.visual-session__tutorial').exists()).toBe(false)
     expect(wrapper.find('#follow-along-video').exists()).toBe(true)
-    expect(wrapper.find('.visual-session__lower-grid').exists()).toBe(true)
+    expect(wrapper.find('.visual-session__info-panel').exists()).toBe(true)
     expect(wrapper.find('.visual-session__actions').exists()).toBe(false)
   })
 
