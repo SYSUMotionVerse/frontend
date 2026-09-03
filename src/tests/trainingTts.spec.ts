@@ -255,6 +255,32 @@ describe('trainingTts', () => {
     expect(context.play).toHaveBeenCalledOnce()
   })
 
+  it('does not play when a preload resolves after the session enters the background', async () => {
+    const context = createAudioContext()
+    let completeDownload: ((result: { statusCode: number; tempFilePath: string }) => void) | undefined
+    const downloadFile = vi.fn(({ success }) => {
+      completeDownload = success
+    })
+    const player = createTrainingTtsPlayer(() => context, { downloadFile })
+    const remoteUrl = 'https://cdn.example.com/background-race.mp3'
+
+    const preloading = player.preload([remoteUrl])
+    const queued = player.enqueue([remoteUrl])
+    player.suspend()
+
+    completeDownload?.({
+      statusCode: 200,
+      tempFilePath: 'wxfile://tmp/background-race.mp3'
+    })
+    await preloading
+    await queued
+
+    expect(context.play).not.toHaveBeenCalled()
+
+    player.resume()
+    expect(context.play).not.toHaveBeenCalled()
+  })
+
   it('does not start a countdown cue after its visible countdown has ended', async () => {
     const context = createAudioContext()
     let completeDownload: ((result: { statusCode: number; tempFilePath: string }) => void) | undefined

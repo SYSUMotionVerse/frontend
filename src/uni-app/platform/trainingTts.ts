@@ -175,7 +175,7 @@ export function createTrainingTtsPlayer(
     expectedGeneration = playbackGeneration
   ): Promise<void> {
     const normalizedUrl = audioUrl.trim()
-    if (!normalizedUrl) {
+    if (!normalizedUrl || suspended) {
       onComplete?.()
       return Promise.resolve()
     }
@@ -200,7 +200,6 @@ export function createTrainingTtsPlayer(
 
     return new Promise<void>(resolve => {
       stopAudio()
-      suspended = false
       let nextAudioContext: InnerAudioContextLike | undefined
       try {
         nextAudioContext = createAudioContext()
@@ -242,7 +241,7 @@ export function createTrainingTtsPlayer(
       const stopPlayback = () => dispose(true)
       stopCurrentPlayback = stopPlayback
       const retryWithRemoteSource = () => {
-        if (sourceUrl === normalizedUrl || !allowPreloadedSource) return false
+        if (suspended || sourceUrl === normalizedUrl || !allowPreloadedSource) return false
         if (preloadedSources.get(normalizedUrl) === sourceUrl) {
           preloadedSources.delete(normalizedUrl)
         }
@@ -395,17 +394,14 @@ export function createTrainingTtsPlayer(
       stopAudio()
     },
     suspend() {
-      const hasScheduledTimeline = timeline.isRunning()
+      if (suspended) return
+      // A download can resolve after the mini-program has entered the
+      // background. Invalidate that continuation so it cannot invoke the
+      // forbidden native operateAudio JSAPI before onShow resumes the session.
+      playbackGeneration += 1
+      suspended = true
       timeline.suspend()
-      if (audioContext) {
-        suspended = true
-        audioContext.pause?.()
-        return
-      }
-      // Keep a not-yet-started queue suspended as well. This can happen when
-      // buffering wins a race with audio-context creation; resume() will then
-      // drain it once the video reports progress again.
-      if (queuedAudioUrls.length > 0 || hasScheduledTimeline) suspended = true
+      audioContext?.pause?.()
     },
     resume() {
       if (!suspended) return
