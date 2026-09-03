@@ -64,6 +64,15 @@ describe('training audio precision', () => {
     expect(context.close).toHaveBeenCalledOnce()
   })
 
+  it('uses the monotonic fallback when a training session opts out of WebAudio', () => {
+    const createContext = vi.fn(() => undefined)
+    const clock = createTrainingAudioClock(createContext)
+
+    expect(createContext).toHaveBeenCalledOnce()
+    expect(clock.context).toBeUndefined()
+    expect(Number.isFinite(clock.nowMs())).toBe(true)
+  })
+
   it('anchors every callback so repeated 80ms timer latency never accumulates', () => {
     const clock = createLateRuntime(80)
     const actualTimes: number[] = []

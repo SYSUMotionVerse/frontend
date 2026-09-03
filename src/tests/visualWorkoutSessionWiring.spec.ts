@@ -42,11 +42,6 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain("const recognitionStatus = shallowRef<PoseRecognitionStatus>('idle')")
     expect(sessionSource).toContain("const recognitionReady = computed(() => recognitionStatus.value === 'ready')")
     expect(sessionSource).toContain('function startTraining()')
-    const startTrainingSource = sessionSource.slice(
-      sessionSource.indexOf('async function startTraining()'),
-      sessionSource.indexOf('function beginFirstAction()')
-    )
-    expect(startTrainingSource).toContain('trainingAudioClock.resume()')
     expect(sessionSource).toContain('if (!recognitionReady.value)')
     expect(sessionSource).toContain("recognitionStatus.value = 'preparing'")
     expect(sessionSource).toContain("if (stats.status === 'ready')")
@@ -87,8 +82,8 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain('function continueAfterModuleAudio')
     expect(sessionSource).toContain('ttsPlayer.waitForIdle()')
     expect(sessionSource).toContain('const trainingSoundscape = createTrainingSoundscape(')
-    expect(sessionSource).toContain('const trainingAudioClock = createTrainingAudioClock()')
-    expect(sessionSource).toContain('trainingAudioClock.runtime')
+    expect(sessionSource).toContain('const trainingAudioClock = createTrainingAudioClock(() => undefined)')
+    expect(sessionSource).toContain('trainingAudioClock.runtime,\n    null')
     expect(sessionSource).toContain('return trainingAudioClock.nowMs()')
     expect(sessionSource).toContain("phaseKind.value === 'demonstration' ? 'pretraining' : 'formal'")
     expect(sessionSource).toContain('trainingSoundscape.suspend()')

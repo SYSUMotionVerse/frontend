@@ -28,11 +28,7 @@ import {
   mapWithConcurrency
 } from '../../../uni-app/platform/actionStandardLoader'
 import { createTrainingTtsPlayer } from '../../../uni-app/platform/trainingTts'
-import {
-  createDefaultTrainingWebAudioRuntime,
-  createTrainingSoundscape,
-  type TrainingWebAudioContextLike
-} from '../../../uni-app/platform/trainingSoundscape'
+import { createTrainingSoundscape } from '../../../uni-app/platform/trainingSoundscape'
 import { createTrainingAudioClock } from '../../../uni-app/platform/trainingAudioClock'
 import { resolveNextWholeSecondDelayMs } from '../../../uni-app/platform/anchoredTimeline'
 import { aggregateActionScores, scoreAction } from '../../../domain/training/actionScoring'
@@ -320,10 +316,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const actionScores = shallowRef<ScoredActionResult[]>([])
   const scoringWarnings = shallowRef<string[]>([])
   const trainingPreparationLabel = shallowRef('')
-  const trainingAudioClock = createTrainingAudioClock()
-  const sharedWebAudioContext = trainingAudioClock.context as
-    | TrainingWebAudioContextLike
-    | undefined
+  // A WebAudioContext created before a user gesture can remain suspended on
+  // real devices. Keep the workout clock independent from that native state
+  // and use the established InnerAudioContext path for all training audio.
+  const trainingAudioClock = createTrainingAudioClock(() => undefined)
   const ttsPlayer = createTrainingTtsPlayer(
     undefined,
     undefined,
@@ -332,10 +328,8 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const trainingSoundscape = createTrainingSoundscape(
     undefined,
     trainingAudioClock.runtime,
-    createDefaultTrainingWebAudioRuntime(sharedWebAudioContext)
+    null
   )
-  // Decode the two effect assets before training so Web Audio can submit the
-  // complete sample-clock timeline as soon as a phase begins.
   void trainingSoundscape.preload()
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setTimeout> | null = null
@@ -1182,9 +1176,6 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   async function startTraining() {
-    // Real devices begin a Web Audio context suspended. Resume it in the
-    // start interaction before every TTS/soundscape timeline is scheduled.
-    trainingAudioClock.resume()
     if (disposed || sessionStopping || sessionSuspended) return
     if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {

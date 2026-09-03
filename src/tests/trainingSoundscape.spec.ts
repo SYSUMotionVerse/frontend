@@ -54,6 +54,17 @@ describe('trainingSoundscape', () => {
     }
   })
 
+  it('uses native InnerAudio players when WebAudio is explicitly disabled', () => {
+    const createContext = vi.fn(createAudioContext)
+    const soundscape = createTrainingSoundscape(createContext, undefined, null)
+
+    soundscape.preload()
+    soundscape.play('formal', 2)
+
+    expect(createContext).toHaveBeenCalledTimes(4)
+    expect(createContext.mock.results[2].value.play).toHaveBeenCalledOnce()
+  })
+
   it('plays one start boundary before the final-three-second pretraining tail', () => {
     const firstSecondContext = createAudioContext()
     const secondSecondContext = createAudioContext()

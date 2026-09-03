@@ -196,7 +196,7 @@ export function createTrainingSoundscape(
     return uniApi?.createInnerAudioContext?.()
   },
   timelineRuntime?: AnchoredTimelineRuntime,
-  webAudioRuntime = createDefaultTrainingWebAudioRuntime()
+  webAudioRuntime: TrainingWebAudioRuntime | undefined | null = createDefaultTrainingWebAudioRuntime()
 ) {
   const secondContexts: Array<PulseAudioContextLike | undefined> = [undefined, undefined]
   let nextSecondContextIndex = 0
