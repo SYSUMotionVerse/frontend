@@ -285,7 +285,8 @@ describe('VisualTrainingPanel media switch', () => {
     await vi.advanceTimersByTimeAsync(500)
     expect(wrapper.find('.visual-session__position-guide').exists()).toBe(true)
     expect(wrapper.find('.visual-session__guide-image').exists()).toBe(true)
-    expect(wrapper.find('.visual-session__guide-image').attributes('src')).toContain('camera-position-guide.png')
+    expect(wrapper.find('.visual-session__guide-image').attributes('src'))
+      .toBe('https://cdn.sysusports.cn/images/camera-position-guide.png')
 
     await wrapper.setProps({
       trainingStarted: true,

@@ -87,7 +87,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
     expect(source).toContain("props.phaseSlot === 'formal-countdown'")
     expect(source).toContain("props.workoutState.current.itemIndex === 0")
     expect(source).toMatch(/\.visual-session__position-guide\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*360rpx;/)
-    expect(source).toContain('camera-position-guide.png')
+    expect(source).toContain(':src="CDN_IMAGE_URLS.cameraPositionGuide"')
     expect(source).toMatch(/\.visual-session__guide-image\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*336rpx;/)
     expect(source).toContain('站在框内')
     expect(source).toMatch(/\.visual-session__guide-label\s*\{[\s\S]*color:\s*#fff;/)

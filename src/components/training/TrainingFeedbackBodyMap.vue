@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { CDN_IMAGE_URLS } from '../../config/cdnAssets'
 import { useStudentStore } from '../../uni-app/composables/useStudentStore'
 
 interface AngleScore {
@@ -14,8 +15,8 @@ const props = defineProps<{
 
 const studentStore = useStudentStore()
 const figureSrc = computed(() => studentStore.state.profile.gender === '女'
-  ? '/static/generated/training-feedback-body-map-female.png'
-  : '/static/generated/training-feedback-body-map.png')
+  ? CDN_IMAGE_URLS.trainingFeedbackBodyMapFemale
+  : CDN_IMAGE_URLS.trainingFeedbackBodyMap)
 
 const anglePositions: Record<string, { side: 'left' | 'right'; top: number }> = {
   left_shoulder: { side: 'left', top: 13 },

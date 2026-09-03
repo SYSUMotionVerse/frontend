@@ -14,8 +14,8 @@ describe('training feedback redesign', () => {
     expect(page).toContain('TrainingFeedbackTrendChart')
     expect(page).toContain('TrainingFeedbackActionCard')
     expect(page).toContain('actionResults')
-    expect(bodyMap).toContain('/static/generated/training-feedback-body-map.png')
-    expect(bodyMap).toContain('/static/generated/training-feedback-body-map-female.png')
+    expect(bodyMap).toContain('CDN_IMAGE_URLS.trainingFeedbackBodyMap')
+    expect(bodyMap).toContain('CDN_IMAGE_URLS.trainingFeedbackBodyMapFemale')
     expect(bodyMap).toContain("studentStore.state.profile.gender === '女'")
     expect(bodyMap).toContain(".filter(angle => anglePositions[angle.key])")
     expect(actionCard).toContain('本动作得分趋势')
@@ -23,7 +23,7 @@ describe('training feedback redesign', () => {
 
   it('replaces the camera guide drawing with the generated transparent asset', () => {
     const panel = readFileSync(resolve('src/subpackages/training/components/VisualTrainingPanel.vue'), 'utf8')
-    expect(panel).toContain('/static/generated/camera-position-guide.png')
+    expect(panel).toContain(':src="CDN_IMAGE_URLS.cameraPositionGuide"')
     expect(panel).not.toContain('visual-session__guide-torso')
     expect(panel).not.toContain('visual-session__guide-arm')
     expect(panel).not.toContain('visual-session__guide-leg')

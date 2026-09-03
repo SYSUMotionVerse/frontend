@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
+import { CDN_IMAGE_URLS } from '../../../config/cdnAssets'
 import DemonstrationVideoControls from './DemonstrationVideoControls.vue'
 import PoseDetectionView from './pose/PoseDetectionView.vue'
 import WorkoutTimeline from './WorkoutTimeline.vue'
@@ -882,7 +883,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
         <cover-view v-if="showPositionGuide" class="visual-session__position-guide">
           <cover-image
             class="visual-session__guide-image"
-            src="/static/generated/camera-position-guide.png"
+            :src="CDN_IMAGE_URLS.cameraPositionGuide"
           />
           <cover-view class="visual-session__guide-label">站在框内</cover-view>
         </cover-view>
