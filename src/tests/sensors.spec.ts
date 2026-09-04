@@ -85,6 +85,30 @@ function createBaselineShiftSamples(): SensorSample[] {
   return [...initialSamples, ...laterSamples]
 }
 
+function createLevelWalkingSamples(verticalAmplitude: number, horizontalAmplitude: number): SensorSample[] {
+  // Gravity sits on x; every 500ms there is an impact plateau on x plus a
+  // square-wave horizontal component on y. With a large horizontal
+  // amplitude this is level walking; with a dominant x amplitude it is a
+  // stair climb of identical step timing.
+  return Array.from({ length: 301 }, (_, index) => {
+    const timestampMs = index * 100
+    const phase = timestampMs % 500
+    const hasImpact = phase === 0 || phase === 100 || phase === 400
+    const horizontal = Math.floor(timestampMs / 250) % 2 === 0
+      ? horizontalAmplitude
+      : -horizontalAmplitude
+
+    return {
+      timestampMs,
+      acceleration: {
+        x: 9.81 + (hasImpact ? verticalAmplitude : 0),
+        y: horizontal,
+        z: 0
+      }
+    }
+  })
+}
+
 function createGappedClimbSamples(): SensorSample[] {
   const stepTimesMs = Array.from({ length: 25 }, (_, index) => 400 + index * 500)
   const activeSamples = Array.from({ length: 131 }, (_, index) => {
@@ -430,6 +454,30 @@ describe('createSensorSessionAnalysis', () => {
 
     expect(analysis.sensorCoverage).toBeLessThan(0.5)
     expect(analysis.isEligibleForCompletion).toBe(false)
+  })
+
+  it('credits a vertical-dominant 30-second session but rejects a horizontal one', () => {
+    const walkAnalysis = createSensorSessionAnalysis({
+      samples: createLevelWalkingSamples(1.2, 2.5),
+      durationSeconds: 30,
+      completedIntervals: 1
+    })
+    const stairAnalysis = createSensorSessionAnalysis({
+      samples: createLevelWalkingSamples(3.2, 0.8),
+      durationSeconds: 30,
+      completedIntervals: 1
+    })
+
+    expect(walkAnalysis.estimatedStepCount).toBeGreaterThan(30)
+    expect(walkAnalysis.isAscentEvidence).toBe(false)
+    expect(walkAnalysis.isEligibleForCompletion).toBe(false)
+    expect(walkAnalysis.completedIntervals).toBe(0)
+    expect(walkAnalysis.summary).toContain('步行')
+
+    expect(stairAnalysis.estimatedStepCount).toBeGreaterThan(30)
+    expect(stairAnalysis.isAscentEvidence).toBe(true)
+    expect(stairAnalysis.isEligibleForCompletion).toBe(true)
+    expect(stairAnalysis.completedIntervals).toBe(1)
   })
 
   it('keeps the stronger peak when two candidates are too close together', () => {

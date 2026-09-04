@@ -329,6 +329,9 @@ describe('page-level backend sync wiring', () => {
         pauseCount: 0,
         confidence: 0,
         sensorCoverage: 0,
+        verticalToHorizontalRatio: 0,
+        ascentStepRatio: 0,
+        isAscentEvidence: false,
         isEligibleForCompletion: false,
         completedIntervals: 0,
         durationSeconds: 0
@@ -355,6 +358,9 @@ describe('page-level backend sync wiring', () => {
         pauseCount: 0,
         confidence: 0.88,
         sensorCoverage: 1,
+        verticalToHorizontalRatio: 2.5,
+        ascentStepRatio: 1,
+        isAscentEvidence: true,
         isEligibleForCompletion: true,
         completedIntervals: 1,
         durationSeconds: 30
@@ -2867,6 +2873,9 @@ describe('page-level backend sync wiring', () => {
         pauseCount: 0,
         confidence: 0.35,
         sensorCoverage: 0.13,
+        verticalToHorizontalRatio: 0.2,
+        ascentStepRatio: 0,
+        isAscentEvidence: false,
         isEligibleForCompletion: false,
         completedIntervals: 0,
         durationSeconds: 30

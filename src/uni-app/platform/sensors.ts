@@ -22,6 +22,9 @@ export interface SensorSessionAnalysis {
   pauseCount: number
   confidence: number
   sensorCoverage: number
+  verticalToHorizontalRatio: number
+  ascentStepRatio: number
+  isAscentEvidence: boolean
   isEligibleForCompletion: boolean
   completedIntervals: number
   durationSeconds: number
@@ -118,6 +121,9 @@ const STEP_TROUGH_WINDOW_MS = 300
 const STEP_VALLEY_WINDOW_MS = 300
 const STEP_FILTER_WINDOW_MS = 100
 const BASELINE_RECALIBRATION_SAMPLE_INTERVAL = 10
+const GRAVITY_EMA_TAU_MS = 1_200
+const ASCENT_RATIO_THRESHOLD = 1
+const ASCENT_STEP_RATIO_THRESHOLD = 0.5
 
 export async function startStairSensorCapture(
   input: StartStairSensorCaptureInput
@@ -734,7 +740,11 @@ export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorS
   const activeClimbSeconds = roundNumber(computeActiveClimbSeconds(peakTimestampsMs), 1)
   const sensorCoverage = computeSensorCoverage(samples, durationSeconds)
   const requiresFullSessionEvidence = durationSeconds >= COMPLETION_DURATION_SECONDS
-  const isEligibleForCompletion = input.completedIntervals > 0 && (
+  const ascentEvidence = computeAscentEvidence(samples, peakTimestampsMs)
+  // The ascent gate needs confirmed steps to evaluate; sessions without any
+  // detected peaks are already blocked by the step/coverage requirements.
+  const ascentGatePassed = peakTimestampsMs.length === 0 || ascentEvidence.isAscentEvidence
+  const isEligibleForCompletion = input.completedIntervals > 0 && ascentGatePassed && (
     !requiresFullSessionEvidence || (
       sensorCoverage >= MIN_SENSOR_COVERAGE_FOR_COMPLETION &&
       estimatedStepCount >= MIN_STEPS_FOR_COMPLETION &&
@@ -778,7 +788,8 @@ export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorS
       activeClimbSeconds,
       confidence,
       isEligibleForCompletion,
-      completionAttempted: input.completedIntervals > 0
+      completionAttempted: input.completedIntervals > 0,
+      isAscentEvidence: ascentEvidence.isAscentEvidence
     }),
     capturedBy: 'sensor',
     estimatedStepCount,
@@ -792,9 +803,161 @@ export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorS
     pauseCount,
     confidence,
     sensorCoverage,
+    verticalToHorizontalRatio: ascentEvidence.verticalToHorizontalRatio,
+    ascentStepRatio: ascentEvidence.ascentStepRatio,
+    isAscentEvidence: ascentEvidence.isAscentEvidence,
     isEligibleForCompletion,
     completedIntervals,
     durationSeconds
+  }
+}
+
+export interface AscentEvidence {
+  verticalToHorizontalRatio: number
+  ascentStepRatio: number
+  isAscentEvidence: boolean
+}
+
+// Stair ascent is world-vertical motion: once the gravity direction is
+// estimated with a slow EMA, the acceleration projected onto it dominates
+// during climbing, while level walking lives mostly in the horizontal
+// (anterior-posterior) component. Literature reports ~89-94% accuracy for
+// vertical-to-horizontal amplitude features with trunk-mounted sensors;
+// handheld phones are noisier, so the gate is intentionally conservative.
+function computeAscentEvidence(
+  samples: SensorSample[],
+  peakTimestampsMs: number[]
+): AscentEvidence {
+  const noEvidence: AscentEvidence = {
+    verticalToHorizontalRatio: 0,
+    ascentStepRatio: 0,
+    isAscentEvidence: false
+  }
+  if (samples.length < 3 || peakTimestampsMs.length === 0) {
+    return noEvidence
+  }
+
+  const gravity = { ...samples[0]!.acceleration }
+  const verticalValues: number[] = []
+  const residualXValues: number[] = []
+  const residualYValues: number[] = []
+  const residualZValues: number[] = []
+  let previousTimestampMs = samples[0]!.timestampMs
+
+  for (const sample of samples) {
+    const acceleration = sample.acceleration
+    const deltaMs = sample.timestampMs - previousTimestampMs
+    previousTimestampMs = sample.timestampMs
+    const alpha = deltaMs > 0 ? 1 - Math.exp(-deltaMs / GRAVITY_EMA_TAU_MS) : 0
+    gravity.x += alpha * (acceleration.x - gravity.x)
+    gravity.y += alpha * (acceleration.y - gravity.y)
+    gravity.z += alpha * (acceleration.z - gravity.z)
+
+    const gravityNorm = Math.sqrt(
+      gravity.x * gravity.x + gravity.y * gravity.y + gravity.z * gravity.z
+    ) || 1
+    const ux = gravity.x / gravityNorm
+    const uy = gravity.y / gravityNorm
+    const uz = gravity.z / gravityNorm
+
+    const vertical = acceleration.x * ux + acceleration.y * uy + acceleration.z * uz
+    verticalValues.push(vertical)
+    // In-plane residual of the specific force; its per-component variances
+    // capture horizontal oscillation energy regardless of swing direction.
+    residualXValues.push(acceleration.x - vertical * ux)
+    residualYValues.push(acceleration.y - vertical * uy)
+    residualZValues.push(acceleration.z - vertical * uz)
+  }
+
+  const ratios: number[] = []
+  let windowStartIndex = 0
+
+  // Per-step-cycle windows: each interval between consecutive confirmed
+  // peaks contains exactly one rise-and-recover cycle, so the vertical and
+  // horizontal ranges are comparable across steps.
+  for (let peakIndex = 1; peakIndex < peakTimestampsMs.length; peakIndex += 1) {
+    const windowStartMs = peakTimestampsMs[peakIndex - 1]!
+    const windowEndMs = peakTimestampsMs[peakIndex]!
+    while (
+      windowStartIndex < samples.length &&
+      samples[windowStartIndex]!.timestampMs < windowStartMs
+    ) {
+      windowStartIndex += 1
+    }
+
+    let verticalSum = 0
+    let verticalSquaredSum = 0
+    let residualXSum = 0
+    let residualXSquaredSum = 0
+    let residualYSum = 0
+    let residualYSquaredSum = 0
+    let residualZSum = 0
+    let residualZSquaredSum = 0
+    let scan = windowStartIndex
+    while (
+      scan < samples.length &&
+      samples[scan]!.timestampMs <= windowEndMs
+    ) {
+      const verticalValue = verticalValues[scan]!
+      const residualX = residualXValues[scan]!
+      const residualY = residualYValues[scan]!
+      const residualZ = residualZValues[scan]!
+      verticalSum += verticalValue
+      verticalSquaredSum += verticalValue * verticalValue
+      residualXSum += residualX
+      residualXSquaredSum += residualX * residualX
+      residualYSum += residualY
+      residualYSquaredSum += residualY * residualY
+      residualZSum += residualZ
+      residualZSquaredSum += residualZ * residualZ
+      scan += 1
+    }
+
+    const windowSize = scan - windowStartIndex
+    if (windowSize < 2) {
+      continue
+    }
+
+    // Variance of the vertical projection vs the total variance of the
+    // in-plane residual: stair ascent raises the former, level walking the
+    // latter. Variance survives swing-direction flips that a magnitude
+    // range would miss.
+    const verticalVariance = Math.max(
+      0,
+      verticalSquaredSum / windowSize - (verticalSum / windowSize) ** 2
+    )
+    const horizontalVariance =
+      Math.max(0, residualXSquaredSum / windowSize - (residualXSum / windowSize) ** 2) +
+      Math.max(0, residualYSquaredSum / windowSize - (residualYSum / windowSize) ** 2) +
+      Math.max(0, residualZSquaredSum / windowSize - (residualZSum / windowSize) ** 2)
+
+    if (horizontalVariance < 1e-9) {
+      // Purely vertical motion is the strongest possible ascent signal.
+      ratios.push(99)
+      continue
+    }
+
+    ratios.push(verticalVariance / horizontalVariance)
+  }
+
+  if (ratios.length === 0) {
+    return noEvidence
+  }
+
+  const sortedRatios = [...ratios].sort((left, right) => left - right)
+  const middleIndex = Math.floor(sortedRatios.length / 2)
+  const medianRatio = sortedRatios.length % 2 === 1
+    ? sortedRatios[middleIndex]!
+    : (sortedRatios[middleIndex - 1]! + sortedRatios[middleIndex]!) / 2
+  const ascentSteps = ratios.filter(ratio => ratio >= ASCENT_RATIO_THRESHOLD).length
+  const ascentStepRatio = Math.round((ascentSteps / ratios.length) * 100) / 100
+
+  return {
+    verticalToHorizontalRatio: Math.round(medianRatio * 100) / 100,
+    ascentStepRatio,
+    isAscentEvidence:
+      medianRatio >= ASCENT_RATIO_THRESHOLD &&
+      ascentStepRatio >= ASCENT_STEP_RATIO_THRESHOLD
   }
 }
 
@@ -971,8 +1134,13 @@ function buildSummary(input: {
   confidence: number
   isEligibleForCompletion: boolean
   completionAttempted: boolean
+  isAscentEvidence: boolean
 }) {
   if (input.completionAttempted && !input.isEligibleForCompletion) {
+    if (input.estimatedStepCount > 0 && !input.isAscentEvidence) {
+      return '本次检测到步伐，但未检测到持续的竖直上升，按步行记录，未计入爬楼训练。'
+    }
+
     return '本轮传感器数据未覆盖足够的连续上楼动作，未计入训练完成；请保持手机稳定并连续上楼后重试。'
   }
 
