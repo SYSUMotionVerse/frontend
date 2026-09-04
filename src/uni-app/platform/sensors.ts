@@ -65,7 +65,7 @@ interface SensorAnalysisInput {
   durationSeconds?: number
   completedIntervals: number
   samples?: SensorSample[]
-  baselineMagnitude?: number
+  detection?: StepPeakDetection
 }
 
 type MotionInterval = 'game' | 'ui' | 'normal'
@@ -109,6 +109,8 @@ const FLOOR_HEIGHT_METERS = 3
 const DEFAULT_SENSOR_INTERVAL: MotionInterval = 'game'
 const SENSOR_START_TIMEOUT_MS = 5_000
 const SENSOR_STOP_TIMEOUT_MS = 2_000
+const STEP_TROUGH_WINDOW_MS = 300
+const BASELINE_RECALIBRATION_SAMPLE_INTERVAL = 10
 const COMPLETION_DURATION_SECONDS = 30
 const MIN_SENSOR_COVERAGE_FOR_COMPLETION = 0.8
 const MIN_STEPS_FOR_COMPLETION = 12
@@ -135,23 +137,25 @@ export async function startStairSensorCapture(
   const samples: SensorSample[] = []
   let latestGyroscope: GyroscopeSample | null = null
   let isActive = true
-  let calibratedBaselineMagnitude: number | undefined
   let stopPromise: Promise<StairSensorCaptureResult> | null = null
   let stoppedResult: StairSensorCaptureResult | null = null
+  const peakDetector = createStepPeakDetector()
 
   const accelerometerHandler = (result: MotionVector) => {
     if (!isActive) {
       return
     }
 
-    samples.push({
+    const sample: SensorSample = {
       timestampMs: Date.now(),
       acceleration: {
         x: result.x,
         y: result.y,
         z: result.z
       }
-    })
+    }
+    samples.push(sample)
+    peakDetector.push(sample)
   }
 
   const gyroscopeHandler = (result: MotionVector) => {
@@ -224,22 +228,11 @@ export async function startStairSensorCapture(
   }
 
   const buildSnapshot = (snapshotInput?: StopStairSensorCaptureInput): StairSensorCaptureSnapshot => {
-    const candidateBaselineMagnitude = estimateBaselineMagnitude(samples)
-    if (
-      candidateBaselineMagnitude !== undefined &&
-      (
-        calibratedBaselineMagnitude === undefined ||
-        candidateBaselineMagnitude < calibratedBaselineMagnitude
-      )
-    ) {
-      calibratedBaselineMagnitude = candidateBaselineMagnitude
-    }
-
     const analysis = createSensorSessionAnalysis({
       durationSeconds: snapshotInput?.durationSeconds,
       completedIntervals: snapshotInput?.completedIntervals ?? input.completedIntervals,
       samples,
-      baselineMagnitude: calibratedBaselineMagnitude
+      detection: peakDetector.getDetection()
     })
 
     return {
@@ -296,6 +289,7 @@ export async function startStairSensorCapture(
         }
         await Promise.all(sensorStops)
 
+        peakDetector.flush()
         stoppedResult = buildSnapshot(stopInput)
         return stoppedResult
       })()
@@ -305,11 +299,232 @@ export async function startStairSensorCapture(
   }
 }
 
+export interface StepPeakDetection {
+  candidateTimestampsMs: number[]
+  confirmedTimestampsMs: number[]
+}
+
+interface StepPeakDetector {
+  push(sample: SensorSample): void
+  flush(): void
+  getDetection(): StepPeakDetection
+}
+
+// Streaming peak picker. Confirmed steps are append-only: later samples can
+// add steps or upgrade a still-uncommitted candidate, but they can never
+// revoke an already confirmed step. The gravity baseline is calibrated from
+// the opening window and may only drift downward; the noise term is frozen
+// at calibration so the detection threshold never increases mid-session.
+function createStepPeakDetector(): StepPeakDetector {
+  const recentSamples: SensorSample[] = []
+  let baselineMagnitude: number | undefined
+  let noiseDeltaTerm = 0
+  let pushesSinceCalibration = 0
+  let pendingPeak: { timestampMs: number; magnitude: number } | null = null
+  let nextPeakIndexToEvaluate = 1
+  const candidateTimestampsMs: number[] = []
+  const confirmedTimestampsMs: number[] = []
+  let runTimestampsMs: number[] = []
+
+  const resolvePeakDelta = () => Math.max(
+    MIN_STEP_PEAK_DELTA,
+    (baselineMagnitude ?? 0) * STEP_PEAK_RATIO,
+    noiseDeltaTerm
+  )
+
+  const passesProminence = (peak: { timestampMs: number; magnitude: number }) => {
+    const windowStartMs = peak.timestampMs - STEP_TROUGH_WINDOW_MS
+    let hasTrough = false
+    let troughMagnitude = Number.POSITIVE_INFINITY
+    for (const sample of recentSamples) {
+      if (sample.timestampMs >= peak.timestampMs) {
+        break
+      }
+      if (sample.timestampMs < windowStartMs) {
+        continue
+      }
+      const value = magnitude(sample.acceleration)
+      hasTrough = true
+      if (value < troughMagnitude) {
+        troughMagnitude = value
+      }
+    }
+
+    // No trough in the window means the peak opens the session; accept it.
+    if (!hasTrough) {
+      return true
+    }
+
+    return peak.magnitude - troughMagnitude >= resolvePeakDelta()
+  }
+
+  const appendCandidate = (timestampMs: number) => {
+    candidateTimestampsMs.push(timestampMs)
+    const lastRunTimestampMs = runTimestampsMs[runTimestampsMs.length - 1]
+    const fitsRun = lastRunTimestampMs !== undefined &&
+      timestampMs - lastRunTimestampMs >= STEP_MIN_GAP_MS &&
+      timestampMs - lastRunTimestampMs <= STEP_MAX_GAP_MS
+
+    if (lastRunTimestampMs !== undefined && fitsRun) {
+      runTimestampsMs.push(timestampMs)
+      if (runTimestampsMs.length === MIN_CONSECUTIVE_STEPS) {
+        confirmedTimestampsMs.push(...runTimestampsMs)
+      } else if (runTimestampsMs.length > MIN_CONSECUTIVE_STEPS) {
+        confirmedTimestampsMs.push(timestampMs)
+      }
+      return
+    }
+
+    runTimestampsMs = [timestampMs]
+  }
+
+  const sealPendingPeak = () => {
+    const peak = pendingPeak
+    pendingPeak = null
+    if (!peak) {
+      return
+    }
+    if (!passesProminence(peak)) {
+      return
+    }
+    appendCandidate(peak.timestampMs)
+  }
+
+  const calibrateBaseline = () => {
+    const candidate = lowerQuantile(recentSamples.map(sample => magnitude(sample.acceleration)))
+    if (baselineMagnitude === undefined) {
+      baselineMagnitude = candidate
+      const calibrationEndMs = recentSamples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
+      noiseDeltaTerm = lowerQuantile(
+        recentSamples
+          .filter(sample => sample.timestampMs <= calibrationEndMs)
+          .map(sample => Math.abs(magnitude(sample.acceleration) - candidate))
+      ) * NOISE_MULTIPLIER
+      return
+    }
+
+    if (candidate < baselineMagnitude) {
+      baselineMagnitude = candidate
+    }
+  }
+
+  return {
+    push(sample) {
+      recentSamples.push(sample)
+
+      if (baselineMagnitude === undefined) {
+        const firstTimestampMs = recentSamples[0]!.timestampMs
+        if (sample.timestampMs - firstTimestampMs >= NOISE_CALIBRATION_WINDOW_MS) {
+          calibrateBaseline()
+          pushesSinceCalibration = 0
+        }
+        if (baselineMagnitude === undefined) {
+          return
+        }
+      } else {
+        pushesSinceCalibration += 1
+        if (pushesSinceCalibration >= BASELINE_RECALIBRATION_SAMPLE_INTERVAL) {
+          pushesSinceCalibration = 0
+          calibrateBaseline()
+        }
+      }
+
+      const evaluatePeakAt = (index: number) => {
+        const peak = recentSamples[index]!
+        const previous = recentSamples[index - 1]!
+        const next = recentSamples[index + 1]!
+        const peakMagnitude = magnitude(peak.acceleration)
+        const isLocalMaximum =
+          peakMagnitude > magnitude(previous.acceleration) &&
+          peakMagnitude >= magnitude(next.acceleration)
+
+        if (
+          !isLocalMaximum ||
+          peakMagnitude < (baselineMagnitude ?? 0) + resolvePeakDelta()
+        ) {
+          return
+        }
+
+        if (pendingPeak && peak.timestampMs - pendingPeak.timestampMs < STEP_MIN_GAP_MS) {
+          if (peakMagnitude > pendingPeak.magnitude) {
+            pendingPeak = { timestampMs: peak.timestampMs, magnitude: peakMagnitude }
+          }
+          return
+        }
+
+        sealPendingPeak()
+        pendingPeak = { timestampMs: peak.timestampMs, magnitude: peakMagnitude }
+      }
+
+      // Peaks are evaluated with one sample of delay (their right neighbour
+      // must exist). Samples that arrive before calibration are replayed on
+      // the calibration push so the opening window is never skipped.
+      const lastSampleIndex = recentSamples.length - 1
+      for (
+        let peakIndex = nextPeakIndexToEvaluate;
+        peakIndex <= lastSampleIndex - 1;
+        peakIndex += 1
+      ) {
+        evaluatePeakAt(peakIndex)
+      }
+      nextPeakIndexToEvaluate = lastSampleIndex
+    },
+    flush() {
+      sealPendingPeak()
+    },
+    getDetection() {
+      const candidates = [...candidateTimestampsMs]
+      const confirmed = [...confirmedTimestampsMs]
+      const run = [...runTimestampsMs]
+      const pending = pendingPeak
+      const latestTimestampMs = recentSamples[recentSamples.length - 1]?.timestampMs ?? 0
+
+      // The pending peak joins the live view only once its upgrade window
+      // has closed, so the displayed value can never exceed what a later
+      // seal will confirm.
+      if (
+        pending &&
+        latestTimestampMs - pending.timestampMs >= STEP_MIN_GAP_MS &&
+        passesProminence(pending)
+      ) {
+        candidates.push(pending.timestampMs)
+        const lastRunTimestampMs = run[run.length - 1]
+        const fitsRun = lastRunTimestampMs !== undefined &&
+          pending.timestampMs - lastRunTimestampMs >= STEP_MIN_GAP_MS &&
+          pending.timestampMs - lastRunTimestampMs <= STEP_MAX_GAP_MS
+
+        if (lastRunTimestampMs !== undefined && fitsRun) {
+          run.push(pending.timestampMs)
+          if (run.length === MIN_CONSECUTIVE_STEPS) {
+            confirmed.push(...run)
+          } else if (run.length > MIN_CONSECUTIVE_STEPS) {
+            confirmed.push(pending.timestampMs)
+          }
+        }
+      }
+
+      return {
+        candidateTimestampsMs: candidates,
+        confirmedTimestampsMs: confirmed
+      }
+    }
+  }
+}
+
+function runLegacyStepDetection(samples: SensorSample[]): StepPeakDetection {
+  const candidateTimestampsMs = detectStepPeakTimestamps(samples)
+  return {
+    candidateTimestampsMs,
+    confirmedTimestampsMs: keepCadencedStepSequences(candidateTimestampsMs)
+  }
+}
+
 export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorSessionAnalysis {
   const samples = normalizeSamples(input.samples ?? [])
   const durationSeconds = resolveDurationSeconds(input.durationSeconds, samples)
-  const candidateStepPeakTimestampsMs = detectStepPeakTimestamps(samples, input.baselineMagnitude)
-  const peakTimestampsMs = keepCadencedStepSequences(candidateStepPeakTimestampsMs)
+  const detection = input.detection ?? runLegacyStepDetection(samples)
+  const candidateStepPeakTimestampsMs = detection.candidateTimestampsMs
+  const peakTimestampsMs = detection.confirmedTimestampsMs
   const estimatedStepCount = peakTimestampsMs.length
   const provisionalCadenceSpm = computeProvisionalCadenceSpm(candidateStepPeakTimestampsMs)
   const stepIntervalsMs = measureIntervalsMs(peakTimestampsMs)
@@ -400,21 +615,13 @@ function resolveDurationSeconds(durationSeconds: number | undefined, samples: Se
   return roundNumber((samples[samples.length - 1]!.timestampMs - samples[0]!.timestampMs) / 1000, 1)
 }
 
-function estimateBaselineMagnitude(samples: SensorSample[]) {
-  if (samples.length === 0) {
-    return undefined
-  }
-
-  return lowerQuantile(samples.map(sample => magnitude(sample.acceleration)))
-}
-
-function detectStepPeakTimestamps(samples: SensorSample[], baselineMagnitudeOverride?: number) {
+function detectStepPeakTimestamps(samples: SensorSample[]) {
   if (samples.length < 3) {
     return [] as number[]
   }
 
   const magnitudes = samples.map(sample => magnitude(sample.acceleration))
-  const baselineMagnitude = baselineMagnitudeOverride ?? lowerQuantile(magnitudes)
+  const baselineMagnitude = lowerQuantile(magnitudes)
   const noiseCalibrationEndMs = samples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
   const calibrationNoise = magnitudes
     .filter((_, index) => samples[index]!.timestampMs <= noiseCalibrationEndMs)
@@ -425,6 +632,7 @@ function detectStepPeakTimestamps(samples: SensorSample[], baselineMagnitudeOver
     lowerQuantile(calibrationNoise) * NOISE_MULTIPLIER
   )
   const peakThreshold = baselineMagnitude + peakDelta
+  const troughsByIndex = computeLeftTroughs(samples, magnitudes)
   const peakCandidates: Array<{ timestampMs: number; magnitude: number }> = []
 
   for (let index = 1; index < samples.length - 1; index += 1) {
@@ -437,6 +645,13 @@ function detectStepPeakTimestamps(samples: SensorSample[], baselineMagnitudeOver
     }
 
     if (currentMagnitude <= previousMagnitude || currentMagnitude < nextMagnitude) {
+      continue
+    }
+
+    // A candidate must rise above its recent trough, not just the global
+    // baseline; small ripples riding on an elevated shoulder are not steps.
+    const trough = troughsByIndex[index]
+    if (trough !== undefined && currentMagnitude - trough < peakDelta) {
       continue
     }
 
@@ -482,6 +697,29 @@ function computeProvisionalCadenceSpm(timestampsMs: number[]) {
   return recentIntervalsMs.length > 0
     ? roundNumber(60_000 / average(recentIntervalsMs), 1)
     : 0
+}
+
+function computeLeftTroughs(samples: SensorSample[], magnitudes: number[]) {
+  const troughs: Array<number | undefined> = []
+  let windowStartIndex = 0
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const windowStartMs = samples[index]!.timestampMs - STEP_TROUGH_WINDOW_MS
+    while (windowStartIndex < index && samples[windowStartIndex]!.timestampMs < windowStartMs) {
+      windowStartIndex += 1
+    }
+
+    let trough: number | undefined
+    for (let scan = windowStartIndex; scan < index; scan += 1) {
+      const value = magnitudes[scan]!
+      if (trough === undefined || value < trough) {
+        trough = value
+      }
+    }
+    troughs.push(trough)
+  }
+
+  return troughs
 }
 
 function keepCadencedStepSequences(timestampsMs: number[]) {

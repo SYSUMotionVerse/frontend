@@ -276,6 +276,62 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.qualityScore).toBeGreaterThanOrEqual(75)
   })
 
+  it('rejects low-prominence bumps riding on an elevated baseline', () => {
+    const samples: SensorSample[] = Array.from({ length: 31 }, (_, index) => {
+      const timestampMs = index * 100
+      let value = 9.81
+      if (timestampMs >= 1000 && timestampMs <= 2500) {
+        value = 10.9
+      }
+      if (timestampMs === 1500) {
+        value = 11.2
+      }
+      return {
+        timestampMs,
+        acceleration: { x: value, y: 0, z: 0 }
+      }
+    })
+
+    const analysis = createSensorSessionAnalysis({
+      samples,
+      completedIntervals: 0
+    })
+
+    // The plateau bump rises only 0.3 above its surrounding trough, so it
+    // must never become a candidate step; the level-shift edge is a genuine
+    // candidate but cannot confirm without a cadenced run.
+    expect(analysis.estimatedStepCount).toBe(0)
+    expect(analysis.provisionalCadenceSpm).toBe(0)
+  })
+
+  it('keeps confirmed steps monotonic across an orientation-driven baseline drop', async () => {
+    const uniMock = installUniSensorMock()
+    let now = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+    const push = (timestampMs: number, x: number) => {
+      now = timestampMs
+      uniMock.emitAcceleration({ x, y: 0, z: 0 })
+    }
+
+    for (let timestampMs = 0; timestampMs <= 1500; timestampMs += 100) {
+      push(timestampMs, [400, 800, 1200].includes(timestampMs) ? 13 : 9.81)
+    }
+    expect(session.getSnapshot().analysis.estimatedStepCount).toBe(3)
+
+    // An orientation flip drops the gravity reading; the noise term stays
+    // frozen, the baseline may only drift down, and confirmed steps survive.
+    for (let timestampMs = 1600; timestampMs <= 3200; timestampMs += 100) {
+      push(timestampMs, 1)
+    }
+    expect(session.getSnapshot().analysis.estimatedStepCount).toBe(3)
+
+    for (let timestampMs = 3300; timestampMs <= 4900; timestampMs += 100) {
+      push(timestampMs, [3600, 4000, 4400].includes(timestampMs) ? 1.4 : 1)
+    }
+    expect(session.getSnapshot().analysis.estimatedStepCount).toBe(6)
+  })
+
   it('does not decrease confirmed steps when later samples shift the baseline', async () => {
     const uniMock = installUniSensorMock()
     const samples = createBaselineShiftSamples()
