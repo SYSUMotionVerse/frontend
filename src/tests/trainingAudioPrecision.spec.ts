@@ -43,34 +43,161 @@ function createLateRuntime(latenessMs = 80) {
 }
 
 describe('training audio precision', () => {
-  it('uses AudioContext currentTime as the shared authoritative clock', () => {
+  it('does not create a context before the start gesture asks for one', () => {
+    const createContext = vi.fn(() => undefined)
+    const clock = createTrainingAudioClock(createContext, { wallNowMs: () => 1000 })
+
+    // A WebAudioContext created outside a user gesture stays suspended on
+    // real devices, so setup must stay context-free.
+    expect(createContext).not.toHaveBeenCalled()
+    expect(clock.context).toBeUndefined()
+    expect(clock.nowMs()).toBe(1000)
+    expect(clock.isContextHealthy()).toBe(false)
+
+    clock.ensureContext()
+    expect(createContext).toHaveBeenCalledOnce()
+    expect(clock.context).toBeUndefined()
+    expect(Number.isFinite(clock.nowMs())).toBe(true)
+  })
+
+  it('re-bases the shared audio clock onto the session timeline without a jump', () => {
     const context = {
-      currentTime: 12.25,
+      currentTime: 0.25,
+      state: 'running',
       resume: vi.fn(),
       suspend: vi.fn(),
       close: vi.fn()
     }
-    const clock = createTrainingAudioClock(() => context)
+    let wallMs = 50_000
+    const clock = createTrainingAudioClock(() => context, { wallNowMs: () => wallMs })
 
-    expect(clock.nowMs()).toBe(12_250)
-    context.currentTime = 13.875
-    expect(clock.runtime.now()).toBe(13_875)
-
-    clock.resume()
-    clock.suspend()
-    clock.close()
+    expect(clock.nowMs()).toBe(50_000)
+    clock.ensureContext()
     expect(context.resume).toHaveBeenCalledOnce()
+
+    // The first post-activation reading continues from the wall epoch instead
+    // of jumping back to the raw AudioContext time.
+    expect(clock.nowMs()).toBe(50_000)
+    context.currentTime = 1.25
+    wallMs = 51_000
+    expect(clock.nowMs()).toBe(51_000)
+    context.currentTime = 1.75
+    wallMs = 99_000
+    expect(clock.nowMs()).toBe(51_500)
+    expect(clock.isContextHealthy()).toBe(true)
+
+    clock.suspend()
     expect(context.suspend).toHaveBeenCalledOnce()
+    clock.close()
     expect(context.close).toHaveBeenCalledOnce()
+    expect(clock.isContextHealthy()).toBe(false)
   })
 
-  it('uses the monotonic fallback when a training session opts out of WebAudio', () => {
-    const createContext = vi.fn(() => undefined)
-    const clock = createTrainingAudioClock(createContext)
+  it('falls back to the wall clock without moving the timeline when the context stalls', () => {
+    const context = {
+      currentTime: 0.5,
+      state: 'running',
+      resume: vi.fn(),
+      suspend: vi.fn()
+    }
+    let wallMs = 10_000
+    const clock = createTrainingAudioClock(() => context, { wallNowMs: () => wallMs })
+    clock.ensureContext()
+    expect(clock.nowMs()).toBe(10_000)
 
-    expect(createContext).toHaveBeenCalledOnce()
-    expect(clock.context).toBeUndefined()
-    expect(Number.isFinite(clock.nowMs())).toBe(true)
+    // The context freezes mid-workout (suspended): readings continue from the
+    // last value at wall rate, so anchored deadlines stay valid.
+    context.state = 'suspended'
+    wallMs = 12_000
+    expect(clock.nowMs()).toBe(10_000)
+    wallMs = 13_000
+    expect(clock.nowMs()).toBe(11_000)
+    expect(clock.isContextHealthy()).toBe(false)
+
+    // A deliberate resume that recovers re-adopts the audio clock, still
+    // without a backwards jump.
+    clock.resume()
+    context.state = 'running'
+    context.currentTime = 3.5
+    expect(clock.nowMs()).toBe(11_000)
+    context.currentTime = 4.5
+    wallMs = 14_000
+    expect(clock.nowMs()).toBe(12_000)
+    expect(clock.isContextHealthy()).toBe(true)
+  })
+
+  it('refuses to adopt a spontaneously advancing clock that lags the fallback', () => {
+    const context = {
+      currentTime: 1,
+      state: 'running',
+      resume: vi.fn()
+    }
+    let wallMs = 10_000
+    const clock = createTrainingAudioClock(() => context, { wallNowMs: () => wallMs })
+    clock.ensureContext()
+    expect(clock.nowMs()).toBe(10_000)
+
+    // Long unannounced stall: the wall continuation runs far ahead of the
+    // audio clock, so a spontaneous advance must not be trusted.
+    wallMs = 60_000
+    expect(clock.nowMs()).toBe(10_000)
+    wallMs = 62_000
+    expect(clock.nowMs()).toBe(12_000)
+    context.currentTime = 2
+    wallMs = 63_000
+    expect(clock.nowMs()).toBe(13_000)
+    expect(clock.isContextHealthy()).toBe(false)
+
+    // A deliberate resume re-adopts it, continuing seamlessly.
+    clock.resume()
+    expect(clock.nowMs()).toBe(13_000)
+    context.currentTime = 3
+    expect(clock.nowMs()).toBe(13_000)
+    context.currentTime = 4
+    wallMs = 64_000
+    expect(clock.nowMs()).toBe(14_000)
+    expect(clock.isContextHealthy()).toBe(true)
+  })
+
+  it('rebuilds a context that refuses to resume and re-anchors seamlessly', () => {
+    const suspendedContext = {
+      currentTime: 3,
+      state: 'suspended',
+      resume: vi.fn(),
+      close: vi.fn()
+    }
+    const freshContext = {
+      currentTime: 0,
+      state: 'running',
+      resume: vi.fn(),
+      close: vi.fn()
+    }
+    let wallMs = 20_000
+    const clock = createTrainingAudioClock(vi.fn()
+      .mockReturnValueOnce(suspendedContext)
+      .mockReturnValueOnce(freshContext), { wallNowMs: () => wallMs })
+
+    clock.ensureContext()
+    expect(clock.nowMs()).toBe(20_000)
+
+    // The context never advances again; the session falls back to wall time,
+    // then rebuilds per the official iOS 17.5+ remedy.
+    wallMs = 21_000
+    expect(clock.nowMs()).toBe(20_000)
+    wallMs = 22_000
+    expect(clock.nowMs()).toBe(21_000)
+    expect(suspendedContext.close).not.toHaveBeenCalled()
+
+    const rebuilt = clock.rebuildContext()
+    expect(rebuilt).toBe(freshContext)
+    expect(suspendedContext.close).toHaveBeenCalledOnce()
+    expect(freshContext.resume).toHaveBeenCalledOnce()
+
+    expect(clock.nowMs()).toBe(21_000)
+    freshContext.currentTime = 1
+    wallMs = 23_000
+    expect(clock.nowMs()).toBe(22_000)
+    expect(clock.isContextHealthy()).toBe(true)
   })
 
   it('anchors every callback so repeated 80ms timer latency never accumulates', () => {

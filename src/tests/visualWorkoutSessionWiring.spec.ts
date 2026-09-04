@@ -87,8 +87,26 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain('function continueAfterModuleAudio')
     expect(sessionSource).toContain('ttsPlayer.waitForIdle()')
     expect(sessionSource).toContain('const trainingSoundscape = createTrainingSoundscape(')
-    expect(sessionSource).toContain('const trainingAudioClock = createTrainingAudioClock(() => undefined)')
-    expect(sessionSource).toContain('trainingAudioClock.runtime,\n    null')
+    // The shared Web Audio clock is created lazily inside the start gesture,
+    // gated by the one-switch rollback constant.
+    expect(sessionSource).toContain('const trainingWebAudioClockEnabled = true')
+    expect(sessionSource).toContain('const trainingWebAudioTtsEnabled = true')
+    expect(sessionSource).toContain(
+      'trainingWebAudioClockEnabled ? undefined : () => undefined'
+    )
+    expect(sessionSource).toContain('trainingWebAudioTtsEnabled ? sharedWebAudioRuntime : null')
+    expect(sessionSource).toContain('trainingAudioClock.ensureContext()')
+    expect(sessionSource).toContain('trainingAudioClock.rebuildContext()')
+    expect(sessionSource).toContain('isContextHealthy: () => trainingAudioClock.isContextHealthy()')
+    expect(sessionSource).toContain('scheduleAudioClockRecovery()')
+    expect(sessionSource).toContain('onAudioInterruptionBegin?.(handleAudioInterruptionBegin)')
+    // Interruption events must never suspend the whole session: the begin
+    // event can fire spuriously on the first beat and the end event is not
+    // guaranteed, so only the audio stack pauses and a watchdog resumes it.
+    expect(sessionSource).toContain('function suspendTrainingAudio()')
+    expect(sessionSource).toContain('if (disposed || !trainingStarted.value || sessionSuspended || sessionStopping) return')
+    expect(sessionSource).toContain('interruption end event lost; resuming audio')
+    expect(sessionSource).not.toContain('function handleAudioInterruptionBegin() {\n    suspendSession()')
     expect(sessionSource).toContain('return trainingAudioClock.nowMs()')
     expect(sessionSource).toContain("phaseKind.value === 'demonstration' ? 'pretraining' : 'formal'")
     expect(sessionSource).toContain('trainingSoundscape.suspend()')

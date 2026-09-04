@@ -21,6 +21,45 @@ function createAudioContext() {
   }
 }
 
+function createWebContext() {
+  return {
+    currentTime: 100,
+    destination: {},
+    state: 'running',
+    createBufferSource: vi.fn(() => ({
+      buffer: undefined,
+      onended: null,
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn()
+    })),
+    decodeAudioData: vi.fn((
+      data: ArrayBuffer,
+      success?: (buffer: unknown) => void,
+      failure?: (error: unknown) => void
+    ) => {
+      success?.({ data })
+      return undefined
+    }),
+    resume: vi.fn(),
+    suspend: vi.fn(),
+    close: vi.fn()
+  }
+}
+
+function createWebRuntime(
+  context: ReturnType<typeof createWebContext>,
+  healthy = true
+) {
+  return {
+    createContext: vi.fn(() => context),
+    loadArrayBuffer: vi.fn(async () => new ArrayBuffer(8)),
+    isContextHealthy: vi.fn(() => healthy),
+    ownsContext: false
+  }
+}
+
 describe('trainingTts', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -549,5 +588,158 @@ describe('trainingTts', () => {
 
     restNext.onEnded.mock.calls[0][0]()
     await expect(completed).resolves.toBeUndefined()
+  })
+
+  it('plays cues through the shared web audio context without a native player', async () => {
+    const webContext = createWebContext()
+    const createNative = vi.fn(createAudioContext)
+    const player = createTrainingTtsPlayer(
+      createNative,
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+
+    const done = player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+    const source = webContext.createBufferSource.mock.results[0].value
+    expect(source.start).toHaveBeenCalledWith(100)
+    expect(createNative).not.toHaveBeenCalled()
+
+    let idle = false
+    void player.waitForIdle().then(() => { idle = true })
+    await Promise.resolve()
+    expect(idle).toBe(false)
+
+    source.onended()
+    await expect(done).resolves.toBeUndefined()
+    await player.waitForIdle()
+    expect(idle).toBe(true)
+  })
+
+  it('falls back to the native player while the shared context reports unhealthy', async () => {
+    const webContext = createWebContext()
+    const native = createAudioContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(() => native),
+      null,
+      undefined,
+      createWebRuntime(webContext, false)
+    )
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(native.play).toHaveBeenCalled())
+    expect(native.src).toBe('https://cdn.example.com/cue.mp3')
+    expect(webContext.createBufferSource).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the native player when the cue fails to decode', async () => {
+    const webContext = createWebContext()
+    webContext.decodeAudioData.mockImplementation((
+      _data: ArrayBuffer,
+      _success?: (buffer: unknown) => void,
+      failure?: (error: unknown) => void
+    ) => {
+      failure?.(new Error('unsupported format'))
+      return undefined
+    })
+    const native = createAudioContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(() => native),
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(native.play).toHaveBeenCalled())
+    expect(webContext.createBufferSource).not.toHaveBeenCalled()
+  })
+
+  it('suspends mid-cue and resumes the web audio playback from the offset', async () => {
+    const webContext = createWebContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+    const firstSource = webContext.createBufferSource.mock.results[0].value
+
+    webContext.currentTime = 102.5
+    player.suspend()
+    expect(firstSource.stop).toHaveBeenCalledOnce()
+
+    webContext.currentTime = 110
+    player.resume()
+    await vi.waitFor(() => {
+      expect(webContext.createBufferSource.mock.results.length).toBe(2)
+    })
+    const secondSource = webContext.createBufferSource.mock.results[1].value
+    expect(secondSource.start).toHaveBeenCalledWith(110, 2.5)
+  })
+
+  it('completes a pending web audio cue when the timeline resets', async () => {
+    const webContext = createWebContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+
+    const done = player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+
+    player.reset()
+    await expect(done).resolves.toBeUndefined()
+  })
+
+  it('re-decodes from cached bytes after the shared context is rebuilt', async () => {
+    const firstContext = createWebContext()
+    const secondContext = createWebContext()
+    const runtime = createWebRuntime(firstContext)
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      runtime
+    )
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(firstContext.createBufferSource).toHaveBeenCalled())
+    expect(runtime.loadArrayBuffer).toHaveBeenCalledTimes(1)
+
+    runtime.createContext.mockImplementation(() => secondContext)
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(secondContext.createBufferSource).toHaveBeenCalled())
+    // The compressed bytes survive the rebuild; only the decode repeats.
+    expect(runtime.loadArrayBuffer).toHaveBeenCalledTimes(1)
+    expect(secondContext.decodeAudioData).toHaveBeenCalledTimes(1)
+  })
+
+  it('preloads each cue with a single CDN fetch and starts without a download', async () => {
+    const webContext = createWebContext()
+    const runtime = createWebRuntime(webContext)
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      runtime
+    )
+
+    await player.preload([
+      'https://cdn.example.com/a.mp3',
+      'https://cdn.example.com/a.mp3',
+      'https://cdn.example.com/b.mp3'
+    ])
+    expect(runtime.loadArrayBuffer).toHaveBeenCalledTimes(2)
+
+    void player.playUrl('https://cdn.example.com/a.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+    expect(runtime.loadArrayBuffer).toHaveBeenCalledTimes(2)
   })
 })

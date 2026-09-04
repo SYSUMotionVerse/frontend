@@ -40,12 +40,12 @@ interface SoundscapeRuntime {
   createInnerAudioContext?: () => PulseAudioContextLike
 }
 
-interface WebAudioBufferSourceLike {
+export interface WebAudioBufferSourceLike {
   buffer?: unknown
   onended?: (() => void) | null
   connect: (destination: unknown) => void
   disconnect?: () => void
-  start: (when?: number) => void
+  start: (when?: number, offset?: number) => void
   stop: (when?: number) => void
 }
 
@@ -68,12 +68,25 @@ export interface TrainingWebAudioContextLike {
   resume?: () => Promise<void> | void
   suspend?: () => Promise<void> | void
   close?: () => Promise<void> | void
+  state?: string
+}
+
+/**
+ * A context owner such as the training audio clock. The context may be
+ * created lazily (inside the start gesture) and may be rebuilt after an
+ * unrecoverable suspension, so it is fetched on every use.
+ */
+export interface SharedWebAudioContextSource {
+  getContext: () => TrainingWebAudioContextLike | undefined
+  isContextHealthy?: () => boolean
 }
 
 export interface TrainingWebAudioRuntime {
   createContext: () => TrainingWebAudioContextLike | undefined
   loadArrayBuffer: (url: string) => Promise<ArrayBuffer>
   ownsContext?: boolean
+  /** Delegated health verdict; without it any present context is trusted. */
+  isContextHealthy?: () => boolean
 }
 
 interface BinaryAudioPlatform {
@@ -105,15 +118,28 @@ type WechatSoundscapeFactory = typeof wx & SoundscapeRuntime & BinaryAudioPlatfo
 }
 
 export function createDefaultTrainingWebAudioRuntime(
-  sharedContext?: TrainingWebAudioContextLike
+  sharedContext?: TrainingWebAudioContextLike | SharedWebAudioContextSource
 ): TrainingWebAudioRuntime | undefined {
   const wechatApi = typeof wx === 'undefined' ? null : wx as WechatSoundscapeFactory
   const uniApi = typeof uni === 'undefined' ? null : uni as unknown as BinaryAudioPlatform
-  if (!sharedContext && !wechatApi?.createWebAudioContext) return undefined
+  const contextSource: SharedWebAudioContextSource | undefined = sharedContext
+    ? 'getContext' in sharedContext
+      ? sharedContext
+      : { getContext: () => sharedContext }
+    : undefined
+  let ownedContext: TrainingWebAudioContextLike | undefined
+  if (!contextSource && !wechatApi?.createWebAudioContext) return undefined
 
   return {
-    ownsContext: !sharedContext,
-    createContext: () => sharedContext ?? wechatApi?.createWebAudioContext?.(),
+    ownsContext: !contextSource,
+    createContext: () => {
+      if (contextSource) return contextSource.getContext()
+      // Cache the owned context: callers re-check on every track start, and
+      // each createWebAudioContext() call would otherwise leak one context.
+      ownedContext ??= wechatApi?.createWebAudioContext?.()
+      return ownedContext
+    },
+    isContextHealthy: contextSource?.isContextHealthy,
     loadArrayBuffer(url) {
       const downloadApi = uniApi?.downloadFile ? uniApi : wechatApi
       const fileSystem = wechatApi?.getFileSystemManager?.()
@@ -211,7 +237,12 @@ export function createTrainingSoundscape(
   let webAudioContext: TrainingWebAudioContextLike | undefined
   let secondBuffer: unknown
   let boundaryBuffer: unknown
-  let webAudioPreload: Promise<boolean> | undefined
+  let soundAssetsPromise: Promise<{
+    second: ArrayBuffer
+    boundary: ArrayBuffer
+  } | null> | undefined
+  let decodedContext: TrainingWebAudioContextLike | undefined
+  let decodePromise: Promise<boolean> | undefined
   let webAudioTrackActive = false
   const scheduledWebAudioSources = new Set<{
     source: WebAudioBufferSourceLike
@@ -240,34 +271,71 @@ export function createTrainingSoundscape(
     })
   }
 
-  function preloadWebAudio() {
-    if (!webAudioRuntime) return Promise.resolve(false)
-    if (webAudioPreload) return webAudioPreload
-    webAudioPreload = (async () => {
+  /** Network download only — safe to run before any user gesture. */
+  function loadSoundAssets() {
+    if (!webAudioRuntime) return Promise.resolve(null)
+    soundAssetsPromise ??= (async () => {
       try {
-        const context = webAudioRuntime.createContext()
-        if (!context) return false
-        webAudioContext = context
         const [secondData, boundaryData] = await Promise.all([
           webAudioRuntime.loadArrayBuffer(trainingSecondSoundUrl),
           webAudioRuntime.loadArrayBuffer(trainingBoundarySoundUrl)
         ])
-        ;[secondBuffer, boundaryBuffer] = await Promise.all([
-          decodeAudioData(context, secondData),
-          decodeAudioData(context, boundaryData)
-        ])
-        return Boolean(secondBuffer && boundaryBuffer)
+        return { second: secondData, boundary: boundaryData }
       } catch (error) {
-        console.warn('[TrainingSoundscape] Web Audio preload failed, using native fallback:', error)
-        if (webAudioRuntime.ownsContext !== false) void webAudioContext?.close?.()
-        webAudioContext = undefined
-        secondBuffer = undefined
-        boundaryBuffer = undefined
-        ensureContexts()
-        return false
+        console.warn('[TrainingSoundscape] sound asset download failed, using native fallback:', error)
+        return null
       }
     })()
-    return webAudioPreload
+    return soundAssetsPromise
+  }
+
+  /**
+   * Decode against the runtime's current context. The shared clock context is
+   * created lazily inside the start gesture and may be rebuilt after an
+   * unrecoverable suspension, so decoding is retried whenever the context
+   * identity changes and the cached raw bytes make each retry cheap.
+   */
+  function ensureDecodedBuffers(): Promise<boolean> {
+    if (!webAudioRuntime) return Promise.resolve(false)
+    const context = webAudioRuntime.createContext()
+    if (!context) return Promise.resolve(false)
+    if (decodePromise && decodedContext === context) return decodePromise
+    decodedContext = context
+    decodePromise = loadSoundAssets().then(async assets => {
+      if (!assets) return false
+      webAudioContext = context
+      try {
+        ;[secondBuffer, boundaryBuffer] = await Promise.all([
+          decodeAudioData(context, assets.second),
+          decodeAudioData(context, assets.boundary)
+        ])
+      } catch (error) {
+        console.warn('[TrainingSoundscape] Web Audio decode failed, using native fallback:', error)
+        return false
+      }
+      return Boolean(secondBuffer && boundaryBuffer)
+    })
+    return decodePromise
+  }
+
+  /**
+   * Gate for the sample-clock track path: the context must be the healthy one
+   * the clock vouches for, and its buffers must be decoded against it. A
+   * suspended context would accept every scheduled source into a frozen
+   * timeline — silence now, a simultaneous dump on resume — so an unhealthy
+   * or freshly rebuilt context defers to the native branch while decoding
+   * catches up.
+   */
+  function isWebAudioTrackReady() {
+    if (!webAudioRuntime) return false
+    if (webAudioRuntime.isContextHealthy && !webAudioRuntime.isContextHealthy()) return false
+    const context = webAudioRuntime.createContext()
+    if (!context) return false
+    if (context !== webAudioContext) {
+      void ensureDecodedBuffers()
+      return false
+    }
+    return Boolean(secondBuffer && boundaryBuffer)
   }
 
   function createPulseContext(src: string, volume: number) {
@@ -396,7 +464,6 @@ export function createTrainingSoundscape(
   ) {
     if (!webAudioContext || !secondBuffer || !boundaryBuffer) return false
     stopWebAudioSources()
-    void webAudioContext.resume?.()
     const now = webAudioContext.currentTime
     const origin = now - elapsedSeconds
     const audibleSlots = slots.filter(slot => (
@@ -460,7 +527,7 @@ export function createTrainingSoundscape(
     activeTrack = track
     endBoundaryPlayed = false
     const slots = buildTrainingSoundEffectTrack(track, durationSeconds)
-    if (scheduleWebAudioTrack(slots, Math.max(0, elapsedSeconds))) return
+    if (isWebAudioTrackReady() && scheduleWebAudioTrack(slots, Math.max(0, elapsedSeconds))) return
     ensureContexts()
     timeline.start(
       slots.map(slot => ({ atMs: slot.atMs, value: slot })),
@@ -488,15 +555,32 @@ export function createTrainingSoundscape(
     webAudioContext = undefined
     secondBuffer = undefined
     boundaryBuffer = undefined
+    decodedContext = undefined
+    decodePromise = undefined
   }
 
   return {
+    /**
+     * Download the effect assets, and decode them as soon as a context is
+     * available. Call once at session setup (download only, before any user
+     * gesture) and again after the clock's in-gesture `ensureContext()` so
+     * the buffers are decoded against the real context before the first
+     * phase starts.
+     */
     preload() {
       if (!webAudioRuntime) {
         ensureContexts()
         return Promise.resolve()
       }
-      return preloadWebAudio().then(() => undefined)
+      return ensureDecodedBuffers().then(ready => {
+        if (!ready) {
+          // The shared context is not usable yet (pre-gesture, decode still
+          // running, or decode failed): warm the native standby players so a
+          // fallback track never has to create a player and play it in the
+          // same tick — WeChat drops that first play on real devices.
+          ensureContexts()
+        }
+      })
     },
     play(track: TrainingSoundscapeTrack, durationSeconds = 0, elapsedSeconds = 0) {
       if (durationSeconds > 0) startTrack(track, durationSeconds, elapsedSeconds)

@@ -66,6 +66,45 @@ describe('trainingSoundscape', () => {
     expect(createContext.mock.results[2].value.play).toHaveBeenCalledOnce()
   })
 
+  it('defers to the native branch while the shared clock reports the context unhealthy', async () => {
+    const starts: number[] = []
+    const fallbackFactory = vi.fn(createAudioContext)
+    const webAudioContext: TrainingWebAudioContextLike = {
+      currentTime: 10,
+      destination: {},
+      createBufferSource: () => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(when => starts.push(when ?? 0)),
+        stop: vi.fn()
+      }),
+      decodeAudioData(data, success) {
+        success?.({ data })
+      }
+    }
+    let healthy = false
+    const soundscape = createTrainingSoundscape(
+      fallbackFactory,
+      undefined,
+      {
+        createContext: () => webAudioContext,
+        loadArrayBuffer: async () => new ArrayBuffer(1),
+        isContextHealthy: () => healthy
+      }
+    )
+
+    await soundscape.preload()
+    soundscape.play('formal', 2)
+    // A suspended context would accept every scheduled source into a frozen
+    // timeline, so the track must ride the native players instead.
+    expect(starts).toEqual([])
+    expect(fallbackFactory).toHaveBeenCalled()
+
+    healthy = true
+    soundscape.play('formal', 2)
+    expect(starts).toEqual([10, 11])
+  })
+
   it('plays one start boundary before the final-three-second pretraining tail', () => {
     const firstSecondContext = createAudioContext()
     const secondSecondContext = createAudioContext()

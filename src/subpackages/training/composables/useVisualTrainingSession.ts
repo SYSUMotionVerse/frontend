@@ -31,7 +31,11 @@ import {
   configureTrainingAudioOutput,
   createTrainingTtsPlayer
 } from '../../../uni-app/platform/trainingTts'
-import { createTrainingSoundscape } from '../../../uni-app/platform/trainingSoundscape'
+import {
+  createDefaultTrainingWebAudioRuntime,
+  createTrainingSoundscape,
+  type TrainingWebAudioContextLike
+} from '../../../uni-app/platform/trainingSoundscape'
 import { createTrainingAudioClock } from '../../../uni-app/platform/trainingAudioClock'
 import { resolveNextWholeSecondDelayMs } from '../../../uni-app/platform/anchoredTimeline'
 import { aggregateActionScores, scoreAction } from '../../../domain/training/actionScoring'
@@ -319,20 +323,39 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   const actionScores = shallowRef<ScoredActionResult[]>([])
   const scoringWarnings = shallowRef<string[]>([])
   const trainingPreparationLabel = shallowRef('')
-  // A WebAudioContext created before a user gesture can remain suspended on
-  // real devices. Keep the workout clock independent from that native state
-  // and use the established InnerAudioContext path for all training audio.
-  const trainingAudioClock = createTrainingAudioClock(() => undefined)
+  // One-switch rollback to the all-InnerAudio audio path: flip to false if a
+  // device fleet must ship without the shared Web Audio clock.
+  const trainingWebAudioClockEnabled = true
+  // Phase 2: speech cues ride the same shared context as the sound effects so
+  // both mix in one audio session; each cue still has a native fallback.
+  const trainingWebAudioTtsEnabled = true
+  const trainingAudioClock = createTrainingAudioClock(
+    trainingWebAudioClockEnabled ? undefined : () => undefined
+  )
+  const sharedWebAudioRuntime = trainingWebAudioClockEnabled
+    ? createDefaultTrainingWebAudioRuntime({
+        getContext: () => trainingAudioClock.context as
+          | TrainingWebAudioContextLike
+          | undefined,
+        isContextHealthy: () => trainingAudioClock.isContextHealthy()
+      })
+    : null
   const ttsPlayer = createTrainingTtsPlayer(
     undefined,
     undefined,
-    trainingAudioClock.runtime
+    trainingAudioClock.runtime,
+    trainingWebAudioTtsEnabled ? sharedWebAudioRuntime : null
   )
   const trainingSoundscape = createTrainingSoundscape(
     undefined,
     trainingAudioClock.runtime,
-    null
+    // Effect scheduling shares the clock's context, so phase timing and
+    // pulses ride one hardware clock; track readiness delegates to the
+    // clock's own suspension guard.
+    sharedWebAudioRuntime
   )
+  // Downloads the two effect assets early; context-bound decoding waits for
+  // the start gesture to create the shared context.
   void trainingSoundscape.preload()
   let recordTimer: ReturnType<typeof setInterval> | null = null
   let phaseTimer: ReturnType<typeof setTimeout> | null = null
@@ -818,6 +841,24 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     capture.value?.stopDetect?.()
   }
 
+  let audioClockRecoveryTimer: ReturnType<typeof setTimeout> | null = null
+
+  function scheduleAudioClockRecovery() {
+    if (audioClockRecoveryTimer) clearTimeout(audioClockRecoveryTimer)
+    // iOS 17.5+ refuses to resume a backgrounded Web Audio context; the
+    // official remedy is close + recreate. Give the resumed context a short
+    // window to prove it advances, then rebuild once — the clock re-anchors
+    // its virtual timeline, so already-scheduled deadlines stay valid.
+    audioClockRecoveryTimer = setTimeout(() => {
+      audioClockRecoveryTimer = null
+      if (disposed || sessionSuspended || !trainingStarted.value) return
+      if (trainingAudioClock.isContextHealthy()) return
+      if (!trainingAudioClock.rebuildContext()) return
+      console.info('[VisualSession:audio] suspended web audio context rebuilt')
+      void trainingSoundscape.preload()
+    }, 800)
+  }
+
   function resumeSession() {
     if (disposed || !sessionSuspended || sessionStopping) return
     sessionSuspended = false
@@ -825,6 +866,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     capture.value?.startDetect?.()
     ttsPlayer.resume()
     trainingSoundscape.resume()
+    scheduleAudioClockRecovery()
     if (resumeVideoOnShow && trainingStarted.value && !videoEnded.value) {
       videoAutoplay.value = true
       scheduleMediaStartWatchdog()
@@ -835,6 +877,65 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     }
     resumeVideoOnShow = false
   }
+
+  interface AudioInterruptionApi {
+    onAudioInterruptionBegin?: (callback: () => void) => void
+    onAudioInterruptionEnd?: (callback: () => void) => void
+    offAudioInterruptionBegin?: (callback: () => void) => void
+    offAudioInterruptionEnd?: (callback: () => void) => void
+  }
+
+  const audioInterruptionApi = (
+    typeof wx === 'undefined' ? null : wx
+  ) as AudioInterruptionApi | null
+  let audioInterrupted = false
+  let audioInterruptionWatchdog: ReturnType<typeof setTimeout> | null = null
+
+  // A phone call or another app can grab the audio focus without ever moving
+  // the mini program to the background. Pause only the audio stack: the OS
+  // already silences the outputs, and the phase clock keeps running on its
+  // wall-clock fallback, so the workout itself never freezes. Suspending the
+  // whole session here would freeze it at the first dropped beat — some
+  // devices and the DevTools simulator fire the begin event the moment our
+  // own first sound starts, and the paired end event is not guaranteed.
+  function suspendTrainingAudio() {
+    audioInterrupted = true
+    trainingAudioClock.suspend()
+    ttsPlayer.suspend()
+    trainingSoundscape.suspend()
+  }
+
+  function resumeTrainingAudio() {
+    if (!audioInterrupted) return
+    audioInterrupted = false
+    if (audioInterruptionWatchdog) {
+      clearTimeout(audioInterruptionWatchdog)
+      audioInterruptionWatchdog = null
+    }
+    trainingAudioClock.resume()
+    ttsPlayer.resume()
+    trainingSoundscape.resume()
+    scheduleAudioClockRecovery()
+  }
+
+  function handleAudioInterruptionBegin() {
+    if (disposed || !trainingStarted.value || sessionSuspended || sessionStopping) return
+    if (audioInterrupted) return
+    console.warn('[VisualSession:audio] audio focus interrupted; pausing training audio')
+    suspendTrainingAudio()
+    if (audioInterruptionWatchdog) clearTimeout(audioInterruptionWatchdog)
+    audioInterruptionWatchdog = setTimeout(() => {
+      audioInterruptionWatchdog = null
+      if (disposed || !audioInterrupted) return
+      console.warn('[VisualSession:audio] interruption end event lost; resuming audio')
+      resumeTrainingAudio()
+    }, 4000)
+  }
+  function handleAudioInterruptionEnd() {
+    resumeTrainingAudio()
+  }
+  audioInterruptionApi?.onAudioInterruptionBegin?.(handleAudioInterruptionBegin)
+  audioInterruptionApi?.onAudioInterruptionEnd?.(handleAudioInterruptionEnd)
 
   function rememberCachedVideo(url: string, filePath: string, itemIndex: number) {
     if (
@@ -1182,6 +1283,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // Must run inside the foreground button interaction: on devices, per-player
     // mute settings alone do not reliably configure the native output route.
     configureTrainingAudioOutput()
+    // A WebAudioContext created before any user gesture stays suspended on
+    // real devices, so the shared clock is created here, inside the tap, and
+    // the effect buffers are decoded against it before the first phase.
+    trainingAudioClock.ensureContext()
+    void trainingSoundscape.preload()
     if (disposed || sessionStopping || sessionSuspended) return
     if (!recognitionReady.value) {
       if (typeof uni.showToast === 'function') {
@@ -1941,6 +2047,16 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearMediaStartWatchdog()
     clearStartCountdownTimer()
     clearCacheWarmupTimer()
+    if (audioClockRecoveryTimer) {
+      clearTimeout(audioClockRecoveryTimer)
+      audioClockRecoveryTimer = null
+    }
+    if (audioInterruptionWatchdog) {
+      clearTimeout(audioInterruptionWatchdog)
+      audioInterruptionWatchdog = null
+    }
+    audioInterruptionApi?.offAudioInterruptionBegin?.(handleAudioInterruptionBegin)
+    audioInterruptionApi?.offAudioInterruptionEnd?.(handleAudioInterruptionEnd)
     ttsPlayer.destroy()
     trainingSoundscape.destroy?.()
     trainingAudioClock.close()
