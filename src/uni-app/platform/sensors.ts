@@ -109,13 +109,15 @@ const FLOOR_HEIGHT_METERS = 3
 const DEFAULT_SENSOR_INTERVAL: MotionInterval = 'game'
 const SENSOR_START_TIMEOUT_MS = 5_000
 const SENSOR_STOP_TIMEOUT_MS = 2_000
-const STEP_TROUGH_WINDOW_MS = 300
-const BASELINE_RECALIBRATION_SAMPLE_INTERVAL = 10
 const COMPLETION_DURATION_SECONDS = 30
 const MIN_SENSOR_COVERAGE_FOR_COMPLETION = 0.8
 const MIN_STEPS_FOR_COMPLETION = 12
 const MIN_ACTIVE_CLIMB_SECONDS_FOR_COMPLETION = 12
 const MAX_SENSOR_SAMPLE_GAP_MS = 2_000
+const STEP_TROUGH_WINDOW_MS = 300
+const STEP_VALLEY_WINDOW_MS = 300
+const STEP_FILTER_WINDOW_MS = 100
+const BASELINE_RECALIBRATION_SAMPLE_INTERVAL = 10
 
 export async function startStairSensorCapture(
   input: StartStairSensorCaptureInput
@@ -320,11 +322,14 @@ function createStepPeakDetector(): StepPeakDetector {
   let baselineMagnitude: number | undefined
   let noiseDeltaTerm = 0
   let pushesSinceCalibration = 0
-  let pendingPeak: { timestampMs: number; magnitude: number } | null = null
+  let pendingPeak: { index: number; timestampMs: number; magnitude: number } | null = null
   let nextPeakIndexToEvaluate = 1
   const candidateTimestampsMs: number[] = []
   const confirmedTimestampsMs: number[] = []
   let runTimestampsMs: number[] = []
+
+  const rawMagnitudes: number[] = []
+  const smoothedMagnitudes: number[] = []
 
   const resolvePeakDelta = () => Math.max(
     MIN_STEP_PEAK_DELTA,
@@ -332,18 +337,15 @@ function createStepPeakDetector(): StepPeakDetector {
     noiseDeltaTerm
   )
 
-  const passesProminence = (peak: { timestampMs: number; magnitude: number }) => {
-    const windowStartMs = peak.timestampMs - STEP_TROUGH_WINDOW_MS
+  const passesProminence = (peak: { index: number; magnitude: number }) => {
+    const windowStartMs = recentSamples[peak.index]!.timestampMs - STEP_TROUGH_WINDOW_MS
     let hasTrough = false
     let troughMagnitude = Number.POSITIVE_INFINITY
-    for (const sample of recentSamples) {
-      if (sample.timestampMs >= peak.timestampMs) {
+    for (let scan = peak.index - 1; scan >= 0; scan -= 1) {
+      if (recentSamples[scan]!.timestampMs < windowStartMs) {
         break
       }
-      if (sample.timestampMs < windowStartMs) {
-        continue
-      }
-      const value = magnitude(sample.acceleration)
+      const value = smoothedMagnitudes[scan]!
       hasTrough = true
       if (value < troughMagnitude) {
         troughMagnitude = value
@@ -357,6 +359,32 @@ function createStepPeakDetector(): StepPeakDetector {
 
     return peak.magnitude - troughMagnitude >= resolvePeakDelta()
   }
+
+  // Peak-valley pairing (Shin-style): a step is only as real as the dip
+  // that follows it. The valley window is fully contained in the upgrade
+  // window, so the live view and the later seal always see the same data.
+  const passesRightValley = (peak: { index: number; magnitude: number }) => {
+    const windowEndMs = recentSamples[peak.index]!.timestampMs + STEP_VALLEY_WINDOW_MS
+    let valley: number | undefined
+    for (let scan = peak.index + 1; scan < recentSamples.length; scan += 1) {
+      if (recentSamples[scan]!.timestampMs > windowEndMs) {
+        break
+      }
+      const value = smoothedMagnitudes[scan]!
+      if (valley === undefined || value < valley) {
+        valley = value
+      }
+    }
+
+    if (valley === undefined) {
+      return true
+    }
+
+    return peak.magnitude - valley >= resolvePeakDelta()
+  }
+
+  const passesPairing = (peak: { index: number; magnitude: number }) =>
+    passesProminence(peak) && passesRightValley(peak)
 
   const appendCandidate = (timestampMs: number) => {
     candidateTimestampsMs.push(timestampMs)
@@ -384,21 +412,21 @@ function createStepPeakDetector(): StepPeakDetector {
     if (!peak) {
       return
     }
-    if (!passesProminence(peak)) {
+    if (!passesPairing(peak)) {
       return
     }
     appendCandidate(peak.timestampMs)
   }
 
   const calibrateBaseline = () => {
-    const candidate = lowerQuantile(recentSamples.map(sample => magnitude(sample.acceleration)))
+    const candidate = lowerQuantile(smoothedMagnitudes)
     if (baselineMagnitude === undefined) {
       baselineMagnitude = candidate
       const calibrationEndMs = recentSamples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
       noiseDeltaTerm = lowerQuantile(
-        recentSamples
-          .filter(sample => sample.timestampMs <= calibrationEndMs)
-          .map(sample => Math.abs(magnitude(sample.acceleration) - candidate))
+        smoothedMagnitudes
+          .filter((_, index) => recentSamples[index]!.timestampMs <= calibrationEndMs)
+          .map(value => Math.abs(value - candidate))
       ) * NOISE_MULTIPLIER
       return
     }
@@ -411,6 +439,24 @@ function createStepPeakDetector(): StepPeakDetector {
   return {
     push(sample) {
       recentSamples.push(sample)
+      const rawMagnitude = magnitude(sample.acceleration)
+      rawMagnitudes.push(rawMagnitude)
+
+      // Causal smoothing over the last ~100ms. Step fundamentals (1–3Hz)
+      // survive, high-frequency sensor noise and hand tremor are flattened
+      // before peak picking. The group delay is absorbed by the pending
+      // upgrade window.
+      const filterWindowStartMs = sample.timestampMs - STEP_FILTER_WINDOW_MS
+      let total = rawMagnitude
+      let count = 1
+      for (let scan = rawMagnitudes.length - 2; scan >= 0; scan -= 1) {
+        if (recentSamples[scan]!.timestampMs < filterWindowStartMs) {
+          break
+        }
+        total += rawMagnitudes[scan]!
+        count += 1
+      }
+      smoothedMagnitudes.push(total / count)
 
       if (baselineMagnitude === undefined) {
         const firstTimestampMs = recentSamples[0]!.timestampMs
@@ -431,12 +477,10 @@ function createStepPeakDetector(): StepPeakDetector {
 
       const evaluatePeakAt = (index: number) => {
         const peak = recentSamples[index]!
-        const previous = recentSamples[index - 1]!
-        const next = recentSamples[index + 1]!
-        const peakMagnitude = magnitude(peak.acceleration)
+        const peakMagnitude = smoothedMagnitudes[index]!
         const isLocalMaximum =
-          peakMagnitude > magnitude(previous.acceleration) &&
-          peakMagnitude >= magnitude(next.acceleration)
+          peakMagnitude > smoothedMagnitudes[index - 1]! &&
+          peakMagnitude >= smoothedMagnitudes[index + 1]!
 
         if (
           !isLocalMaximum ||
@@ -447,13 +491,13 @@ function createStepPeakDetector(): StepPeakDetector {
 
         if (pendingPeak && peak.timestampMs - pendingPeak.timestampMs < STEP_MIN_GAP_MS) {
           if (peakMagnitude > pendingPeak.magnitude) {
-            pendingPeak = { timestampMs: peak.timestampMs, magnitude: peakMagnitude }
+            pendingPeak = { index, timestampMs: peak.timestampMs, magnitude: peakMagnitude }
           }
           return
         }
 
         sealPendingPeak()
-        pendingPeak = { timestampMs: peak.timestampMs, magnitude: peakMagnitude }
+        pendingPeak = { index, timestampMs: peak.timestampMs, magnitude: peakMagnitude }
       }
 
       // Peaks are evaluated with one sample of delay (their right neighbour
@@ -485,7 +529,7 @@ function createStepPeakDetector(): StepPeakDetector {
       if (
         pending &&
         latestTimestampMs - pending.timestampMs >= STEP_MIN_GAP_MS &&
-        passesProminence(pending)
+        passesPairing(pending)
       ) {
         candidates.push(pending.timestampMs)
         const lastRunTimestampMs = run[run.length - 1]
@@ -517,6 +561,161 @@ function runLegacyStepDetection(samples: SensorSample[]): StepPeakDetection {
     candidateTimestampsMs,
     confirmedTimestampsMs: keepCadencedStepSequences(candidateTimestampsMs)
   }
+}
+
+function computeSmoothedMagnitudes(samples: SensorSample[]): number[] {
+  const rawMagnitudes = samples.map(sample => magnitude(sample.acceleration))
+  return samples.map((sample, index) => {
+    const windowStartMs = sample.timestampMs - STEP_FILTER_WINDOW_MS
+    let total = 0
+    let count = 0
+    for (let scan = index; scan >= 0; scan -= 1) {
+      if (samples[scan]!.timestampMs < windowStartMs) {
+        break
+      }
+      total += rawMagnitudes[scan]!
+      count += 1
+    }
+    return total / count
+  })
+}
+
+function detectStepPeakTimestamps(samples: SensorSample[]) {
+  if (samples.length < 3) {
+    return [] as number[]
+  }
+
+  const magnitudes = computeSmoothedMagnitudes(samples)
+  const baselineMagnitude = lowerQuantile(magnitudes)
+  const noiseCalibrationEndMs = samples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
+  const calibrationNoise = magnitudes
+    .filter((_, index) => samples[index]!.timestampMs <= noiseCalibrationEndMs)
+    .map(value => Math.abs(value - baselineMagnitude))
+  const peakDelta = Math.max(
+    MIN_STEP_PEAK_DELTA,
+    baselineMagnitude * STEP_PEAK_RATIO,
+    lowerQuantile(calibrationNoise) * NOISE_MULTIPLIER
+  )
+  const peakThreshold = baselineMagnitude + peakDelta
+  const troughsByIndex = computeLeftTroughs(samples, magnitudes)
+  const peakCandidates: Array<{ timestampMs: number; magnitude: number }> = []
+
+  for (let index = 1; index < samples.length - 1; index += 1) {
+    const currentMagnitude = magnitudes[index]!
+    const previousMagnitude = magnitudes[index - 1]!
+    const nextMagnitude = magnitudes[index + 1]!
+
+    if (currentMagnitude < peakThreshold) {
+      continue
+    }
+
+    if (currentMagnitude <= previousMagnitude || currentMagnitude < nextMagnitude) {
+      continue
+    }
+
+    // A candidate must rise above its recent trough, not just the global
+    // baseline; small ripples riding on an elevated shoulder are not steps.
+    const trough = troughsByIndex[index]
+    if (trough !== undefined && currentMagnitude - trough < peakDelta) {
+      continue
+    }
+
+    // Peak-valley pairing: a real step is followed by a genuine dip. A
+    // candidate without one (level-shift edges, plateau shoulders) is not a
+    // step no matter how well it peaks.
+    const valleyEndMs = samples[index]!.timestampMs + STEP_VALLEY_WINDOW_MS
+    let valley: number | undefined
+    for (let scan = index + 1; scan < samples.length; scan += 1) {
+      if (samples[scan]!.timestampMs > valleyEndMs) {
+        break
+      }
+      const value = magnitudes[scan]!
+      if (valley === undefined || value < valley) {
+        valley = value
+      }
+    }
+    if (valley !== undefined && currentMagnitude - valley < peakDelta) {
+      continue
+    }
+
+    const timestampMs = samples[index]!.timestampMs
+    const lastCandidate = peakCandidates[peakCandidates.length - 1]
+
+    if (
+      lastCandidate &&
+      timestampMs - lastCandidate.timestampMs < STEP_MIN_GAP_MS
+    ) {
+      if (currentMagnitude > lastCandidate.magnitude) {
+        peakCandidates[peakCandidates.length - 1] = {
+          timestampMs,
+          magnitude: currentMagnitude
+        }
+      }
+      continue
+    }
+
+    peakCandidates.push({
+      timestampMs,
+      magnitude: currentMagnitude
+    })
+  }
+
+  return peakCandidates.map(candidate => candidate.timestampMs)
+}
+
+function computeLeftTroughs(samples: SensorSample[], magnitudes: number[]) {
+  const troughs: Array<number | undefined> = []
+  let windowStartIndex = 0
+  let windowMinimum = Number.POSITIVE_INFINITY
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const windowStartMs = samples[index]!.timestampMs - STEP_TROUGH_WINDOW_MS
+    while (windowStartIndex < index && samples[windowStartIndex]!.timestampMs < windowStartMs) {
+      if (magnitudes[windowStartIndex]! < windowMinimum) {
+        windowMinimum = magnitudes[windowStartIndex]!
+      }
+      windowStartIndex += 1
+    }
+
+    // Samples between windowStartIndex and index - 1 have not been folded
+    // into the running minimum yet, so scan that short stretch directly.
+    let trough: number | undefined
+    for (let scan = windowStartIndex; scan < index; scan += 1) {
+      const value = magnitudes[scan]!
+      if (trough === undefined || value < trough) {
+        trough = value
+      }
+    }
+    troughs.push(trough)
+  }
+
+  return troughs
+}
+
+function keepCadencedStepSequences(timestampsMs: number[]) {
+  const acceptedTimestamps: number[] = []
+  let sequenceStartIndex = 0
+
+  function acceptSequence(endIndex: number) {
+    if (endIndex - sequenceStartIndex + 1 < MIN_CONSECUTIVE_STEPS) {
+      return
+    }
+
+    acceptedTimestamps.push(...timestampsMs.slice(sequenceStartIndex, endIndex + 1))
+  }
+
+  for (let index = 1; index < timestampsMs.length; index += 1) {
+    const intervalMs = timestampsMs[index]! - timestampsMs[index - 1]!
+    if (intervalMs >= STEP_MIN_GAP_MS && intervalMs <= STEP_MAX_GAP_MS) {
+      continue
+    }
+
+    acceptSequence(index - 1)
+    sequenceStartIndex = index
+  }
+
+  acceptSequence(timestampsMs.length - 1)
+  return acceptedTimestamps
 }
 
 export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorSessionAnalysis {
@@ -615,71 +814,6 @@ function resolveDurationSeconds(durationSeconds: number | undefined, samples: Se
   return roundNumber((samples[samples.length - 1]!.timestampMs - samples[0]!.timestampMs) / 1000, 1)
 }
 
-function detectStepPeakTimestamps(samples: SensorSample[]) {
-  if (samples.length < 3) {
-    return [] as number[]
-  }
-
-  const magnitudes = samples.map(sample => magnitude(sample.acceleration))
-  const baselineMagnitude = lowerQuantile(magnitudes)
-  const noiseCalibrationEndMs = samples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
-  const calibrationNoise = magnitudes
-    .filter((_, index) => samples[index]!.timestampMs <= noiseCalibrationEndMs)
-    .map(value => Math.abs(value - baselineMagnitude))
-  const peakDelta = Math.max(
-    MIN_STEP_PEAK_DELTA,
-    baselineMagnitude * STEP_PEAK_RATIO,
-    lowerQuantile(calibrationNoise) * NOISE_MULTIPLIER
-  )
-  const peakThreshold = baselineMagnitude + peakDelta
-  const troughsByIndex = computeLeftTroughs(samples, magnitudes)
-  const peakCandidates: Array<{ timestampMs: number; magnitude: number }> = []
-
-  for (let index = 1; index < samples.length - 1; index += 1) {
-    const currentMagnitude = magnitudes[index]!
-    const previousMagnitude = magnitudes[index - 1]!
-    const nextMagnitude = magnitudes[index + 1]!
-
-    if (currentMagnitude < peakThreshold) {
-      continue
-    }
-
-    if (currentMagnitude <= previousMagnitude || currentMagnitude < nextMagnitude) {
-      continue
-    }
-
-    // A candidate must rise above its recent trough, not just the global
-    // baseline; small ripples riding on an elevated shoulder are not steps.
-    const trough = troughsByIndex[index]
-    if (trough !== undefined && currentMagnitude - trough < peakDelta) {
-      continue
-    }
-
-    const timestampMs = samples[index]!.timestampMs
-    const lastCandidate = peakCandidates[peakCandidates.length - 1]
-
-    if (
-      lastCandidate &&
-      timestampMs - lastCandidate.timestampMs < STEP_MIN_GAP_MS
-    ) {
-      if (currentMagnitude > lastCandidate.magnitude) {
-        peakCandidates[peakCandidates.length - 1] = {
-          timestampMs,
-          magnitude: currentMagnitude
-        }
-      }
-      continue
-    }
-
-    peakCandidates.push({
-      timestampMs,
-      magnitude: currentMagnitude
-    })
-  }
-
-  return peakCandidates.map(candidate => candidate.timestampMs)
-}
-
 function computeProvisionalCadenceSpm(timestampsMs: number[]) {
   const recentIntervalsMs: number[] = []
 
@@ -697,55 +831,6 @@ function computeProvisionalCadenceSpm(timestampsMs: number[]) {
   return recentIntervalsMs.length > 0
     ? roundNumber(60_000 / average(recentIntervalsMs), 1)
     : 0
-}
-
-function computeLeftTroughs(samples: SensorSample[], magnitudes: number[]) {
-  const troughs: Array<number | undefined> = []
-  let windowStartIndex = 0
-
-  for (let index = 0; index < samples.length; index += 1) {
-    const windowStartMs = samples[index]!.timestampMs - STEP_TROUGH_WINDOW_MS
-    while (windowStartIndex < index && samples[windowStartIndex]!.timestampMs < windowStartMs) {
-      windowStartIndex += 1
-    }
-
-    let trough: number | undefined
-    for (let scan = windowStartIndex; scan < index; scan += 1) {
-      const value = magnitudes[scan]!
-      if (trough === undefined || value < trough) {
-        trough = value
-      }
-    }
-    troughs.push(trough)
-  }
-
-  return troughs
-}
-
-function keepCadencedStepSequences(timestampsMs: number[]) {
-  const acceptedTimestamps: number[] = []
-  let sequenceStartIndex = 0
-
-  function acceptSequence(endIndex: number) {
-    if (endIndex - sequenceStartIndex + 1 < MIN_CONSECUTIVE_STEPS) {
-      return
-    }
-
-    acceptedTimestamps.push(...timestampsMs.slice(sequenceStartIndex, endIndex + 1))
-  }
-
-  for (let index = 1; index < timestampsMs.length; index += 1) {
-    const intervalMs = timestampsMs[index]! - timestampsMs[index - 1]!
-    if (intervalMs >= STEP_MIN_GAP_MS && intervalMs <= STEP_MAX_GAP_MS) {
-      continue
-    }
-
-    acceptSequence(index - 1)
-    sequenceStartIndex = index
-  }
-
-  acceptSequence(timestampsMs.length - 1)
-  return acceptedTimestamps
 }
 
 function magnitude(acceleration: SensorSample['acceleration']) {

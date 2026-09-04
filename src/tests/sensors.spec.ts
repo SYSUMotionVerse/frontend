@@ -276,6 +276,57 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.qualityScore).toBeGreaterThanOrEqual(75)
   })
 
+  it('keeps inter-step noise spikes out of the confirmed count', () => {
+    const peakCenters = [400, 1200, 2000, 2800, 3600, 4400, 5200]
+    const spikeTimes = [760, 1560, 2360, 3160, 3960, 4760]
+    const samples: SensorSample[] = Array.from({ length: 281 }, (_, index) => {
+      const timestampMs = index * 20
+      const value = peakCenters.some(center => Math.abs(center - timestampMs) <= 60)
+        ? 13
+        : spikeTimes.includes(timestampMs)
+          ? 12
+          : 9.81
+      return { timestampMs, acceleration: { x: value, y: 0, z: 0 } }
+    })
+
+    const analysis = createSensorSessionAnalysis({
+      samples,
+      completedIntervals: 0
+    })
+
+    expect(analysis.estimatedStepCount).toBe(7)
+  })
+
+  it('requires a qualifying valley after each candidate peak', () => {
+    const samples: SensorSample[] = Array.from({ length: 31 }, (_, index) => {
+      const timestampMs = index * 100
+      let value = 9.81
+      if (timestampMs >= 1000 && timestampMs <= 1600) {
+        value = 10.9
+      }
+      if (timestampMs === 1700) {
+        value = 10.2
+      }
+      if (timestampMs === 1800) {
+        value = 11.3
+      }
+      if (timestampMs >= 1900 && timestampMs <= 2600) {
+        value = 10.9
+      }
+      return { timestampMs, acceleration: { x: value, y: 0, z: 0 } }
+    })
+
+    const analysis = createSensorSessionAnalysis({
+      samples,
+      completedIntervals: 0
+    })
+
+    // Neither the level-shift edge nor the plateau bump is followed by a
+    // genuine valley, so neither may become a candidate step.
+    expect(analysis.estimatedStepCount).toBe(0)
+    expect(analysis.provisionalCadenceSpm).toBe(0)
+  })
+
   it('rejects low-prominence bumps riding on an elevated baseline', () => {
     const samples: SensorSample[] = Array.from({ length: 31 }, (_, index) => {
       const timestampMs = index * 100
@@ -304,6 +355,31 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.provisionalCadenceSpm).toBe(0)
   })
 
+  it('does not decrease confirmed steps when later samples shift the baseline', async () => {
+    const uniMock = installUniSensorMock()
+    const samples = createBaselineShiftSamples()
+    let now = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+
+    for (const sample of samples.slice(0, 41)) {
+      now = sample.timestampMs
+      uniMock.emitAcceleration(sample.acceleration)
+    }
+    const initialAnalysis = session.getSnapshot().analysis
+
+    for (const sample of samples.slice(41)) {
+      now = sample.timestampMs
+      uniMock.emitAcceleration(sample.acceleration)
+    }
+    const laterAnalysis = session.getSnapshot().analysis
+
+    expect(initialAnalysis.estimatedStepCount).toBeGreaterThan(0)
+    expect(laterAnalysis.estimatedStepCount).toBeGreaterThanOrEqual(
+      initialAnalysis.estimatedStepCount
+    )
+  })
+
   it('keeps confirmed steps monotonic across an orientation-driven baseline drop', async () => {
     const uniMock = installUniSensorMock()
     let now = 0
@@ -330,31 +406,6 @@ describe('createSensorSessionAnalysis', () => {
       push(timestampMs, [3600, 4000, 4400].includes(timestampMs) ? 1.4 : 1)
     }
     expect(session.getSnapshot().analysis.estimatedStepCount).toBe(6)
-  })
-
-  it('does not decrease confirmed steps when later samples shift the baseline', async () => {
-    const uniMock = installUniSensorMock()
-    const samples = createBaselineShiftSamples()
-    let now = 0
-    vi.spyOn(Date, 'now').mockImplementation(() => now)
-    const session = await startStairSensorCapture({ completedIntervals: 0 })
-
-    for (const sample of samples.slice(0, 41)) {
-      now = sample.timestampMs
-      uniMock.emitAcceleration(sample.acceleration)
-    }
-    const initialAnalysis = session.getSnapshot().analysis
-
-    for (const sample of samples.slice(41)) {
-      now = sample.timestampMs
-      uniMock.emitAcceleration(sample.acceleration)
-    }
-    const laterAnalysis = session.getSnapshot().analysis
-
-    expect(initialAnalysis.estimatedStepCount).toBeGreaterThan(0)
-    expect(laterAnalysis.estimatedStepCount).toBeGreaterThanOrEqual(
-      initialAnalysis.estimatedStepCount
-    )
   })
 
   it('withholds completion credit when a 30-second session lacks sensor coverage', () => {
