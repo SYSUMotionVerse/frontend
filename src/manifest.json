@@ -7,6 +7,15 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wx9c6cccd49637b32e",
+    "permission": {
+      "scope.userLocation": {
+        "desc": "阶梯训练用于确认你在训练期间没有发生水平移动（区分爬楼与平地走）"
+      }
+    },
+    "requiredPrivateInfos": [
+      "startLocationUpdate",
+      "onLocationChange"
+    ],
     "optimization": {
       "subPackages": true
     },

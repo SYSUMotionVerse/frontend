@@ -16,6 +16,10 @@ import {
   type SensorSessionAnalysis,
   type StairSensorCaptureSession
 } from '../../platform/sensors'
+import {
+  startHorizontalEvidenceCapture,
+  type HorizontalEvidenceSession
+} from '../../platform/horizontalEvidence'
 import type { StairSessionSummary } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
@@ -26,6 +30,8 @@ let timerId: ReturnType<typeof setInterval> | null = null
 let liveMetricsTimerId: ReturnType<typeof setInterval> | null = null
 let captureGeneration = 0
 let captureSession: StairSensorCaptureSession | null = null
+let horizontalCapturePromise: Promise<HorizontalEvidenceSession | null> | null = null
+let horizontalEvidenceSession: HorizontalEvidenceSession | null = null
 const secondsLeft = shallowRef(30)
 const isRunning = shallowRef(false)
 const isFinishing = shallowRef(false)
@@ -86,6 +92,20 @@ async function startTimer() {
   sensorStatus.value = 'collecting'
   isRunning.value = true
 
+  // 定位采集与传感器并行启动；授权弹窗不阻塞训练计时，
+  // 拿不到定位证据时按仅加速度证据降级。
+  horizontalEvidenceSession = null
+  horizontalCapturePromise = startHorizontalEvidenceCapture()
+    .then(session => {
+      horizontalEvidenceSession = session
+      return session
+    })
+    .catch(error => {
+      horizontalEvidenceSession = null
+      reportBackendSyncError('楼梯训练定位采集', error)
+      return null
+    })
+
   try {
     const startedSession = await startStairSensorCapture({
       completedIntervals: 0
@@ -110,6 +130,7 @@ async function startTimer() {
     sensorStatus.value = 'unavailable'
     isRunning.value = false
     reportBackendSyncError('楼梯训练传感器启动', error)
+    void collectHorizontalEvidence()
     return
   }
 
@@ -150,6 +171,21 @@ function resolveSummaryPayload(
   }
 }
 
+async function collectHorizontalEvidence() {
+  const pending = horizontalCapturePromise
+  const session = pending ? await pending.catch(() => null) : horizontalEvidenceSession
+  horizontalCapturePromise = null
+  horizontalEvidenceSession = null
+  if (!session) {
+    return null
+  }
+
+  return session.stop().catch(error => {
+    reportBackendSyncError('楼梯训练定位停止', error)
+    return null
+  })
+}
+
 async function finishSession() {
   if (isFinishing.value) {
     return
@@ -179,14 +215,30 @@ async function finishSession() {
   })
   syncLiveMetrics(analysis, captureResult?.samples.length ?? 0)
   sensorStatus.value = captureResult ? 'stopped' : 'unavailable'
+  const horizontalEvidence = await collectHorizontalEvidence()
+
+  // 双证据门槛：加速度给出竖直节奏证据，定位给出水平静止证据。
+  // 定位拒绝授权或拿不到有效定位点时降级为仅加速度证据。
+  const gpsEligible = !horizontalEvidence
+    || !horizontalEvidence.available
+    || horizontalEvidence.isImmobile
+  const countsAsCompletion = analysis.isEligibleForCompletion && gpsEligible
+  let summaryText = analysis.summary
+  if (analysis.isEligibleForCompletion && !gpsEligible) {
+    summaryText = '本次检测到步伐，但水平移动明显，按步行记录，未计入爬楼训练。'
+  } else if (countsAsCompletion && horizontalEvidence && !horizontalEvidence.available) {
+    summaryText = `${summaryText}（未获取到有效定位证据，仅按运动传感器记录。）`
+  }
+
   const summaryPayload = resolveSummaryPayload(analysis)
+  summaryPayload.summaryText = summaryText
   const completedAt = new Date().toISOString()
 
   void notifyTrainingComplete().catch(error => reportBackendSyncError('楼梯训练完成提示', error))
   void studentBackendSync.syncStairSession({
     sessionId: trainingSessionId,
     durationSeconds,
-    completedIntervals: analysis.completedIntervals,
+    completedIntervals: countsAsCompletion ? analysis.completedIntervals : 0,
     qualityScore: analysis.qualityScore,
     summary: summaryPayload,
     completedAt
@@ -196,9 +248,9 @@ async function finishSession() {
     sessionId: trainingSessionId,
     modality: 'stair',
     qualityScore: analysis.qualityScore,
-    summary: analysis.summary,
+    summary: summaryText,
     capturedBy: analysis.capturedBy,
-    countsAsCompletion: analysis.isEligibleForCompletion
+    countsAsCompletion
   })
   useTrainingProgress().invalidate()
   invalidateGrowthOverview()
@@ -258,6 +310,7 @@ function stopActiveCapture() {
   isRunning.value = false
   const activeSession = captureSession
   captureSession = null
+  void collectHorizontalEvidence()
 
   // The 30-second interval was interrupted, so it is not credited as a
   // completed interval — only a timer-driven finish may report one.
