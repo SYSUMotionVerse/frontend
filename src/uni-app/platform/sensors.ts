@@ -65,6 +65,7 @@ interface SensorAnalysisInput {
   durationSeconds?: number
   completedIntervals: number
   samples?: SensorSample[]
+  baselineMagnitude?: number
 }
 
 type MotionInterval = 'game' | 'ui' | 'normal'
@@ -134,6 +135,7 @@ export async function startStairSensorCapture(
   const samples: SensorSample[] = []
   let latestGyroscope: GyroscopeSample | null = null
   let isActive = true
+  let calibratedBaselineMagnitude: number | undefined
   let stopPromise: Promise<StairSensorCaptureResult> | null = null
   let stoppedResult: StairSensorCaptureResult | null = null
 
@@ -222,10 +224,22 @@ export async function startStairSensorCapture(
   }
 
   const buildSnapshot = (snapshotInput?: StopStairSensorCaptureInput): StairSensorCaptureSnapshot => {
+    const candidateBaselineMagnitude = estimateBaselineMagnitude(samples)
+    if (
+      candidateBaselineMagnitude !== undefined &&
+      (
+        calibratedBaselineMagnitude === undefined ||
+        candidateBaselineMagnitude < calibratedBaselineMagnitude
+      )
+    ) {
+      calibratedBaselineMagnitude = candidateBaselineMagnitude
+    }
+
     const analysis = createSensorSessionAnalysis({
       durationSeconds: snapshotInput?.durationSeconds,
       completedIntervals: snapshotInput?.completedIntervals ?? input.completedIntervals,
-      samples
+      samples,
+      baselineMagnitude: calibratedBaselineMagnitude
     })
 
     return {
@@ -294,7 +308,7 @@ export async function startStairSensorCapture(
 export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorSessionAnalysis {
   const samples = normalizeSamples(input.samples ?? [])
   const durationSeconds = resolveDurationSeconds(input.durationSeconds, samples)
-  const candidateStepPeakTimestampsMs = detectStepPeakTimestamps(samples)
+  const candidateStepPeakTimestampsMs = detectStepPeakTimestamps(samples, input.baselineMagnitude)
   const peakTimestampsMs = keepCadencedStepSequences(candidateStepPeakTimestampsMs)
   const estimatedStepCount = peakTimestampsMs.length
   const provisionalCadenceSpm = computeProvisionalCadenceSpm(candidateStepPeakTimestampsMs)
@@ -386,13 +400,21 @@ function resolveDurationSeconds(durationSeconds: number | undefined, samples: Se
   return roundNumber((samples[samples.length - 1]!.timestampMs - samples[0]!.timestampMs) / 1000, 1)
 }
 
-function detectStepPeakTimestamps(samples: SensorSample[]) {
+function estimateBaselineMagnitude(samples: SensorSample[]) {
+  if (samples.length === 0) {
+    return undefined
+  }
+
+  return lowerQuantile(samples.map(sample => magnitude(sample.acceleration)))
+}
+
+function detectStepPeakTimestamps(samples: SensorSample[], baselineMagnitudeOverride?: number) {
   if (samples.length < 3) {
     return [] as number[]
   }
 
   const magnitudes = samples.map(sample => magnitude(sample.acceleration))
-  const baselineMagnitude = lowerQuantile(magnitudes)
+  const baselineMagnitude = baselineMagnitudeOverride ?? lowerQuantile(magnitudes)
   const noiseCalibrationEndMs = samples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
   const calibrationNoise = magnitudes
     .filter((_, index) => samples[index]!.timestampMs <= noiseCalibrationEndMs)

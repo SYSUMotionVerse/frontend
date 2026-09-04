@@ -67,6 +67,24 @@ function createModerateClimbSamples(baseMagnitude: number): SensorSample[] {
   })
 }
 
+function createBaselineShiftSamples(): SensorSample[] {
+  const stepTimesMs = [400, 900, 1400, 1900, 2400, 2900, 3400]
+  const initialSamples = Array.from({ length: 41 }, (_, index) => {
+    const timestampMs = index * 100
+    const hasStepPeak = stepTimesMs.some(stepTimeMs => Math.abs(stepTimeMs - timestampMs) <= 100)
+    return {
+      timestampMs,
+      acceleration: { x: hasStepPeak ? 10.4 : 9.81, y: 0, z: 0 }
+    }
+  })
+  const laterSamples = Array.from({ length: 60 }, (_, index) => ({
+    timestampMs: 4_100 + index * 100,
+    acceleration: { x: 10.2, y: 0, z: 0 }
+  }))
+
+  return [...initialSamples, ...laterSamples]
+}
+
 function createGappedClimbSamples(): SensorSample[] {
   const stepTimesMs = Array.from({ length: 25 }, (_, index) => 400 + index * 500)
   const activeSamples = Array.from({ length: 131 }, (_, index) => {
@@ -256,6 +274,31 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.confidence).toBeGreaterThan(0.7)
     expect(analysis.summary).toContain('节奏稳定')
     expect(analysis.qualityScore).toBeGreaterThanOrEqual(75)
+  })
+
+  it('does not decrease confirmed steps when later samples shift the baseline', async () => {
+    const uniMock = installUniSensorMock()
+    const samples = createBaselineShiftSamples()
+    let now = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+
+    for (const sample of samples.slice(0, 41)) {
+      now = sample.timestampMs
+      uniMock.emitAcceleration(sample.acceleration)
+    }
+    const initialAnalysis = session.getSnapshot().analysis
+
+    for (const sample of samples.slice(41)) {
+      now = sample.timestampMs
+      uniMock.emitAcceleration(sample.acceleration)
+    }
+    const laterAnalysis = session.getSnapshot().analysis
+
+    expect(initialAnalysis.estimatedStepCount).toBeGreaterThan(0)
+    expect(laterAnalysis.estimatedStepCount).toBeGreaterThanOrEqual(
+      initialAnalysis.estimatedStepCount
+    )
   })
 
   it('withholds completion credit when a 30-second session lacks sensor coverage', () => {
