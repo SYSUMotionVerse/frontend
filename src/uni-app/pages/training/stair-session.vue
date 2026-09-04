@@ -20,11 +20,16 @@ import type { StairSessionSummary } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
 const trainingSessionId = createTrainingSessionId('stairs')
+const LIVE_METRICS_INTERVAL_MS = 500
+const QUESTIONNAIRE_NAVIGATION_TIMEOUT_MS = 5_000
 let timerId: ReturnType<typeof setInterval> | null = null
+let liveMetricsTimerId: ReturnType<typeof setInterval> | null = null
+let captureGeneration = 0
 let captureSession: StairSensorCaptureSession | null = null
 const secondsLeft = shallowRef(30)
 const isRunning = shallowRef(false)
 const isFinishing = shallowRef(false)
+const questionnaireNavigationState = shallowRef<'idle' | 'opening' | 'failed'>('idle')
 const cadenceSpm = shallowRef(0)
 const estimatedStepCount = shallowRef(0)
 const estimatedVerticalSpeedMps = shallowRef(0)
@@ -42,8 +47,14 @@ function resetLiveMetrics() {
   sampleCount.value = 0
 }
 
-function syncLiveMetrics(analysis: SensorSessionAnalysis, samplesLength: number) {
-  cadenceSpm.value = analysis.cadenceSpmAvg
+function syncLiveMetrics(
+  analysis: SensorSessionAnalysis,
+  samplesLength: number,
+  isLiveSnapshot = false
+) {
+  cadenceSpm.value = isLiveSnapshot && Number.isFinite(analysis.provisionalCadenceSpm)
+    ? analysis.provisionalCadenceSpm
+    : analysis.cadenceSpmAvg
   estimatedStepCount.value = analysis.estimatedStepCount
   estimatedVerticalSpeedMps.value = analysis.estimatedVerticalSpeedMps
   estimatedFloorsPerMin.value = analysis.estimatedFloorsPerMin
@@ -61,7 +72,7 @@ function refreshLiveSnapshot() {
     completedIntervals: isRunning.value ? 1 : 0
   })
 
-  syncLiveMetrics(snapshot.analysis, snapshot.samples.length)
+  syncLiveMetrics(snapshot.analysis, snapshot.samples.length, true)
 }
 
 async function startTimer() {
@@ -69,17 +80,32 @@ async function startTimer() {
     return
   }
 
+  const startGeneration = ++captureGeneration
   secondsLeft.value = 30
   resetLiveMetrics()
   sensorStatus.value = 'collecting'
   isRunning.value = true
 
   try {
-    captureSession = await startStairSensorCapture({
+    const startedSession = await startStairSensorCapture({
       completedIntervals: 0
     })
+    if (startGeneration !== captureGeneration) {
+      void startedSession.stop({
+        durationSeconds: 0,
+        completedIntervals: 0
+      }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
+      return
+    }
+
+    captureSession = startedSession
     refreshLiveSnapshot()
+    liveMetricsTimerId = setInterval(refreshLiveSnapshot, LIVE_METRICS_INTERVAL_MS)
   } catch (error) {
+    if (startGeneration !== captureGeneration) {
+      return
+    }
+
     captureSession = null
     sensorStatus.value = 'unavailable'
     isRunning.value = false
@@ -89,7 +115,6 @@ async function startTimer() {
 
   timerId = setInterval(() => {
     secondsLeft.value -= 1
-    refreshLiveSnapshot()
 
     if (secondsLeft.value <= 0) {
       clearTimer()
@@ -99,12 +124,15 @@ async function startTimer() {
 }
 
 function clearTimer() {
-  if (!timerId) {
-    return
+  if (timerId) {
+    clearInterval(timerId)
+    timerId = null
   }
 
-  clearInterval(timerId)
-  timerId = null
+  if (liveMetricsTimerId) {
+    clearInterval(liveMetricsTimerId)
+    liveMetricsTimerId = null
+  }
 }
 
 function resolveSummaryPayload(
@@ -117,8 +145,6 @@ function resolveSummaryPayload(
     cadenceSpmAvg: analysis.cadenceSpmAvg,
     cadenceSpmPeak: analysis.cadenceSpmPeak,
     cadenceStability: analysis.cadenceStability,
-    estimatedVerticalSpeedMps: analysis.estimatedVerticalSpeedMps,
-    estimatedFloorsPerMin: analysis.estimatedFloorsPerMin,
     pauseCount: analysis.pauseCount,
     confidence: analysis.confidence
   }
@@ -134,13 +160,19 @@ async function finishSession() {
   isRunning.value = false
   const durationSeconds = 30 - secondsLeft.value
   const completedIntervals = durationSeconds > 0 ? 1 : 0
-  const captureResult = captureSession
-    ? await captureSession.stop({
+  const activeSession = captureSession
+  captureSession = null
+  let captureResult = null
+  if (activeSession) {
+    try {
+      captureResult = await activeSession.stop({
         durationSeconds,
         completedIntervals
       })
-    : null
-  captureSession = null
+    } catch (error) {
+      reportBackendSyncError('楼梯训练传感器停止', error)
+    }
+  }
   const analysis = captureResult?.analysis ?? createSensorSessionAnalysis({
     durationSeconds,
     completedIntervals
@@ -150,32 +182,69 @@ async function finishSession() {
   const summaryPayload = resolveSummaryPayload(analysis)
   const completedAt = new Date().toISOString()
 
-  await notifyTrainingComplete()
-
-  try {
-    await studentBackendSync.syncStairSession({
-      sessionId: trainingSessionId,
-      durationSeconds,
-      completedIntervals,
-      qualityScore: analysis.qualityScore,
-      summary: summaryPayload,
-      completedAt
-    })
-  } catch (error) {
-    reportBackendSyncError('楼梯训练同步', error)
-  }
+  void notifyTrainingComplete().catch(error => reportBackendSyncError('楼梯训练完成提示', error))
+  void studentBackendSync.syncStairSession({
+    sessionId: trainingSessionId,
+    durationSeconds,
+    completedIntervals: analysis.completedIntervals,
+    qualityScore: analysis.qualityScore,
+    summary: summaryPayload,
+    completedAt
+  }).catch(error => reportBackendSyncError('楼梯训练同步', error))
 
   store.completeTrainingSession({
     sessionId: trainingSessionId,
     modality: 'stair',
     qualityScore: analysis.qualityScore,
     summary: analysis.summary,
-    capturedBy: analysis.capturedBy
+    capturedBy: analysis.capturedBy,
+    countsAsCompletion: analysis.isEligibleForCompletion
   })
   useTrainingProgress().invalidate()
   invalidateGrowthOverview()
-  void uni.redirectTo({
-    url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(trainingSessionId)}`
+  await openShortQuestionnaire()
+}
+
+async function openShortQuestionnaire() {
+  if (questionnaireNavigationState.value === 'opening') {
+    return
+  }
+
+  questionnaireNavigationState.value = 'opening'
+  try {
+    await redirectToShortQuestionnaire()
+  } catch (error) {
+    questionnaireNavigationState.value = 'failed'
+    reportBackendSyncError('楼梯训练问卷跳转', error)
+  }
+}
+
+function redirectToShortQuestionnaire() {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      settle(() => reject(new Error('Stair questionnaire navigation timed out.')))
+    }, QUESTIONNAIRE_NAVIGATION_TIMEOUT_MS)
+
+    function settle(action: () => void) {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeout)
+      action()
+    }
+
+    try {
+      Promise.resolve(uni.redirectTo({
+        url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(trainingSessionId)}`
+      })).then(
+        () => settle(resolve),
+        error => settle(() => reject(error))
+      )
+    } catch (error) {
+      settle(() => reject(error))
+    }
   })
 }
 
@@ -184,6 +253,7 @@ function stopActiveCapture() {
   // racing the finish flow must not clobber its final state.
   if (isFinishing.value) return
 
+  captureGeneration += 1
   clearTimer()
   isRunning.value = false
   const activeSession = captureSession
@@ -242,8 +312,10 @@ onBeforeUnmount(() => {
       :confidence="confidence"
       :sensor-status="sensorStatus"
       :sample-count="sampleCount"
+      :questionnaire-navigation-state="questionnaireNavigationState"
       @interrupt="interruptSession"
       @start="startTimer"
+      @continue-questionnaire="openShortQuestionnaire"
     />
   </UniTrainingPageShell>
 </template>

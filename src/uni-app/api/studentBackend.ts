@@ -1132,9 +1132,19 @@ export function createStudentBackendSync(
         completedAt,
         queuedAt: new Date().toISOString()
       }
-      submissionOptions.pendingSubmissions.save(submission)
+      let submissionPersisted = true
+      try {
+        submissionOptions.pendingSubmissions.save(submission)
+      } catch (error) {
+        // Storage quota must not prevent an immediately available backend
+        // from receiving a completed session.
+        submissionPersisted = false
+        console.warn('[StudentBackend] unable to persist stair submission:', error)
+      }
       await submitPendingTrainingJob(submission)
-      submissionOptions.pendingSubmissions.remove(input.sessionId)
+      if (submissionPersisted) {
+        submissionOptions.pendingSubmissions.remove(input.sessionId)
+      }
       return { synced: true } as const
     },
     async retryPendingTrainingSubmissions() {

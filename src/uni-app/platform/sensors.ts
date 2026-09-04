@@ -14,12 +14,15 @@ export interface SensorSessionAnalysis {
   estimatedStepCount: number
   activeClimbSeconds: number
   cadenceSpmAvg: number
+  provisionalCadenceSpm: number
   cadenceSpmPeak: number
   cadenceStability: number
   estimatedVerticalSpeedMps: number
   estimatedFloorsPerMin: number
   pauseCount: number
   confidence: number
+  sensorCoverage: number
+  isEligibleForCompletion: boolean
   completedIntervals: number
   durationSeconds: number
 }
@@ -90,15 +93,26 @@ interface SensorMethodOptions {
 
 type SensorMethodKind = 'callback' | 'promise'
 
-const GRAVITY_BASELINE = 9.81
-const STEP_PEAK_DELTA = 1.2
+const STEP_PEAK_RATIO = 0.05
+const MIN_STEP_PEAK_DELTA = 0.05
+const NOISE_CALIBRATION_WINDOW_MS = 500
+const NOISE_MULTIPLIER = 3
 const STEP_MIN_GAP_MS = 300
+const STEP_MAX_GAP_MS = 1200
+const MIN_CONSECUTIVE_STEPS = 3
 const PAUSE_GAP_MS = 1200
 const WINDOW_MS = 1000
 const WINDOW_STEP_THRESHOLD = 2
 const STEP_HEIGHT_METERS = 0.17
 const FLOOR_HEIGHT_METERS = 3
 const DEFAULT_SENSOR_INTERVAL: MotionInterval = 'game'
+const SENSOR_START_TIMEOUT_MS = 5_000
+const SENSOR_STOP_TIMEOUT_MS = 2_000
+const COMPLETION_DURATION_SECONDS = 30
+const MIN_SENSOR_COVERAGE_FOR_COMPLETION = 0.8
+const MIN_STEPS_FOR_COMPLETION = 12
+const MIN_ACTIVE_CLIMB_SECONDS_FOR_COMPLETION = 12
+const MAX_SENSOR_SAMPLE_GAP_MS = 2_000
 
 export async function startStairSensorCapture(
   input: StartStairSensorCaptureInput
@@ -106,12 +120,16 @@ export async function startStairSensorCapture(
   const motionSensor = resolveUniMotionSensor()
   if (
     !motionSensor.startAccelerometer ||
-    !motionSensor.startGyroscope ||
-    !motionSensor.onAccelerometerChange ||
-    !motionSensor.onGyroscopeChange
+    !motionSensor.stopAccelerometer ||
+    !motionSensor.onAccelerometerChange
   ) {
     throw new Error('Motion sensor APIs are unavailable.')
   }
+  const shouldCaptureGyroscope = Boolean(
+    motionSensor.startGyroscope &&
+    motionSensor.stopGyroscope &&
+    motionSensor.onGyroscopeChange
+  )
   const startedAtMs = Date.now()
   const samples: SensorSample[] = []
   let latestGyroscope: GyroscopeSample | null = null
@@ -149,34 +167,57 @@ export async function startStairSensorCapture(
     }
   }
 
-  motionSensor.onAccelerometerChange?.(accelerometerHandler)
-  motionSensor.onGyroscopeChange?.(gyroscopeHandler)
+  motionSensor.onAccelerometerChange(accelerometerHandler)
+  if (shouldCaptureGyroscope) {
+    motionSensor.onGyroscopeChange?.(gyroscopeHandler)
+  }
 
   try {
-    await Promise.all([
+    const sensorStarts = [
       callUniSensorMethod(callbacks =>
         motionSensor.startAccelerometer?.({
           interval: input.accelerometerInterval ?? DEFAULT_SENSOR_INTERVAL,
           ...callbacks
         }),
-        'callback'
-      ),
-      callUniSensorMethod(callbacks =>
-        motionSensor.startGyroscope?.({
-          interval: input.gyroscopeInterval ?? DEFAULT_SENSOR_INTERVAL,
-          ...callbacks
-        }),
-        'callback'
+        'callback',
+        SENSOR_START_TIMEOUT_MS,
+        'Motion sensor startup timed out.'
       )
-    ])
+    ]
+    if (shouldCaptureGyroscope) {
+      sensorStarts.push(
+        callUniSensorMethod(callbacks =>
+          motionSensor.startGyroscope?.({
+            interval: input.gyroscopeInterval ?? DEFAULT_SENSOR_INTERVAL,
+            ...callbacks
+          }),
+          'callback',
+          SENSOR_START_TIMEOUT_MS,
+          'Motion sensor startup timed out.'
+        )
+      )
+    }
+    await Promise.all(sensorStarts)
   } catch (error) {
     isActive = false
     motionSensor.offAccelerometerChange?.(accelerometerHandler)
-    motionSensor.offGyroscopeChange?.(gyroscopeHandler)
-    callUniSensorMethod(callbacks => motionSensor.stopAccelerometer?.(callbacks), 'callback')
-      .catch(() => {})
-    callUniSensorMethod(callbacks => motionSensor.stopGyroscope?.(callbacks), 'callback')
-      .catch(() => {})
+    if (shouldCaptureGyroscope) {
+      motionSensor.offGyroscopeChange?.(gyroscopeHandler)
+    }
+    callUniSensorMethod(
+      callbacks => motionSensor.stopAccelerometer?.(callbacks),
+      'callback',
+      SENSOR_STOP_TIMEOUT_MS,
+      'Motion sensor shutdown timed out.'
+    ).catch(() => {})
+    if (shouldCaptureGyroscope) {
+      callUniSensorMethod(
+        callbacks => motionSensor.stopGyroscope?.(callbacks),
+        'callback',
+        SENSOR_STOP_TIMEOUT_MS,
+        'Motion sensor shutdown timed out.'
+      ).catch(() => {})
+    }
     throw error
   }
 
@@ -217,12 +258,29 @@ export async function startStairSensorCapture(
         isActive = false
 
         motionSensor.offAccelerometerChange?.(accelerometerHandler)
-        motionSensor.offGyroscopeChange?.(gyroscopeHandler)
+        if (shouldCaptureGyroscope) {
+          motionSensor.offGyroscopeChange?.(gyroscopeHandler)
+        }
 
-        await Promise.all([
-          callUniSensorMethod(callbacks => motionSensor.stopAccelerometer?.(callbacks), 'callback'),
-          callUniSensorMethod(callbacks => motionSensor.stopGyroscope?.(callbacks), 'callback')
-        ])
+        const sensorStops = [
+          callUniSensorMethod(
+            callbacks => motionSensor.stopAccelerometer?.(callbacks),
+            'callback',
+            SENSOR_STOP_TIMEOUT_MS,
+            'Motion sensor shutdown timed out.'
+          )
+        ]
+        if (shouldCaptureGyroscope) {
+          sensorStops.push(
+            callUniSensorMethod(
+              callbacks => motionSensor.stopGyroscope?.(callbacks),
+              'callback',
+              SENSOR_STOP_TIMEOUT_MS,
+              'Motion sensor shutdown timed out.'
+            )
+          )
+        }
+        await Promise.all(sensorStops)
 
         stoppedResult = buildSnapshot(stopInput)
         return stoppedResult
@@ -236,14 +294,26 @@ export async function startStairSensorCapture(
 export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorSessionAnalysis {
   const samples = normalizeSamples(input.samples ?? [])
   const durationSeconds = resolveDurationSeconds(input.durationSeconds, samples)
-  const peakTimestampsMs = detectStepPeakTimestamps(samples)
+  const candidateStepPeakTimestampsMs = detectStepPeakTimestamps(samples)
+  const peakTimestampsMs = keepCadencedStepSequences(candidateStepPeakTimestampsMs)
   const estimatedStepCount = peakTimestampsMs.length
+  const provisionalCadenceSpm = computeProvisionalCadenceSpm(candidateStepPeakTimestampsMs)
   const stepIntervalsMs = measureIntervalsMs(peakTimestampsMs)
   const cadenceSpmAvg = durationSeconds > 0 ? roundNumber((estimatedStepCount / durationSeconds) * 60, 1) : 0
   const cadenceSpmPeak = roundNumber(computePeakCadenceSpm(peakTimestampsMs), 1)
   const cadenceStability = roundNumber(computeCadenceStability(stepIntervalsMs), 2)
   const pauseCount = countPauses(stepIntervalsMs)
   const activeClimbSeconds = roundNumber(computeActiveClimbSeconds(peakTimestampsMs), 1)
+  const sensorCoverage = computeSensorCoverage(samples, durationSeconds)
+  const requiresFullSessionEvidence = durationSeconds >= COMPLETION_DURATION_SECONDS
+  const isEligibleForCompletion = input.completedIntervals > 0 && (
+    !requiresFullSessionEvidence || (
+      sensorCoverage >= MIN_SENSOR_COVERAGE_FOR_COMPLETION &&
+      estimatedStepCount >= MIN_STEPS_FOR_COMPLETION &&
+      activeClimbSeconds >= MIN_ACTIVE_CLIMB_SECONDS_FOR_COMPLETION
+    )
+  )
+  const completedIntervals = isEligibleForCompletion ? input.completedIntervals : 0
   const verticalDistanceMeters = roundNumber(estimatedStepCount * STEP_HEIGHT_METERS, 2)
   const estimatedVerticalSpeedMps =
     activeClimbSeconds > 0 ? roundNumber(verticalDistanceMeters / activeClimbSeconds, 2) : 0
@@ -252,20 +322,23 @@ export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorS
       ? roundNumber((verticalDistanceMeters / FLOOR_HEIGHT_METERS) / (durationSeconds / 60), 2)
       : 0
   const confidence = roundNumber(computeConfidence({
-    samples,
+    sensorCoverage,
     estimatedStepCount,
     cadenceStability,
     pauseCount,
-    completedIntervals: input.completedIntervals
+    completedIntervals
   }), 2)
-  const qualityScore = Math.round(computeQualityScore({
+  const rawQualityScore = Math.round(computeQualityScore({
     cadenceStability,
     pauseCount,
     estimatedStepCount,
     durationSeconds,
-    completedIntervals: input.completedIntervals,
+    completedIntervals,
     confidence
   }))
+  const qualityScore = isEligibleForCompletion
+    ? rawQualityScore
+    : Math.min(rawQualityScore, 40)
 
   return {
     qualityScore,
@@ -275,19 +348,24 @@ export function createSensorSessionAnalysis(input: SensorAnalysisInput): SensorS
       cadenceStability,
       pauseCount,
       activeClimbSeconds,
-      confidence
+      confidence,
+      isEligibleForCompletion,
+      completionAttempted: input.completedIntervals > 0
     }),
     capturedBy: 'sensor',
     estimatedStepCount,
     activeClimbSeconds,
     cadenceSpmAvg,
+    provisionalCadenceSpm,
     cadenceSpmPeak,
     cadenceStability,
     estimatedVerticalSpeedMps,
     estimatedFloorsPerMin,
     pauseCount,
     confidence,
-    completedIntervals: input.completedIntervals,
+    sensorCoverage,
+    isEligibleForCompletion,
+    completedIntervals,
     durationSeconds
   }
 }
@@ -314,14 +392,25 @@ function detectStepPeakTimestamps(samples: SensorSample[]) {
   }
 
   const magnitudes = samples.map(sample => magnitude(sample.acceleration))
-  const peakTimestampsMs: number[] = []
+  const baselineMagnitude = lowerQuantile(magnitudes)
+  const noiseCalibrationEndMs = samples[0]!.timestampMs + NOISE_CALIBRATION_WINDOW_MS
+  const calibrationNoise = magnitudes
+    .filter((_, index) => samples[index]!.timestampMs <= noiseCalibrationEndMs)
+    .map(value => Math.abs(value - baselineMagnitude))
+  const peakDelta = Math.max(
+    MIN_STEP_PEAK_DELTA,
+    baselineMagnitude * STEP_PEAK_RATIO,
+    lowerQuantile(calibrationNoise) * NOISE_MULTIPLIER
+  )
+  const peakThreshold = baselineMagnitude + peakDelta
+  const peakCandidates: Array<{ timestampMs: number; magnitude: number }> = []
 
   for (let index = 1; index < samples.length - 1; index += 1) {
     const currentMagnitude = magnitudes[index]!
     const previousMagnitude = magnitudes[index - 1]!
     const nextMagnitude = magnitudes[index + 1]!
 
-    if (currentMagnitude < GRAVITY_BASELINE + STEP_PEAK_DELTA) {
+    if (currentMagnitude < peakThreshold) {
       continue
     }
 
@@ -330,22 +419,73 @@ function detectStepPeakTimestamps(samples: SensorSample[]) {
     }
 
     const timestampMs = samples[index]!.timestampMs
-    const lastAcceptedTimestampMs = peakTimestampsMs[peakTimestampsMs.length - 1]
+    const lastCandidate = peakCandidates[peakCandidates.length - 1]
 
     if (
-      typeof lastAcceptedTimestampMs === 'number' &&
-      timestampMs - lastAcceptedTimestampMs < STEP_MIN_GAP_MS
+      lastCandidate &&
+      timestampMs - lastCandidate.timestampMs < STEP_MIN_GAP_MS
     ) {
-      if (currentMagnitude > magnitude(samples[index - 1]!.acceleration)) {
-        peakTimestampsMs[peakTimestampsMs.length - 1] = timestampMs
+      if (currentMagnitude > lastCandidate.magnitude) {
+        peakCandidates[peakCandidates.length - 1] = {
+          timestampMs,
+          magnitude: currentMagnitude
+        }
       }
       continue
     }
 
-    peakTimestampsMs.push(timestampMs)
+    peakCandidates.push({
+      timestampMs,
+      magnitude: currentMagnitude
+    })
   }
 
-  return peakTimestampsMs
+  return peakCandidates.map(candidate => candidate.timestampMs)
+}
+
+function computeProvisionalCadenceSpm(timestampsMs: number[]) {
+  const recentIntervalsMs: number[] = []
+
+  for (let index = timestampsMs.length - 1; index > 0; index -= 1) {
+    const intervalMs = timestampsMs[index]! - timestampsMs[index - 1]!
+    if (intervalMs < STEP_MIN_GAP_MS || intervalMs > STEP_MAX_GAP_MS) {
+      break
+    }
+    recentIntervalsMs.push(intervalMs)
+    if (recentIntervalsMs.length === 3) {
+      break
+    }
+  }
+
+  return recentIntervalsMs.length > 0
+    ? roundNumber(60_000 / average(recentIntervalsMs), 1)
+    : 0
+}
+
+function keepCadencedStepSequences(timestampsMs: number[]) {
+  const acceptedTimestamps: number[] = []
+  let sequenceStartIndex = 0
+
+  function acceptSequence(endIndex: number) {
+    if (endIndex - sequenceStartIndex + 1 < MIN_CONSECUTIVE_STEPS) {
+      return
+    }
+
+    acceptedTimestamps.push(...timestampsMs.slice(sequenceStartIndex, endIndex + 1))
+  }
+
+  for (let index = 1; index < timestampsMs.length; index += 1) {
+    const intervalMs = timestampsMs[index]! - timestampsMs[index - 1]!
+    if (intervalMs >= STEP_MIN_GAP_MS && intervalMs <= STEP_MAX_GAP_MS) {
+      continue
+    }
+
+    acceptSequence(index - 1)
+    sequenceStartIndex = index
+  }
+
+  acceptSequence(timestampsMs.length - 1)
+  return acceptedTimestamps
 }
 
 function magnitude(acceleration: SensorSample['acceleration']) {
@@ -354,6 +494,25 @@ function magnitude(acceleration: SensorSample['acceleration']) {
       acceleration.y * acceleration.y +
       acceleration.z * acceleration.z
   )
+}
+
+function computeSensorCoverage(samples: SensorSample[], durationSeconds: number) {
+  if (samples.length < 2) {
+    return 0
+  }
+
+  if (durationSeconds <= 0) {
+    return 1
+  }
+
+  const capturedDurationMs = samples.slice(1).reduce((total, sample, index) => {
+    const previousSample = samples[index]!
+    const gapMs = sample.timestampMs - previousSample.timestampMs
+    return gapMs > 0 && gapMs <= MAX_SENSOR_SAMPLE_GAP_MS
+      ? total + gapMs
+      : total
+  }, 0)
+  return clamp(capturedDurationMs / (durationSeconds * 1000), 0, 1)
 }
 
 function measureIntervalsMs(timestampsMs: number[]) {
@@ -417,17 +576,17 @@ function computeActiveClimbSeconds(timestampsMs: number[]) {
 }
 
 function computeConfidence(input: {
-  samples: SensorSample[]
+  sensorCoverage: number
   estimatedStepCount: number
   cadenceStability: number
   pauseCount: number
   completedIntervals: number
 }) {
-  if (input.samples.length === 0) {
+  if (input.sensorCoverage === 0) {
     return clamp(0.35 + input.completedIntervals * 0.12, 0, 0.72)
   }
 
-  const sampleCoverage = clamp(input.samples.length / 30, 0, 1)
+  const sampleCoverage = input.sensorCoverage
   const stepCoverage = clamp(input.estimatedStepCount / 6, 0, 1)
   const stabilityScore = input.cadenceStability
   const pausePenalty = Math.min(0.18, input.pauseCount * 0.12)
@@ -465,7 +624,13 @@ function buildSummary(input: {
   pauseCount: number
   activeClimbSeconds: number
   confidence: number
+  isEligibleForCompletion: boolean
+  completionAttempted: boolean
 }) {
+  if (input.completionAttempted && !input.isEligibleForCompletion) {
+    return '本轮传感器数据未覆盖足够的连续上楼动作，未计入训练完成；请保持手机稳定并连续上楼后重试。'
+  }
+
   if (input.estimatedStepCount === 0 || input.activeClimbSeconds === 0) {
     return '本次传感器检测到的动作偏少，楼梯节奏尚未形成，建议开始后连续抬腿并保持上楼动作。'
   }
@@ -496,6 +661,17 @@ function average(values: number[]) {
   return values.reduce((total, value) => total + value, 0) / values.length
 }
 
+function lowerQuantile(values: number[]) {
+  if (values.length === 0) {
+    return 0
+  }
+
+  const sortedValues = [...values].sort((left, right) => left - right)
+  const quantileIndex = Math.floor((sortedValues.length - 1) * 0.2)
+
+  return sortedValues[quantileIndex]!
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -506,33 +682,40 @@ function roundNumber(value: number, fractionDigits: number) {
 }
 
 function resolveUniMotionSensor(): UniMotionSensor {
-  if (typeof globalThis === 'undefined') {
-    return {}
-  }
-
-  const runtime = globalThis as typeof globalThis & {
-    uni?: unknown
-  }
-
-  return runtime.uni ? (runtime.uni as UniMotionSensor) : {}
+  // Use uni-app's injected runtime binding instead of globalThis.uni. The
+  // mp-weixin bundle exposes `uni` through its runtime bridge, but it is not
+  // guaranteed to be attached as a property on globalThis.
+  return typeof uni === 'undefined' ? {} : (uni as unknown as UniMotionSensor)
 }
 
 async function callUniSensorMethod(
   invoke: (callbacks: SensorMethodOptions) => unknown,
-  methodKind: SensorMethodKind = 'promise'
+  methodKind: SensorMethodKind = 'promise',
+  timeoutMs?: number,
+  timeoutMessage = 'Motion sensor operation timed out.'
 ) {
   await new Promise<void>((resolve, reject) => {
     let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     const settle = (action: 'resolve' | 'reject', error?: unknown) => {
       if (settled) {
         return
       }
       settled = true
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId)
+      }
       if (action === 'resolve') {
         resolve()
         return
       }
       reject(toSensorError(error))
+    }
+
+    if (methodKind === 'callback' && timeoutMs !== undefined) {
+      timeoutId = setTimeout(() => {
+        settle('reject', new Error(timeoutMessage))
+      }, timeoutMs)
     }
 
     let result: unknown

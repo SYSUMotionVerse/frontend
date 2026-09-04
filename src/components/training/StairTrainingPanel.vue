@@ -11,11 +11,13 @@ const props = defineProps<{
   confidence: number
   sensorStatus: 'ready' | 'collecting' | 'stopped' | 'unavailable'
   sampleCount: number
+  questionnaireNavigationState?: 'idle' | 'opening' | 'failed'
 }>()
 
 const emit = defineEmits<{
   start: []
   interrupt: []
+  continueQuestionnaire: []
 }>()
 
 type CurrentMetric = {
@@ -46,6 +48,14 @@ function resolveSensorStatusLabel(status: typeof props.sensorStatus) {
 }
 
 function resolveStatusHint() {
+  if (props.questionnaireNavigationState === 'failed') {
+    return '本轮训练已保存，请继续填写训练反馈。'
+  }
+
+  if (props.questionnaireNavigationState === 'opening') {
+    return '训练已完成，正在打开训练反馈。'
+  }
+
   if (props.sensorStatus === 'collecting') {
     return '保持连续上楼，系统正在记录你的节奏和步数。'
   }
@@ -62,6 +72,14 @@ function resolveStatusHint() {
 }
 
 function resolveRunStateLabel() {
+  if (props.questionnaireNavigationState === 'failed') {
+    return '等待填写反馈'
+  }
+
+  if (props.questionnaireNavigationState === 'opening') {
+    return '正在打开反馈'
+  }
+
   if (props.sensorStatus === 'stopped') {
     return '训练完成'
   }
@@ -85,6 +103,29 @@ const currentMetrics = computed<CurrentMetric[]>(() => [
 ])
 
 const sensorStatusClass = computed(() => `stair-panel__sensor-chip--${props.sensorStatus}`)
+const isPrimaryActionDisabled = computed(() =>
+  props.isRunning || props.questionnaireNavigationState === 'opening'
+)
+const primaryActionLabel = computed(() => {
+  if (props.questionnaireNavigationState === 'failed') {
+    return '继续填写反馈'
+  }
+
+  if (props.questionnaireNavigationState === 'opening') {
+    return '正在打开反馈'
+  }
+
+  return props.isRunning ? '训练进行中' : '开始 30 秒训练'
+})
+
+function handlePrimaryAction() {
+  if (props.questionnaireNavigationState === 'failed') {
+    emit('continueQuestionnaire')
+    return
+  }
+
+  emit('start')
+}
 </script>
 
 <template>
@@ -132,14 +173,14 @@ const sensorStatusClass = computed(() => `stair-panel__sensor-chip--${props.sens
       <view class="stair-panel__actions">
         <button
           class="stair-panel__primary-action"
-          :class="{ 'stair-panel__primary-action--disabled': isRunning }"
+          :class="{ 'stair-panel__primary-action--disabled': isPrimaryActionDisabled }"
           type="button"
           form-type="button"
           hover-class="stair-panel__primary-action--pressed"
-          :disabled="isRunning"
-          @click="emit('start')"
+          :disabled="isPrimaryActionDisabled"
+          @click="handlePrimaryAction"
         >
-          <text>{{ isRunning ? '训练进行中' : '开始 30 秒训练' }}</text>
+          <text>{{ primaryActionLabel }}</text>
         </button>
 
         <button

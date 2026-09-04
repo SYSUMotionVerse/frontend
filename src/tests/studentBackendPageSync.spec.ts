@@ -328,6 +328,8 @@ describe('page-level backend sync wiring', () => {
         estimatedFloorsPerMin: 0,
         pauseCount: 0,
         confidence: 0,
+        sensorCoverage: 0,
+        isEligibleForCompletion: false,
         completedIntervals: 0,
         durationSeconds: 0
       }
@@ -352,6 +354,8 @@ describe('page-level backend sync wiring', () => {
         estimatedFloorsPerMin: 2.73,
         pauseCount: 0,
         confidence: 0.88,
+        sensorCoverage: 1,
+        isEligibleForCompletion: true,
         completedIntervals: 1,
         durationSeconds: 30
       }
@@ -2770,18 +2774,220 @@ describe('page-level backend sync wiring', () => {
         durationSeconds: 30,
         summary: expect.objectContaining({
           estimatedStepCount: 64,
-          cadenceSpmAvg: 128,
-          estimatedVerticalSpeedMps: 0.41
+          cadenceSpmAvg: 128
         })
       })
     )
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
+    expect(studentBackendSync.syncStairSession.mock.calls[0]?.[0]?.summary).not.toHaveProperty(
+      'estimatedVerticalSpeedMps'
+    )
+    expect(studentBackendSync.syncStairSession.mock.calls[0]?.[0]?.summary).not.toHaveProperty(
+      'estimatedFloorsPerMin'
+    )
     expect(store.completeTrainingSession).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: expect.stringMatching(/^stairs-/) })
     )
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
     })
+  })
+
+  it('continues to the questionnaire when completion feedback fails', async () => {
+    vi.useFakeTimers()
+    notifyTrainingComplete.mockRejectedValueOnce(new Error('audio unavailable'))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
+    }))
+  })
+
+  it('lets the participant retry short-questionnaire navigation after it fails', async () => {
+    vi.useFakeTimers()
+    currentUni().redirectTo.mockRejectedValueOnce(new Error('navigation unavailable'))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+
+    await wrapper.get('.stair-panel__primary-action').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('继续填写反馈')
+    currentUni().redirectTo.mockResolvedValueOnce(undefined)
+    await wrapper.get('.stair-panel__primary-action').trigger('click')
+    await flushPromises()
+
+    expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
+  })
+
+  it('records an unqualified sensor session without awarding training completion', async () => {
+    vi.useFakeTimers()
+    stairSensorCaptureSession.stop.mockResolvedValueOnce({
+      samples: [],
+      latestGyroscope: null,
+      analysis: {
+        qualityScore: 40,
+        summary: '本轮传感器数据未覆盖足够的连续上楼动作，未计入训练完成；请保持手机稳定并连续上楼后重试。',
+        capturedBy: 'sensor',
+        estimatedStepCount: 7,
+        activeClimbSeconds: 3,
+        cadenceSpmAvg: 14,
+        provisionalCadenceSpm: 120,
+        cadenceSpmPeak: 120,
+        cadenceStability: 1,
+        estimatedVerticalSpeedMps: 0.4,
+        estimatedFloorsPerMin: 0.24,
+        pauseCount: 0,
+        confidence: 0.35,
+        sensorCoverage: 0.13,
+        isEligibleForCompletion: false,
+        completedIntervals: 0,
+        durationSeconds: 30
+      }
+    })
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
+      completedIntervals: 0,
+      qualityScore: 40
+    }))
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
+      countsAsCompletion: false
+    }))
+  })
+
+  it('opens the questionnaire without waiting for a slow stair upload', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.syncStairSession.mockReturnValue(new Promise(() => {}))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
+    }))
+  })
+
+  it('stops a capture that resolves after the stair page unmounts', async () => {
+    const pendingCapture: {
+      resolve: ((session: typeof stairSensorCaptureSession) => void) | null
+    } = {
+      resolve: null
+    }
+    startStairSensorCapture.mockReturnValue(new Promise(resolve => {
+      pendingCapture.resolve = resolve
+    }))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    wrapper.unmount()
+    pendingCapture.resolve?.(stairSensorCaptureSession)
+    await flushPromises()
+
+    expect(stairSensorCaptureSession.stop).toHaveBeenCalledWith({
+      durationSeconds: 0,
+      completedIntervals: 0
+    })
+    expect(stairSensorCaptureSession.getSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('completes the stair flow when sensor shutdown rejects', async () => {
+    vi.useFakeTimers()
+    stairSensorCaptureSession.stop.mockRejectedValueOnce(new Error('shutdown failed'))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
+    }))
   })
 
   it('does not record a stair session when motion sensors cannot start', async () => {

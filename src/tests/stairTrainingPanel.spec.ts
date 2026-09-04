@@ -74,6 +74,21 @@ describe('stair training panel', () => {
     expect(wrapper.emitted('interrupt')).toHaveLength(1)
   })
 
+  it('offers a retry action when questionnaire navigation fails', async () => {
+    const wrapper = mountPanel({
+      isRunning: false,
+      sensorStatus: 'stopped',
+      questionnaireNavigationState: 'failed'
+    })
+
+    expect(wrapper.text()).toContain('继续填写反馈')
+    expect(wrapper.text()).toContain('本轮训练已保存')
+    await wrapper.get('.stair-panel__primary-action').trigger('click')
+
+    expect(wrapper.emitted('continueQuestionnaire')).toHaveLength(1)
+    expect(wrapper.emitted('start')).toBeUndefined()
+  })
+
   it('stops an active sensor capture when the page hides instead of waiting for unmount', () => {
     const pageSource = readFileSync(
       resolve(process.cwd(), 'src/uni-app/pages/training/stair-session.vue'),
@@ -102,6 +117,18 @@ describe('stair training panel', () => {
     expect(stopSource).toContain('secondsLeft.value = 30')
     expect(stopSource).toContain("sensorStatus.value = 'ready'")
     expect(stopSource).toContain('resetLiveMetrics()')
+  })
+
+  it('updates provisional cadence twice per second without leaving a live timer behind', () => {
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/pages/training/stair-session.vue'),
+      'utf8'
+    )
+
+    expect(pageSource).toContain('const LIVE_METRICS_INTERVAL_MS = 500')
+    expect(pageSource).toContain('analysis.provisionalCadenceSpm')
+    expect(pageSource).toContain('liveMetricsTimerId = setInterval(refreshLiveSnapshot, LIVE_METRICS_INTERVAL_MS)')
+    expect(pageSource).toContain('clearInterval(liveMetricsTimerId)')
   })
 
   it('stretches the stair session card to consume the available page height above the dock', () => {
@@ -138,7 +165,7 @@ describe('stair training panel', () => {
     expect(panelSource).not.toContain('radial-gradient(')
     expect(panelSource).not.toContain('linear-gradient(')
     expect(panelSource).not.toContain('stair-panel__hero-mark')
-    expect(panelSource).toContain("'stair-panel__primary-action--disabled': isRunning")
+    expect(panelSource).toContain("'stair-panel__primary-action--disabled': isPrimaryActionDisabled")
     expect(panelSource).not.toContain('.stair-panel__primary-action[disabled]')
     expect(panelSource).not.toContain('height: calc(100vh - 272rpx);')
   })

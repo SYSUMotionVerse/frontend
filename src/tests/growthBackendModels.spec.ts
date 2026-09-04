@@ -47,7 +47,7 @@ describe('growth backend read models', () => {
             },
             acceleration_data: {
               qualityScore: 81,
-              summary: '节奏稳定。'
+              summaryText: '节奏稳定。'
             },
             created_at: '2026-04-11T11:00:00Z'
           }
@@ -87,6 +87,22 @@ describe('growth backend read models', () => {
         }
       }
     ])
+  })
+
+  it('keeps legacy stair summaries readable', async () => {
+    const { mapBackendTrainingHistory } = await import('../uni-app/api/growthBackendModels')
+
+    expect(
+      mapBackendTrainingHistory([], [{
+        id: 3,
+        duration: 26,
+        speed_data: null,
+        acceleration_data: {
+          summary: '旧版楼梯训练摘要。'
+        },
+        created_at: '2026-04-12T10:00:00Z'
+      }])
+    ).toEqual([expect.objectContaining({ summary: '旧版楼梯训练摘要。' })])
   })
 
   it('preserves unavailable scores instead of turning them into zeroes', async () => {

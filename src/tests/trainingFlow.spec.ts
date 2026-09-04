@@ -212,7 +212,7 @@ describe('student training and adherence flow', () => {
     expect(nextState.sessions[0]?.analysis.qualityScore).toBe(22)
   })
 
-  it('records stair sessions through the sensor adapter after the timer flow', async () => {
+  it('withholds stair completion credit when the timer flow has no sensor evidence', async () => {
     const { completeGuidedSession } = await loadTrainingModule()
     const state = createInitialStudentState()
 
@@ -224,14 +224,17 @@ describe('student training and adherence flow', () => {
       modality: 'stair',
       qualityScore: analysis.qualityScore,
       summary: analysis.summary,
-      capturedBy: analysis.capturedBy
+      capturedBy: analysis.capturedBy,
+      countsAsCompletion: analysis.isEligibleForCompletion
     })
 
     expect(analysis.capturedBy).toBe('sensor')
-    expect(analysis.completedIntervals).toBe(1)
+    expect(analysis.completedIntervals).toBe(0)
+    expect(analysis.isEligibleForCompletion).toBe(false)
     expect(analysis.estimatedStepCount).toBeGreaterThanOrEqual(0)
     expect(analysis.confidence).toBeGreaterThanOrEqual(0)
     expect(nextState.sessions[0]?.completed).toBe(true)
+    expect(nextState.sessions[0]?.validCheckInApplied).toBe(false)
     expect(nextState.sessions[0]?.analysis.capturedBy).toBe('sensor')
     expect(nextState.sessions[0]?.analysis.qualityScore).toBe(analysis.qualityScore)
   })

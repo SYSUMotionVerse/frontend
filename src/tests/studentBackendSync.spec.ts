@@ -534,6 +534,37 @@ describe('student backend sync orchestration', () => {
     )
   })
 
+  it('attempts the live stair upload when durable queue storage is unavailable', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    pending.store.save.mockImplementationOnce(() => {
+      throw new Error('storage quota exceeded')
+    })
+    const createStairsRecord = vi.fn().mockResolvedValue({ id: 21 })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        createStairsRecord
+      },
+      {},
+      { pendingSubmissions: pending.store }
+    )
+
+    await expect(sync.syncStairSession({
+      sessionId: 'stairs-storage-fallback',
+      durationSeconds: 30,
+      completedIntervals: 1,
+      qualityScore: 80,
+      summary: '完成训练。'
+    })).resolves.toEqual({ synced: true })
+
+    expect(createStairsRecord).toHaveBeenCalledWith(expect.objectContaining({
+      training_session_id: 'stairs-storage-fallback'
+    }))
+    expect(pending.store.remove).not.toHaveBeenCalled()
+  })
+
   it('replays an ambiguous visual POST with the exact durable session payload', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const pending = createPendingSubmissionStore()

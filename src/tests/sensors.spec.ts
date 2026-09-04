@@ -47,6 +47,78 @@ function createPausedClimbSamples(): SensorSample[] {
   })
 }
 
+function createModerateClimbSamples(baseMagnitude: number): SensorSample[] {
+  const stepTimesMs = [400, 900, 1400, 1900, 2400, 2900, 3400]
+  const peakMagnitude = baseMagnitude * 1.06
+
+  return Array.from({ length: 41 }, (_, index) => {
+    const timestampMs = index * 100
+    const hasStepPeak = stepTimesMs.some(stepTimeMs => Math.abs(stepTimeMs - timestampMs) <= 100)
+    const magnitude = hasStepPeak ? peakMagnitude : baseMagnitude + (index % 2 === 0 ? 0.01 : -0.01)
+
+    return {
+      timestampMs,
+      acceleration: {
+        x: magnitude,
+        y: 0,
+        z: 0
+      }
+    }
+  })
+}
+
+function createGappedClimbSamples(): SensorSample[] {
+  const stepTimesMs = Array.from({ length: 25 }, (_, index) => 400 + index * 500)
+  const activeSamples = Array.from({ length: 131 }, (_, index) => {
+    const timestampMs = index * 100
+    const hasStepPeak = stepTimesMs.some(stepTimeMs => Math.abs(stepTimeMs - timestampMs) <= 100)
+    return {
+      timestampMs,
+      acceleration: { x: hasStepPeak ? 13.2 : 9.81, y: 0, z: 0 }
+    }
+  })
+
+  return [...activeSamples, {
+    timestampMs: 30_000,
+    acceleration: { x: 9.81, y: 0, z: 0 }
+  }]
+}
+
+function createClosePeakSamples(): SensorSample[] {
+  const peakMagnitudes = new Map([
+    [400, 14],
+    [600, 12],
+    [900, 14],
+    [1400, 14],
+    [1900, 14]
+  ])
+
+  return Array.from({ length: 23 }, (_, index) => {
+    const timestampMs = index * 100
+    return {
+      timestampMs,
+      acceleration: {
+        x: peakMagnitudes.get(timestampMs) ?? 9.81,
+        y: 0,
+        z: 0
+      }
+    }
+  })
+}
+
+function createStationaryJitterSamples(): SensorSample[] {
+  const magnitudes = [9.81, 9.96, 9.72, 10.12, 9.58, 10.18, 9.74, 9.99, 9.67, 10.08]
+
+  return Array.from({ length: 61 }, (_, index) => ({
+    timestampMs: index * 100,
+    acceleration: {
+      x: magnitudes[index % magnitudes.length]!,
+      y: 0,
+      z: 0
+    }
+  }))
+}
+
 function createStaticSamples(durationMs: number): SensorSample[] {
   return Array.from({ length: durationMs / 100 + 1 }, (_, index) => ({
     timestampMs: index * 100,
@@ -118,6 +190,7 @@ function installUniSensorMock(): UniSensorMock {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -139,6 +212,33 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.qualityScore).toBeLessThan(45)
   })
 
+  it('does not turn stationary sensor jitter into steps', () => {
+    const analysis = createSensorSessionAnalysis({
+      samples: createStationaryJitterSamples(),
+      completedIntervals: 0
+    })
+
+    expect(analysis.estimatedStepCount).toBe(0)
+    expect(analysis.activeClimbSeconds).toBe(0)
+  })
+
+  it('rejects an isolated motion spike without a step cadence', () => {
+    const samples = createStaticSamples(3000).map(sample =>
+      sample.timestampMs === 1000
+        ? {
+            ...sample,
+            acceleration: { x: 14, y: 0, z: 0 }
+          }
+        : sample
+    )
+    const analysis = createSensorSessionAnalysis({
+      samples,
+      completedIntervals: 0
+    })
+
+    expect(analysis.estimatedStepCount).toBe(0)
+  })
+
   it('recognizes a stable climb pattern with high cadence stability', () => {
     const analysis = createSensorSessionAnalysis({
       samples: createStableClimbSamples(),
@@ -156,6 +256,62 @@ describe('createSensorSessionAnalysis', () => {
     expect(analysis.confidence).toBeGreaterThan(0.7)
     expect(analysis.summary).toContain('节奏稳定')
     expect(analysis.qualityScore).toBeGreaterThanOrEqual(75)
+  })
+
+  it('withholds completion credit when a 30-second session lacks sensor coverage', () => {
+    const analysis = createSensorSessionAnalysis({
+      samples: createStableClimbSamples(),
+      durationSeconds: 30,
+      completedIntervals: 1
+    })
+
+    expect(analysis.sensorCoverage).toBeLessThan(0.2)
+    expect(analysis.isEligibleForCompletion).toBe(false)
+    expect(analysis.completedIntervals).toBe(0)
+    expect(analysis.qualityScore).toBeLessThanOrEqual(40)
+  })
+
+  it('withholds completion credit when sensor samples contain a long gap', () => {
+    const analysis = createSensorSessionAnalysis({
+      samples: createGappedClimbSamples(),
+      durationSeconds: 30,
+      completedIntervals: 1
+    })
+
+    expect(analysis.sensorCoverage).toBeLessThan(0.5)
+    expect(analysis.isEligibleForCompletion).toBe(false)
+  })
+
+  it('keeps the stronger peak when two candidates are too close together', () => {
+    const analysis = createSensorSessionAnalysis({
+      samples: createClosePeakSamples(),
+      completedIntervals: 1
+    })
+
+    expect(analysis.estimatedStepCount).toBe(4)
+    expect(analysis.provisionalCadenceSpm).toBe(120)
+  })
+
+  it('reports provisional cadence before final step confirmation', () => {
+    const analysis = createSensorSessionAnalysis({
+      samples: createStableClimbSamples().filter(sample => sample.timestampMs <= 1200),
+      completedIntervals: 0
+    })
+
+    expect(analysis.estimatedStepCount).toBe(0)
+    expect(analysis.cadenceSpmAvg).toBe(0)
+    expect(analysis.provisionalCadenceSpm).toBe(120)
+  })
+
+  it('detects moderate peaks across acceleration unit scales', () => {
+    for (const baseMagnitude of [9.81, 1]) {
+      const analysis = createSensorSessionAnalysis({
+        samples: createModerateClimbSamples(baseMagnitude),
+        completedIntervals: 1
+      })
+
+      expect(analysis.estimatedStepCount, `base=${baseMagnitude}`).toBe(7)
+    }
   })
 
   it('detects a pause inside a climb session and lowers stability', () => {
@@ -250,6 +406,35 @@ describe('startStairSensorCapture', () => {
     nowSpy.mockRestore()
   })
 
+  it('captures stairs when gyroscope APIs are unavailable', async () => {
+    const capturedHandlers: {
+      accelerometer: ((sample: { x: number; y: number; z: number }) => void) | null
+    } = {
+      accelerometer: null
+    }
+    const uniMock = {
+      startAccelerometer: vi.fn((options: { success?: () => void }) => options.success?.()),
+      stopAccelerometer: vi.fn((options: { success?: () => void }) => options.success?.()),
+      onAccelerometerChange: vi.fn((handler: typeof capturedHandlers.accelerometer) => {
+        capturedHandlers.accelerometer = handler
+      }),
+      offAccelerometerChange: vi.fn(() => {
+        capturedHandlers.accelerometer = null
+      })
+    }
+    vi.stubGlobal('uni', uniMock)
+
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+
+    capturedHandlers.accelerometer?.({ x: 13.2, y: 0, z: 0 })
+    const result = await session.stop()
+
+    expect(result.samples).toHaveLength(1)
+    expect(result.latestGyroscope).toBeNull()
+    expect(uniMock.startAccelerometer).toHaveBeenCalledTimes(1)
+    expect(uniMock.stopAccelerometer).toHaveBeenCalledTimes(1)
+  })
+
   it('degrades safely when uni motion sensor APIs are unavailable', async () => {
     vi.stubGlobal('uni', {})
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(3000)
@@ -259,6 +444,48 @@ describe('startStairSensorCapture', () => {
     })).rejects.toThrow('Motion sensor APIs are unavailable.')
 
     nowSpy.mockRestore()
+  })
+
+  it('times out a sensor start that never settles and cleans up listeners', async () => {
+    vi.useFakeTimers()
+    const uniMock = {
+      startAccelerometer: vi.fn(),
+      stopAccelerometer: vi.fn((options: { success?: () => void }) => options.success?.()),
+      onAccelerometerChange: vi.fn(),
+      offAccelerometerChange: vi.fn(),
+      startGyroscope: vi.fn(),
+      stopGyroscope: vi.fn((options: { success?: () => void }) => options.success?.()),
+      onGyroscopeChange: vi.fn(),
+      offGyroscopeChange: vi.fn()
+    }
+    vi.stubGlobal('uni', uniMock)
+
+    const capture = startStairSensorCapture({ completedIntervals: 0 })
+    const timedOut = expect(capture).rejects.toThrow('Motion sensor startup timed out.')
+
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    await timedOut
+    expect(uniMock.offAccelerometerChange).toHaveBeenCalledTimes(1)
+    expect(uniMock.offGyroscopeChange).toHaveBeenCalledTimes(1)
+    expect(uniMock.stopAccelerometer).toHaveBeenCalledTimes(1)
+    expect(uniMock.stopGyroscope).toHaveBeenCalledTimes(1)
+  })
+
+  it('times out a sensor stop that never settles after cleanup', async () => {
+    vi.useFakeTimers()
+    const uniMock = installUniSensorMock()
+    uniMock.stopAccelerometer.mockImplementation(() => undefined)
+    uniMock.stopGyroscope.mockImplementation(() => undefined)
+
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+    const stop = expect(session.stop()).rejects.toThrow('Motion sensor shutdown timed out.')
+
+    await vi.advanceTimersByTimeAsync(2_000)
+    await stop
+
+    expect(uniMock.offAccelerometerChange).toHaveBeenCalledTimes(1)
+    expect(uniMock.offGyroscopeChange).toHaveBeenCalledTimes(1)
   })
 
   it('rejects when a callback-style sensor start reports failure and cleans up listeners', async () => {

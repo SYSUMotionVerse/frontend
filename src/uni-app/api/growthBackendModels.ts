@@ -84,15 +84,19 @@ export function mapBackendTrainingHistory(
 
   const stairSessions = stairRecords.map(record => {
     const score = toNullableNumber(record.acceleration_data?.qualityScore)
+    const summaryText = record.acceleration_data?.summaryText
+    const legacySummary = record.acceleration_data?.summary
     return {
       createdAt: record.completed_at || record.created_at,
       id: record.training_session_id || `stair-${record.id}`,
       modality: 'stair' as const,
       date: formatDate(record.completed_at || record.created_at),
       durationSeconds: record.duration,
-      summary: typeof record.acceleration_data?.summary === 'string'
-        ? record.acceleration_data.summary
-        : '已完成楼梯训练。',
+      summary: typeof summaryText === 'string'
+        ? summaryText
+        : typeof legacySummary === 'string'
+          ? legacySummary
+          : '已完成楼梯训练。',
       qualityScore: score === null ? null : Math.round(score)
     }
   })
