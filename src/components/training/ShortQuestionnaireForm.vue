@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 
 type RatingField = 'feelingScale' | 'feltArousalScale'
 type SubmissionStatus = 'idle' | 'error' | 'saved-locally' | 'submitted'
@@ -24,8 +25,8 @@ const props = withDefaults(defineProps<{
 })
 
 const form = reactive({
-  feelingScale: null as number | null,
-  feltArousalScale: null as number | null
+  feelingScale: 0,
+  feltArousalScale: 3
 })
 
 const questionSections: Array<{
@@ -36,7 +37,6 @@ const questionSections: Array<{
   values: number[]
   lowLabel: string
   highLabel: string
-  neutralValue: number
 }> = [
   {
     field: 'feelingScale',
@@ -45,8 +45,7 @@ const questionSections: Array<{
     hint: '选择最符合你此刻运动感受的一项',
     values: Array.from({ length: 11 }, (_, index) => index - 5),
     lowLabel: '非常糟糕',
-    highLabel: '非常好',
-    neutralValue: 0
+    highLabel: '非常好'
   },
   {
     field: 'feltArousalScale',
@@ -55,15 +54,10 @@ const questionSections: Array<{
     hint: '选择最符合你此刻激活程度的一项',
     values: [1, 2, 3, 4, 5, 6],
     lowLabel: '低唤醒',
-    highLabel: '高唤醒',
-    neutralValue: 3
+    highLabel: '高唤醒'
   }
 ]
 
-const completedCount = computed(() => (
-  questionSections.filter(section => form[section.field] !== null).length
-))
-const isComplete = computed(() => completedCount.value === questionSections.length)
 const hasPersistentStatusMessage = computed(() => (
   !isOpeningFeedback.value
   && props.status !== 'idle'
@@ -81,18 +75,15 @@ const isFormLocked = computed(() => (
   || isFeedbackRecovery.value
 ))
 const primaryDisabled = computed(() => (
-  !isComplete.value
-  || props.submitting
+  props.submitting
   || isTerminalStatus.value
   || isOpeningFeedback.value
 ))
-const completionLabel = computed(() => `已完成 ${completedCount.value}/2 项`)
+const showPrimaryLoading = computed(() => props.submitting || isOpeningFeedback.value)
 const primaryLabel = computed(() => {
-  if (isOpeningFeedback.value) return '正在打开训练反馈…'
   if (isFeedbackRecovery.value) return '重新打开训练反馈'
-  if (props.submitting) return '正在保存反馈…'
+  if (showPrimaryLoading.value) return '正在提交'
   if (props.status === 'error') return '重新提交反馈'
-  if (!isComplete.value) return `完成 ${completedCount.value}/2 项后提交`
   return '提交并查看反馈'
 })
 const statusLabel = computed(() => (
@@ -108,25 +99,17 @@ function handleFieldChange(field: RatingField, value: number) {
   form[field] = value
 }
 
-function sliderValue(field: RatingField, fallback: number) {
-  return form[field] ?? fallback
-}
-
 function handleSliderChange(field: RatingField, event: { detail?: { value?: number } }) {
   const value = Number(event.detail?.value)
   if (Number.isFinite(value)) handleFieldChange(field, value)
-}
-
-function scoreLabel(field: RatingField) {
-  return form[field] !== null ? `已选 ${form[field]} 分` : '未选择'
 }
 
 function handleSubmit() {
   if (primaryDisabled.value) return
 
   emit('submit', {
-    feelingScale: form.feelingScale as number,
-    feltArousalScale: form.feltArousalScale as number
+    feelingScale: form.feelingScale,
+    feltArousalScale: form.feltArousalScale
   })
 }
 </script>
@@ -143,28 +126,27 @@ function handleSubmit() {
       <text class="short-questionnaire-form__copy">两个问题，约 20 秒。请按此刻的真实感受选择。</text>
     </view>
 
-    <view class="short-questionnaire-form__questions">
-      <view
-        v-for="section in questionSections"
-        :key="section.field"
-        class="short-questionnaire-form__question"
-      >
-        <view class="short-questionnaire-form__question-head">
-          <view class="short-questionnaire-form__question-copy">
-            <text class="short-questionnaire-form__question-index">{{ section.index }}</text>
-            <view class="short-questionnaire-form__question-text">
-              <text class="short-questionnaire-form__question-title">{{ section.title }}</text>
-              <text class="short-questionnaire-form__question-hint">{{ section.hint }}</text>
-            </view>
+    <view
+      v-for="section in questionSections"
+      :key="section.field"
+      class="short-questionnaire-form__question"
+    >
+      <view class="short-questionnaire-form__question-head">
+        <view class="short-questionnaire-form__question-copy">
+          <text class="short-questionnaire-form__question-index">{{ section.index }}</text>
+          <view class="short-questionnaire-form__question-text">
+            <text class="short-questionnaire-form__question-title">{{ section.title }}</text>
+            <text class="short-questionnaire-form__question-hint">{{ section.hint }}</text>
           </view>
-          <text class="short-questionnaire-form__question-score">{{ scoreLabel(section.field) }}</text>
         </view>
+      </view>
 
+      <view class="short-questionnaire-form__scale-group">
         <view class="short-questionnaire-form__scale">
           <view class="short-questionnaire-form__ticks" aria-hidden="true">
             <view
-            v-for="value in section.values"
-            :key="value"
+              v-for="value in section.values"
+              :key="value"
               class="short-questionnaire-form__tick"
               :class="{ 'short-questionnaire-form__tick--selected': form[section.field] === value }"
             >
@@ -177,7 +159,7 @@ function handleSubmit() {
             :min="section.values[0]"
             :max="section.values[section.values.length - 1]"
             :step="1"
-            :value="sliderValue(section.field, section.neutralValue)"
+            :value="form[section.field]"
             :disabled="isFormLocked"
             active-color="#ff8b8b"
             background-color="#e8e0d7"
@@ -196,58 +178,55 @@ function handleSubmit() {
     </view>
 
     <view
-      class="short-questionnaire-form__actions"
-      :class="{ 'short-questionnaire-form__actions--submitted': isOpeningFeedback }"
+      v-if="hasPersistentStatusMessage"
+      class="short-questionnaire-form__feedback-slot"
     >
-      <view class="short-questionnaire-form__feedback-slot">
-        <text
-          v-if="isOpeningFeedback"
-          class="short-questionnaire-form__handoff"
-          aria-live="polite"
-        >
-          {{ props.statusMessage || '反馈已保存，正在打开训练反馈…' }}
-        </text>
-        <view
-          v-else-if="hasPersistentStatusMessage"
-          class="short-questionnaire-form__status"
-          :class="`short-questionnaire-form__status--${props.status}`"
-          aria-live="polite"
-        >
-          <text class="short-questionnaire-form__status-label">{{ statusLabel }}</text>
-          <text class="short-questionnaire-form__status-copy">{{ props.statusMessage }}</text>
-        </view>
-
-        <text v-else class="short-questionnaire-form__completion">{{ completionLabel }}</text>
+      <view
+        class="short-questionnaire-form__status"
+        :class="`short-questionnaire-form__status--${props.status}`"
+        aria-live="polite"
+      >
+        <text class="short-questionnaire-form__status-label">{{ statusLabel }}</text>
+        <text class="short-questionnaire-form__status-copy">{{ props.statusMessage }}</text>
       </view>
-
-      <button
-        v-if="isTerminalStatus"
-        class="short-questionnaire-form__primary-action"
-        type="button"
-        hover-class="short-questionnaire-form__primary-action--pressed"
-        @click="emit('goHome')"
-      >
-        <text>返回训练首页</text>
-      </button>
-      <button
-        v-else-if="isFeedbackRecovery"
-        class="short-questionnaire-form__primary-action"
-        type="button"
-        hover-class="short-questionnaire-form__primary-action--pressed"
-        @click="emit('openFeedback')"
-      >
-        <text>{{ primaryLabel }}</text>
-      </button>
-      <button
-        v-else
-        class="short-questionnaire-form__primary-action"
-        form-type="submit"
-        :disabled="primaryDisabled"
-        hover-class="short-questionnaire-form__primary-action--pressed"
-      >
-        <text>{{ primaryLabel }}</text>
-      </button>
     </view>
+
+    <button
+      v-if="isTerminalStatus"
+      class="short-questionnaire-form__primary-action"
+      type="button"
+      hover-class="short-questionnaire-form__primary-action--pressed"
+      @click="emit('goHome')"
+    >
+      <text>返回训练首页</text>
+    </button>
+    <button
+      v-else-if="isFeedbackRecovery"
+      class="short-questionnaire-form__primary-action"
+      type="button"
+      hover-class="short-questionnaire-form__primary-action--pressed"
+      @click="emit('openFeedback')"
+    >
+      <text>{{ primaryLabel }}</text>
+    </button>
+    <button
+      v-else
+      class="short-questionnaire-form__primary-action"
+      form-type="submit"
+      :disabled="primaryDisabled"
+      hover-class="short-questionnaire-form__primary-action--pressed"
+    >
+      <view class="short-questionnaire-form__primary-content">
+        <text>{{ primaryLabel }}</text>
+        <view
+          v-if="showPrimaryLoading"
+          class="short-questionnaire-form__primary-spinner"
+          aria-hidden="true"
+        >
+          <uni-icons type="spinner-cycle" size="20" color="#fffaf4" />
+        </view>
+      </view>
+    </button>
   </form>
 </template>
 
@@ -261,7 +240,7 @@ function handleSubmit() {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 28rpx;
+  gap: 0;
   box-sizing: border-box;
   color: var(--checkin-ink);
 }
@@ -275,6 +254,7 @@ function handleSubmit() {
   border-radius: 28rpx;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
+  margin-bottom: 32rpx;
 }
 
 .short-questionnaire-form__eyebrow {
@@ -301,12 +281,6 @@ function handleSubmit() {
   line-height: 1.55;
 }
 
-.short-questionnaire-form__questions {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
-}
-
 .short-questionnaire-form__question {
   display: flex;
   flex-direction: column;
@@ -316,13 +290,13 @@ function handleSubmit() {
   border-radius: 28rpx;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8rpx 20rpx rgba(71, 56, 39, 0.04);
+  margin-bottom: 32rpx;
 }
 
-.short-questionnaire-form__question-head,
-.short-questionnaire-form__question-copy {
+.short-questionnaire-form__question-head {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .short-questionnaire-form__question-head {
@@ -331,17 +305,20 @@ function handleSubmit() {
 }
 
 .short-questionnaire-form__question-copy {
+  display: flex;
+  min-width: 0;
   flex: 1;
-  gap: 16rpx;
+  align-items: center;
+  gap: 18rpx;
 }
 
 .short-questionnaire-form__question-index {
-  padding-top: 3rpx;
+  flex: none;
   color: #8f5e4c;
-  font-size: 21rpx;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1.25;
+  font-size: 34rpx;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .short-questionnaire-form__question-text {
@@ -358,20 +335,17 @@ function handleSubmit() {
   line-height: 1.3;
 }
 
-.short-questionnaire-form__question-hint,
-.short-questionnaire-form__question-score {
+.short-questionnaire-form__question-hint {
   color: var(--checkin-muted);
   font-size: 22rpx;
   font-weight: 700;
   line-height: 1.4;
 }
 
-.short-questionnaire-form__question-score {
-  flex: none;
-  padding-top: 4rpx;
-  color: #4f6670;
-  text-align: right;
-  white-space: nowrap;
+.short-questionnaire-form__scale-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
 }
 
 .short-questionnaire-form__scale {
@@ -419,56 +393,31 @@ function handleSubmit() {
 }
 
 .short-questionnaire-form__slider {
-  width: 100%;
-  margin: -6rpx 0 0;
+  width: calc(100% - 56rpx);
+  margin: -6rpx 28rpx 0;
 }
 
 .short-questionnaire-form__scale-labels {
   display: flex;
   justify-content: space-between;
   color: var(--checkin-muted);
-  font-size: 21rpx;
-  font-weight: 700;
+  padding: 0 2rpx;
+  font-size: 25rpx;
+  font-weight: 800;
 }
 
 .short-questionnaire-form__primary-action::after {
   display: none;
 }
 
-.short-questionnaire-form__actions {
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-  padding: 28rpx 32rpx 32rpx;
-  border: 2rpx solid rgba(255, 211, 132, 0.28);
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.94);
-  transition: background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.short-questionnaire-form__actions--submitted {
-  background: #edf5ef;
-}
-
 .short-questionnaire-form__feedback-slot {
   min-height: 32rpx;
-}
-
-.short-questionnaire-form__completion {
-  display: block;
-  color: var(--checkin-muted);
-  font-size: 23rpx;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.short-questionnaire-form__handoff {
-  display: block;
-  color: #286743;
-  font-size: 23rpx;
-  font-weight: 700;
-  line-height: 1.35;
-  animation: short-questionnaire-form__handoff-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding: 20rpx 22rpx;
+  border: 2rpx solid rgba(255, 211, 132, 0.28);
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.94);
+  transition: background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  margin-bottom: 32rpx;
 }
 
 .short-questionnaire-form__status {
@@ -512,9 +461,10 @@ function handleSubmit() {
   justify-content: center;
   margin: 0;
   padding: 0 24rpx;
-  border: 2rpx solid var(--checkin-ink);
+  border: 2rpx solid #ff7777;
   border-radius: 9999px;
-  background: var(--checkin-ink);
+  background: #ff7777;
+  box-shadow: 0 8rpx 0 #de7272;
   box-sizing: border-box;
   color: #fffaf4;
   font-size: 29rpx;
@@ -528,31 +478,39 @@ function handleSubmit() {
 }
 
 .short-questionnaire-form__primary-action--pressed {
-  background: #1e2a36;
+  border-color: #e96565;
+  background: #e96565;
+  box-shadow: 0 4rpx 0 #c75f5f;
+  transform: translateY(4rpx);
+}
+
+.short-questionnaire-form__primary-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+}
+
+.short-questionnaire-form__primary-spinner {
+  display: inline-flex;
+  width: 40rpx;
+  height: 40rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  animation: short-questionnaire-form-spin 900ms linear infinite;
 }
 
 .short-questionnaire-form__primary-action[disabled] {
-  border-color: #90999f;
-  background: #90999f;
-  color: #f7f2ea;
-}
-
-.short-questionnaire-form__actions--submitted .short-questionnaire-form__primary-action[disabled] {
-  border-color: #47755e;
-  background: #47755e;
+  border-color: #ff7777;
+  background: #ff7777;
+  box-shadow: 0 8rpx 0 #de7272;
   color: #fffaf4;
+  opacity: 1;
 }
 
-@keyframes short-questionnaire-form__handoff-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 10rpx, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
+@keyframes short-questionnaire-form-spin {
+  to { transform: rotate(360deg); }
 }
 
 @media (max-height: 640px) {

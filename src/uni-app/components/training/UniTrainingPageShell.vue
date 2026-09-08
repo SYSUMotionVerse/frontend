@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   showBack?: boolean
   customBack?: boolean
   showNavigation?: boolean
+  scrollContent?: boolean
   refreshEnabled?: boolean
   refreshing?: boolean
 }>(), {
@@ -32,6 +33,7 @@ const props = withDefaults(defineProps<{
   showBack: false,
   customBack: false,
   showNavigation: true,
+  scrollContent: false,
   refreshEnabled: false,
   refreshing: false
 })
@@ -45,6 +47,7 @@ const { contentClearancePx } = useFloatingDockLayout()
 const shellStyle = computed(() => ({
   '--floating-dock-content-clearance': `${contentClearancePx.value}px`
 }))
+const usesScrollFrame = computed(() => props.scrollContent || props.refreshEnabled)
 
 onMounted(() => {
   void ensureProtectedStudentAccess(props.accessMode)
@@ -58,6 +61,7 @@ onMounted(() => {
     :class="{
       'training-shell--no-dock': !props.showDock,
       'training-shell--fit-viewport': props.fitViewport,
+      'training-shell--scroll-frame': usesScrollFrame,
       'training-shell--refreshable': props.refreshEnabled
     }"
   >
@@ -74,15 +78,18 @@ onMounted(() => {
       @back="emit('back')"
     />
     <view
-      v-if="props.refreshEnabled"
+      v-if="usesScrollFrame"
       class="training-shell__scroll-frame"
     >
       <scroll-view
-        class="training-shell__inner training-shell__inner--refreshable"
-        :class="{ 'training-shell__inner--no-dock': !props.showDock }"
+        class="training-shell__inner training-shell__inner--scrollable"
+        :class="{
+          'training-shell__inner--no-dock': !props.showDock,
+          'training-shell__inner--refreshable': props.refreshEnabled
+        }"
         scroll-y
         enable-flex
-        refresher-enabled
+        :refresher-enabled="props.refreshEnabled"
         :refresher-threshold="140"
         refresher-background="transparent"
         :refresher-triggered="props.refreshing"
@@ -165,7 +172,9 @@ onMounted(() => {
 }
 
 .training-shell--refreshable,
-.training-shell--no-dock.training-shell--refreshable {
+.training-shell--no-dock.training-shell--refreshable,
+.training-shell--scroll-frame,
+.training-shell--no-dock.training-shell--scroll-frame {
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
@@ -251,8 +260,8 @@ onMounted(() => {
   min-height: 0;
 }
 
-.training-shell__inner--refreshable,
-.training-shell__inner--no-dock.training-shell__inner--refreshable {
+.training-shell__inner--scrollable,
+.training-shell__inner--no-dock.training-shell__inner--scrollable {
   height: 100%;
   min-height: 0;
   overflow: hidden;

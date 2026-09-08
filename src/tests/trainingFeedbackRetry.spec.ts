@@ -75,7 +75,7 @@ describe('training feedback retry', () => {
 
     expect(controls.loadTrainingSession).toHaveBeenCalledTimes(2)
     expect(controls.loadTrainingSession).toHaveBeenLastCalledWith('remote-session-1')
-    expect(wrapper.text()).toContain('质量得分')
+    expect(wrapper.text()).toContain('套组总分')
     expect(wrapper.text()).toContain('86')
     expect(wrapper.find('.feedback-page__retry-action').exists()).toBe(false)
   })

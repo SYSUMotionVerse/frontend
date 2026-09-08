@@ -10,24 +10,28 @@ async function completeCheckIn(wrapper: ReturnType<typeof mount>) {
 }
 
 describe('ShortQuestionnaireForm', () => {
-  it('keeps both FS/FAS ratings and the disabled primary action in one continuous check-in surface', async () => {
+  it('renders four evenly spaced sections with an immediately available submit action', async () => {
     const wrapper = mount(ShortQuestionnaireForm)
     const primaryAction = wrapper.get('button[form-type="submit"]')
 
     expect(wrapper.findAll('.short-questionnaire-form__question')).toHaveLength(2)
     expect(wrapper.findAll('slider')).toHaveLength(2)
     expect(wrapper.findAll('.short-questionnaire-form__tick')).toHaveLength(17)
-    expect(wrapper.text()).toContain('完成 0/2 项后提交')
-    expect(primaryAction.attributes('disabled')).toBeDefined()
-
-    await completeCheckIn(wrapper)
-
-    expect(wrapper.text()).toContain('已完成 2/2 项')
-    expect(wrapper.text()).toContain('提交并查看反馈')
+    expect(wrapper.findAll('.short-questionnaire-form__tick--selected')).toHaveLength(2)
+    expect(wrapper.find('.short-questionnaire-form__question-score').exists()).toBe(false)
+    expect(wrapper.find('.short-questionnaire-form__actions').exists()).toBe(false)
+    expect(wrapper.find('.short-questionnaire-form__feedback-slot').exists()).toBe(false)
+    expect(primaryAction.text()).toContain('提交并查看反馈')
     expect(primaryAction.attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.emitted('submit')).toEqual([[
+      { feelingScale: 0, feltArousalScale: 3 }
+    ]])
   })
 
-  it('emits the selected ratings only after the form is complete', async () => {
+  it('emits adjusted ratings when either slider is changed', async () => {
     const wrapper = mount(ShortQuestionnaireForm)
 
     await completeCheckIn(wrapper)
@@ -38,12 +42,14 @@ describe('ShortQuestionnaireForm', () => {
     ]])
   })
 
-  it('keeps saving and retry states in the same action area', async () => {
+  it('keeps the coral submit action visible with a right-side spinner while saving', async () => {
     const savingWrapper = mount(ShortQuestionnaireForm, {
       props: { submitting: true }
     })
 
-    expect(savingWrapper.text()).toContain('正在保存反馈…')
+    expect(savingWrapper.text()).toContain('正在提交')
+    expect(savingWrapper.find('.short-questionnaire-form__primary-spinner').exists()).toBe(true)
+    expect(savingWrapper.find('.short-questionnaire-form__feedback-slot').exists()).toBe(false)
     expect(savingWrapper.get('button[form-type="submit"]').attributes('disabled')).toBeDefined()
 
     const retryWrapper = mount(ShortQuestionnaireForm, {
@@ -54,7 +60,7 @@ describe('ShortQuestionnaireForm', () => {
     })
     await completeCheckIn(retryWrapper)
 
-    expect(retryWrapper.find('.short-questionnaire-form__actions .short-questionnaire-form__status').exists()).toBe(true)
+    expect(retryWrapper.find('.short-questionnaire-form__feedback-slot .short-questionnaire-form__status').exists()).toBe(true)
     expect(retryWrapper.text()).toContain('暂未保存')
     expect(retryWrapper.text()).toContain('重新提交反馈')
     expect(retryWrapper.get('button[form-type="submit"]').attributes('disabled')).toBeUndefined()
@@ -80,7 +86,7 @@ describe('ShortQuestionnaireForm', () => {
     expect(wrapper.emitted('goHome')).toHaveLength(1)
   })
 
-  it('holds the completed response in a saved state while training feedback opens', async () => {
+  it('moves directly from the loading button to feedback without a saved-message strip', async () => {
     const wrapper = mount(ShortQuestionnaireForm, {
       props: {
         status: 'submitted',
@@ -91,11 +97,11 @@ describe('ShortQuestionnaireForm', () => {
 
     const primaryAction = wrapper.get('button[form-type="submit"]')
 
-    expect(wrapper.text()).toContain('已保存')
-    expect(wrapper.text()).toContain('正在打开训练反馈')
-    expect(wrapper.find('.short-questionnaire-form__handoff').exists()).toBe(true)
+    expect(wrapper.text()).toContain('正在提交')
+    expect(wrapper.find('.short-questionnaire-form__primary-spinner').exists()).toBe(true)
+    expect(wrapper.find('.short-questionnaire-form__feedback-slot').exists()).toBe(false)
+    expect(wrapper.find('.short-questionnaire-form__handoff').exists()).toBe(false)
     expect(wrapper.find('.short-questionnaire-form__status').exists()).toBe(false)
-    expect(primaryAction.text()).toContain('正在打开训练反馈')
     expect(primaryAction.attributes('disabled')).toBeDefined()
     expect(wrapper.findAll('slider')[0].attributes('disabled')).toBeDefined()
   })

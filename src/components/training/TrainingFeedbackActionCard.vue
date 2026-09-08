@@ -10,6 +10,7 @@ const props = defineProps<{
   index: number
   expanded: boolean
   trend: Array<{ date: string; score: number }>
+  gender?: '男' | '女'
 }>()
 
 defineEmits<{
@@ -25,7 +26,7 @@ const angleLabels: Record<string, string> = {
   right_hip: '右髋',
   left_knee: '左膝',
   right_knee: '右膝',
-  torso_rotation: '躯干旋转'
+  torso_rotation: '躯干'
 }
 
 const angles = computed(() => Object.entries(props.action.angleDetails)
@@ -45,7 +46,6 @@ const chartId = computed(() => `action-trend-${props.index}-${props.action.itemI
       <view class="feedback-action__index">{{ String(index + 1).padStart(2, '0') }}</view>
       <view class="feedback-action__copy">
         <text class="feedback-action__title">{{ action.title }}</text>
-        <text class="feedback-action__meta">{{ angles.length }} 个角度参与评分</text>
       </view>
       <view class="feedback-action__score">
         <text class="feedback-action__score-value">{{ Math.round(action.score) }}</text>
@@ -62,9 +62,8 @@ const chartId = computed(() => `action-trend-${props.index}-${props.action.itemI
           <text class="feedback-action__eyebrow">身体部位</text>
           <text class="feedback-action__section-title">角度评分</text>
         </view>
-        <text class="feedback-action__scale">0—100</text>
       </view>
-      <TrainingFeedbackBodyMap :angles="angles" />
+      <TrainingFeedbackBodyMap :angles="angles" :gender="gender" />
 
       <view class="feedback-action__trend">
         <view class="feedback-action__section-head">
@@ -128,7 +127,6 @@ const chartId = computed(() => `action-trend-${props.index}-${props.action.itemI
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 6rpx;
 }
 
 .feedback-action__title {
@@ -139,13 +137,6 @@ const chartId = computed(() => `action-trend-${props.index}-${props.action.itemI
   line-height: 1.28;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.feedback-action__meta,
-.feedback-action__scale {
-  color: #8a97a8;
-  font-size: 19rpx;
-  font-weight: 700;
 }
 
 .feedback-action__score {
@@ -171,6 +162,7 @@ const chartId = computed(() => `action-trend-${props.index}-${props.action.itemI
 .feedback-action__arrow {
   width: 24rpx;
   flex: none;
+  margin-right: 12rpx;
   font-size: 25rpx;
   text-align: center;
 }

@@ -8,6 +8,14 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { ensureProtectedStudentAccess } from '../../composables/useNavigationGuard'
+import { useStudentStore } from '../../composables/useStudentStore'
+import { invalidateGrowthOverview } from '../../composables/useGrowthOverview'
+import { useTrainingProgress } from '../../composables/useTrainingProgress'
+import {
+  buildMockExerciseArrangements,
+  buildMockTrainingCompletion,
+  isTrainingMockEnabled
+} from '../../../features/training/trainingMock'
 
 type VisualModality = Exclude<TrainingModality, 'stair'>
 
@@ -16,10 +24,12 @@ const arrangements = shallowRef<ExerciseArrangementSummary[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const errorMessage = ref('')
+const mockEnabled = isTrainingMockEnabled()
+const store = useStudentStore()
+const trainingProgress = useTrainingProgress()
 let loadRequestId = 0
 
 const modalityLabel = computed(() => modality.value === 'hiit' ? '自重抗阻' : '传统体育养生')
-const pageTitle = computed(() => `选择${modalityLabel.value}套组`)
 const accentTone = computed(() => modality.value === 'hiit' ? 'teal' : 'coral')
 
 function normalizeModality(value: unknown): VisualModality {
@@ -39,6 +49,13 @@ async function loadArrangements(options: { refresh?: boolean } = {}) {
   if (isRefresh) refreshing.value = true
   else loading.value = true
   errorMessage.value = ''
+
+  if (mockEnabled) {
+    arrangements.value = buildMockExerciseArrangements(modality.value)
+    loading.value = false
+    refreshing.value = false
+    return
+  }
 
   try {
     const nextArrangements = await studentBackendSync.listVisualExerciseArrangements(
@@ -62,6 +79,20 @@ async function selectArrangement(arrangement: ExerciseArrangementSummary) {
   const canExecute = await ensureProtectedStudentAccess('execute')
   if (!canExecute) return
 
+  if (mockEnabled) {
+    const completion = buildMockTrainingCompletion({
+      modality: modality.value,
+      arrangementId: arrangement.id
+    })
+    store.completeTrainingSession(completion)
+    trainingProgress.invalidate()
+    invalidateGrowthOverview()
+    void uni.navigateTo({
+      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(completion.sessionId)}&mock=1&modality=${modality.value}`
+    })
+    return
+  }
+
   void uni.navigateTo({
     url: `/subpackages/training/visual-session?modality=${modality.value}&arrangementId=${arrangement.id}`
   })
@@ -75,8 +106,10 @@ onLoad((query) => {
 
 <template>
   <UniTrainingPageShell
-    :page-title="pageTitle"
+    page-title="选择套组"
     :show-dock="false"
+    show-navigation
+    scroll-content
     show-decorations
     show-back
     access-mode="execute"

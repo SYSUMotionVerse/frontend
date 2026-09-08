@@ -90,4 +90,90 @@
 
 - Reassess callout overlap for unusually long backend angle labels after the first real-device capture.
 
+**Latest Short-Questionnaire Refinement — 2026-09-08**
+
+- Source visual truth: `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-b473028a-365a-44ae-bed8-ae61e07bfb85.png` (520 × 228 px), plus the user's six written requirements.
+- Implementation evidence for iteration 1: `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-58125654-9b78-49ea-95e0-03477adea339.png` (600 × 1238 px). It shows the native mini-program state before the latest fixes.
+- [Resolved P1] The `24rpx` flex gap did not render between top-level form children in the supplied mini-program capture. The intro, each question card, and the conditional feedback slot now use explicit `24rpx` bottom margins, leaving the button as the final section.
+- [Resolved P2] The first/last slider endpoints still extended about one thumb-edge beyond the tick centers. Tick padding remains `18rpx`; the slider is now independently inset to `28rpx` on both sides with `width: calc(100% - 56rpx)`.
+- [Resolved P2] The former fourth action card and selected-score copy are removed. A full-width coral-red submit button is immediately enabled, including when both sliders retain their defaults.
+- [Resolved P2] Question numbers now use `34rpx`/900 and vertically center beside a left-aligned title/subtitle stack. Endpoint labels remain `25rpx`/800 with a `4rpx` slider-to-label group gap.
+- Verification: the latest 50 questionnaire/style tests passed; TypeScript check passed; the `mp-weixin` build completed; generated WXSS contains the explicit margins, `28rpx` slider inset, centered header layout, and `34rpx` number; `git diff --check` passed. The preceding full single-worker regression remained 98/98 files and 691/691 tests.
+- [P2] Same-state post-fix comparison remains unavailable because the latest rendered WeChat DevTools capture has not yet been supplied. Native slider geometry and the explicit section margins still require confirmation from the rebuilt mini-program.
+- Required visual follow-up: reopen the rebuilt `dist/build/mp-weixin`, capture the initial questionnaire at the same device viewport, and compare section rhythm, tick/track endpoints, and the centered number/title header.
+
+**Latest Questionnaire and Feedback Refinement — 2026-09-08**
+
+- Source visual truth and pre-fix implementation evidence:
+  - `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-172b3597-ae95-4432-ab8b-1f05e83fc4f9.png` (589 × 730 px): short-questionnaire spacing state.
+  - `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-5a0a70c4-702e-4ace-805c-82d8715d050d.png` (624 × 999 px): feedback overview, body map, and trend state.
+  - `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-7b723a18-c1f2-4622-8282-adb0f8e67a0d.png` (516 × 400 px): requested body-map connector-line annotation.
+- [Resolved P2] Questionnaire section spacing increased from explicit `24rpx` margins to `32rpx` margins.
+- [Resolved P1] Mock remains a data-source decision only on the questionnaire and feedback pages. The mock notice, mock heading/copy, mock trend prefix, mock save message, and mock-only badge suppression were removed.
+- [Resolved P1] Traditional-sport mock fixtures now include left/right hip and knee dimensions and action-level lower-body angle scores.
+- [Resolved P1] Body-map callouts now use a measured canvas overlay to draw a horizontal-plus-diagonal connector from each rendered label edge to its configured shoulder, elbow, torso, hip, or knee target.
+- [Resolved P1] Overall and per-action trend charts now render a labeled 0/25/50/75/100 vertical axis and the concrete score beside every plotted point.
+- [Resolved P2] Action-detail helper copy (`点击展开`, angle-count metadata, and `0—100`) was removed; the disclosure icon gained `12rpx` right spacing.
+- [Resolved P2] Feedback footer actions now share one row: outlined `返回首页` on the left and coral-filled `查看成长中心` on the right, using the long-questionnaire action proportions.
+- Verification: all 98 test files and 691 tests passed; TypeScript check passed; the `mp-weixin` build completed; generated WXML/WXSS/JS contains the new canvas connectors, score labels, lower-body fixtures, footer layout, and `32rpx` questionnaire spacing; forbidden visible Mock/action-helper copy is absent from the two compiled pages; `git diff --check` passed.
+- Required fidelity surfaces: existing typography and cream/coral/navy tokens are preserved; spacing and interaction structure are updated; the supplied body image remains the original CDN raster asset; app copy is production-equivalent in mock and live modes.
+- [P2] Same-state post-fix visual comparison is blocked until a fresh WeChat DevTools capture is available. Native canvas layering, connector endpoints, point-label collision, and the final two-button width cannot be visually proven from compiled output alone.
+
+**Latest Standard-Shell and Feedback-Map Refinement — 2026-09-08**
+
+- Source visual truth and pre-fix implementation evidence:
+  - `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-c08357a4-5c1f-406e-bdd4-8b7e9d54421b.png` (561 × 795 px): current feedback page, body callouts, chart, and footer-button contrast.
+  - `C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-b3d4a23a-e7ae-4f05-930c-6f5b846f2293.png` (552 × 784 px): annotated abnormal bottom body-map spacing and asymmetric trend-chart side spacing.
+- [Resolved P1] Feedback, short-questionnaire, and exercise-set selection now explicitly opt into the shared training page shell navigation and declare the custom-navigation cream page frame in both mini-program manifests.
+- [Resolved P1] The filled `查看成长中心` action now forces white text for adequate contrast against the coral fill.
+- [Resolved P1] Body callout connectors now keep a longer 38 px horizontal segment before the diagonal, then target configured anatomy coordinates. Hip targets move down to 63%, while torso rotation targets the abdomen at 42% vertical position.
+- [Resolved P2] Body callouts now use semantic region colors: green for upper body, coral for torso, and blue for lower body. Label borders, label text, and their connector lines share the same region color.
+- [Resolved P1] The body-map label rows use symmetric 10% and 90% vertical anchors to balance the visual top and bottom insets. The trend plot uses matching 42 px left and right insets while retaining the vertical-axis labels.
+- Verification: 59 targeted navigation, questionnaire, mock-flow, and feedback-design tests passed, followed by the full 98-file/691-test regression; TypeScript check passed; the `mp-weixin` build completed; generated WXML/WXSS/JS contains shared navigation, the white primary-action text, region classes/colors, 38 px connector bends, updated anatomy targets, and symmetric chart insets; `git diff --check` passed.
+- Required fidelity surfaces: all three pages retain the shared immersive TitleBar, safe-area handling, cream background, and existing typography tokens; only feedback spatial annotations and semantic region colors changed.
+- [P2] Same-state post-fix comparison remains blocked until a fresh WeChat DevTools capture is supplied. Connector anatomy accuracy, visual inset equality, and title-bar rendering must still be confirmed on the target device.
+
+**Latest Fixed-TitleBar and Feedback-Detail Refinement — 2026-09-09**
+
+- Source visual truth and pre-fix implementation evidence:
+  - C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-fdcf481b-7f2c-44dc-8750-dbe8199fc45e.png (644 × 227 px): feedback page content incorrectly scrolling over the missing fixed TitleBar.
+  - C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-2073256b-172d-4f53-900d-0bb38b01238b.png (660 × 322 px): the existing history-page fixed TitleBar and transparent top fade used as the standard-frame reference.
+  - C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-82c5877f-8d15-4389-9abd-b40ff1ae5732.png (530 × 155 px): pre-fix suite-score header layout.
+  - C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-fa3ec612-978b-4ad1-929b-00b3e8dd6f31.png (516 × 381 px): anatomy connector target annotation.
+  - C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-1692031d-0ff2-4e70-ab23-24a545c3f15b.png (543 × 171 px): badge share-button vertical-alignment issue.
+- [Resolved P1] The three requested training pages now opt into a constrained internal scroll frame. The shared TitleBar remains outside that scroll view, while the content receives the same 0–32 rpx transparent top mask used by the standard page treatment.
+- [Resolved P1] Short-questionnaire submission retains the coral button while disabled, displays the existing uni-icons spinner immediately to the right of the loading label, removes the submitted-message strip, and navigates as soon as persistence succeeds instead of waiting for a confirmation delay.
+- [Resolved P1] The overview header now says 套组总分, removes 质量得分, bottom-aligns the score and its left-aligned badge/advice stack, and preserves the card's vertical body-map/trend flow.
+- [Resolved P1] Anatomy connectors now use a 52 px horizontal segment and the annotated target set: shoulders 45/55 × 29%, elbows 43/57 × 40%, torso 50 × 38%, hips 47/53 × 59%, and knees 47/53 × 67%. 躯干旋转 is normalized to 躯干.
+- [Resolved P2] The trend plot keeps equal side insets while reducing each from 42 px to 30 px.
+- [Resolved P2] The recommendation eyebrow/title pair uses a 4 rpx internal gap; the recommendation body remains separated by the card's 14 rpx section gap.
+- [Resolved P2] The share action now has an explicit 64 rpx height, inline-flex centering, and unit line-height so its label centers vertically in the native button.
+- Verification: 61 targeted tests passed, followed by the full 98-file/692-test regression; TypeScript check passed; the mp-weixin build completed. Generated WXML/WXSS/JS contains the internal masked scroll frame, coral disabled submit action and spinner, new overview copy/layout, target coordinates, reduced symmetric chart insets, compact recommendation heading, and centered share action. git diff --check passed.
+- Required fidelity surfaces: typography and palette remain on the existing mini-program tokens; page scrolling and submission states changed functionally; the supplied body figure asset is unchanged; all requested production copy is present and no new mock-facing copy was introduced.
+- [P2] Post-fix visual comparison remains blocked because no screenshot from this rebuilt mini-program is available yet. The fixed TitleBar fade, connector endpoints, native disabled-button paint, and share-button baseline require a same-device WeChat DevTools capture.
+
+**Latest Hip and Knee Target Refinement — 2026-09-09**
+
+- Source visual truth: C:\Users\Aruked\AppData\Local\Temp\codex-clipboard-37acead3-2a8a-4b32-98e5-ef8099144f9d.png (533 × 242 px), showing the requested upward target positions for both hip and knee connector pairs.
+- [Resolved P2] Left/right hip target Y coordinates moved from 59% to 50%; left/right knee target Y coordinates moved from 67% to 60%. Their X coordinates, callout rows, region colors, and 52 px horizontal bends remain unchanged.
+- Verification: the focused feedback-design tests passed; TypeScript check passed; the mp-weixin build completed; packaged TrainingFeedbackBodyMap.js contains the 50% hip and 60% knee targets.
+- [P2] Post-fix comparison remains blocked until the rebuilt body map is captured in WeChat DevTools at the same state and crop.
+
+**Latest Mock Female Body-Map Switch — 2026-09-09**
+
+- [Resolved P1] Mock feedback now explicitly supplies female gender to both the overview body map and every expanded action body map, selecting the existing female feedback figure without mutating the student's stored profile.
+- Live feedback still normalizes the stored profile to the matching male or female figure, so the override is isolated to the environment-controlled mock route.
+- Verification: four focused mock-flow and feedback-design tests passed; TypeScript check passed; the mp-weixin build completed.
+- [P2] Female-image connector alignment remains a visual follow-up until a rendered WeChat DevTools screenshot is supplied.
+
+final result: blocked
+
+**Android Canvas Scroll Compatibility — 2026-09-09**
+
+- Source visual truth: `D:/Res/Downloads/Screenshot_20260909_005523.jpg` (Android WeChat, feedback page while scrolled).
+- [Resolved in code P1] The body-map connectors and score-trend plot used the legacy `canvas-id` / `createCanvasContext` rendering path. On Android WeChat these canvases could retain viewport coordinates while the surrounding internal `scroll-view` moved, leaving both drawings detached from their cards.
+- Both drawing components now use `canvas type="2d"`, query their Canvas 2D nodes, and render at the device pixel ratio. This keeps the canvases in the component rendering layer and preserves sharpness on high-density Android displays.
+- Verification: five focused feedback/mock tests passed; TypeScript check passed; the mp-weixin development build completed.
+- [P1] A post-fix Android WeChat screenshot at the same scrolled state is still required to verify native runtime behavior. WeChat DevTools alone cannot validate the reported device-only failure.
+
 final result: blocked

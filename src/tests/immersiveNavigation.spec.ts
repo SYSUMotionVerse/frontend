@@ -14,6 +14,16 @@ describe('immersive mini-program navigation', () => {
   it('uses custom navigation across every mini-program route', () => {
     const pages = JSON.parse(readFileSync(resolve('src/pages.json'), 'utf8'))
     expect(pages.globalStyle.navigationStyle).toBe('custom')
+
+    for (const route of [
+      'pages/training/exercise-sets',
+      'pages/training/short-questionnaire',
+      'pages/training/feedback'
+    ]) {
+      const page = pages.pages.find((item: { path: string }) => item.path === route)
+      expect(page?.style.navigationStyle, route).toBe('custom')
+      expect(page?.style.backgroundColor, route).toBe('#FCF7F0')
+    }
   })
 
   it('reads the native capsule bounds and preserves a symmetric title clearance', () => {
@@ -90,7 +100,16 @@ describe('immersive mini-program navigation', () => {
     ])
 
     for (const [path, sharedComponent] of routeShells) {
-      expect(readFileSync(resolve(path), 'utf8'), path).toContain(sharedComponent)
+      const source = readFileSync(resolve(path), 'utf8')
+      expect(source, path).toContain(sharedComponent)
+      if ([
+        'src/uni-app/pages/training/exercise-sets.vue',
+        'src/uni-app/pages/training/short-questionnaire.vue',
+        'src/uni-app/pages/training/feedback.vue'
+      ].includes(path)) {
+        expect(source, path).toContain('show-navigation')
+        expect(source, path).toContain('scroll-content')
+      }
     }
 
     const sharedTitleBar = 'src/uni-app/components/layout/ImmersiveNavigationBar.vue'
@@ -104,6 +123,20 @@ describe('immersive mini-program navigation', () => {
     })
 
     expect(titleBarImplementations).toEqual([sharedTitleBar])
+  })
+
+  it('keeps standard training TitleBars outside a masked internal scroll frame', () => {
+    const shell = readFileSync(
+      resolve('src/uni-app/components/training/UniTrainingPageShell.vue'),
+      'utf8'
+    )
+
+    expect(shell.indexOf('<ImmersiveNavigationBar')).toBeLessThan(shell.indexOf('<scroll-view'))
+    expect(shell).toContain('scrollContent?: boolean')
+    expect(shell).toContain('props.scrollContent || props.refreshEnabled')
+    expect(shell).toContain('training-shell__inner--scrollable')
+    expect(shell).toContain('-webkit-mask-image: linear-gradient(')
+    expect(shell).toContain('height: 100vh;')
   })
 
   it('uses a non-returning standard registration frame after startup relaunch', () => {

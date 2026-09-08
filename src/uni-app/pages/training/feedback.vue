@@ -12,8 +12,14 @@ import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import type { GrowthTrainingHistoryItem, GrowthVisualScoreTrendModel } from '../../api/studentBackendTypes'
 import { useStudentStore } from '../../composables/useStudentStore'
+import {
+  buildMockTrainingSession,
+  buildMockTrainingTrend,
+  isTrainingMockEnabled
+} from '../../../features/training/trainingMock'
 
 const store = useStudentStore()
+const mockEnabled = isTrainingMockEnabled()
 const sessionId = shallowRef('latest')
 const remoteSession = shallowRef<SessionRecord | null>(null)
 const loadingSession = shallowRef(false)
@@ -21,6 +27,8 @@ const sessionLoadError = shallowRef('')
 const historySessions = shallowRef<GrowthTrainingHistoryItem[]>([])
 const scoreTrend = shallowRef<GrowthVisualScoreTrendModel | null>(null)
 const expandedActionKey = shallowRef('')
+const mockMode = shallowRef(false)
+const mockSession = shallowRef<SessionRecord | null>(null)
 
 const angleKeys = new Set([
   'left_elbow', 'right_elbow', 'left_shoulder', 'right_shoulder',
@@ -30,6 +38,19 @@ const angleKeys = new Set([
 onLoad((query) => {
   sessionId.value = query?.sessionId?.toString() ?? 'latest'
   remoteSession.value = null
+  mockMode.value = mockEnabled && query?.mock?.toString() === '1'
+  if (mockMode.value) {
+    mockSession.value = buildMockTrainingSession({
+      sessionId: sessionId.value === 'latest' ? undefined : sessionId.value,
+      modality: query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
+    })
+    sessionId.value = mockSession.value.id
+    sessionLoadError.value = ''
+    historySessions.value = []
+    scoreTrend.value = null
+    return
+  }
+  mockSession.value = null
   void Promise.all([loadSession(), loadHistoryContext()])
 })
 
@@ -91,7 +112,7 @@ function resolveLocalSession() {
   return snapshot.sessions.find(item => item.id === sessionId.value) ?? null
 }
 
-const session = computed(() => resolveLocalSession() ?? remoteSession.value)
+const session = computed(() => mockSession.value ?? resolveLocalSession() ?? remoteSession.value)
 const canReloadSession = computed(() => Boolean(sessionLoadError.value) && sessionId.value !== 'latest')
 const modalityLabel = computed(() => session.value ? resolveModalityLabel(session.value.modality) : '本次训练')
 const qualityScore = computed<number | null>(() => session.value?.analysis.qualityScore ?? null)
@@ -101,6 +122,9 @@ const feedbackSummary = computed(() => session.value?.analysis.summary?.trim() |
 const scoreDimensions = computed(() => session.value?.analysis.scoreDetails?.dimensions ?? [])
 const actionResults = computed(() => session.value?.analysis.scoreDetails?.actionResults ?? [])
 const overallAngles = computed(() => scoreDimensions.value.filter(dimension => angleKeys.has(dimension.key)))
+const feedbackGender = computed<'男' | '女'>(() => (
+  mockMode.value || store.state.profile.gender === '女' ? '女' : '男'
+))
 
 const previousComparableSession = computed(() => {
   if (!session.value) return null
@@ -111,6 +135,7 @@ const previousComparableSession = computed(() => {
 })
 
 const scoreChangeLabel = computed(() => {
+  if (mockMode.value) return '较上次提升 4 分'
   const previousScore = previousComparableSession.value?.analysis.qualityScore
   if (qualityScore.value === null) return '暂无可比较评分'
   if (previousScore === undefined) return '首次训练基线'
@@ -136,6 +161,9 @@ const scoreDescription = computed(() => {
 })
 
 const overallTrend = computed(() => {
+  if (mockMode.value && session.value && qualityScore.value !== null) {
+    return buildMockTrainingTrend(session.value.date, qualityScore.value)
+  }
   if (scoreTrend.value?.trend.length) {
     return scoreTrend.value.trend.slice(-6).map(point => ({ date: point.date, score: point.overallScore }))
   }
@@ -147,6 +175,9 @@ const overallTrend = computed(() => {
 })
 
 function actionTrend(action: ScoredActionResult) {
+  if (mockMode.value && session.value) {
+    return buildMockTrainingTrend(session.value.date, action.score)
+  }
   const points = historySessions.value
     .filter(item => item.modality === session.value?.modality)
     .flatMap(item => {
@@ -185,7 +216,7 @@ onShareAppMessage((options) => {
 </script>
 
 <template>
-  <UniTrainingPageShell :show-dock="false" page-title="训练反馈" show-back show-decorations>
+  <UniTrainingPageShell :show-dock="false" page-title="训练反馈" show-navigation scroll-content show-back show-decorations>
     <view class="feedback-page">
       <view v-if="loadingSession" class="feedback-page__state-card">
         <text class="feedback-page__state-title">正在加载训练结果</text>
@@ -200,13 +231,17 @@ onShareAppMessage((options) => {
       </view>
 
       <template v-else>
-        <UniPageHeading inset eyebrow="训练已记录" :title="`${modalityLabel}完成`" :description="`${statusText}，结果已经为你保存。`" />
+        <UniPageHeading
+          inset
+          eyebrow="训练已记录"
+          :title="`${modalityLabel}完成`"
+          :description="`${statusText}，结果已经为你保存。`"
+        />
 
         <section class="feedback-page__overview-card">
           <view class="feedback-page__overview-head">
             <view class="feedback-page__score-block">
-              <text class="feedback-page__section-eyebrow">套组总览</text>
-              <text class="feedback-page__score-label">质量得分</text>
+              <text class="feedback-page__section-eyebrow">套组总分</text>
               <view class="feedback-page__score-row">
                 <text class="feedback-page__score-value">{{ qualityScore === null ? '—' : qualityScore }}</text>
                 <text class="feedback-page__score-unit">{{ qualityScore === null ? '暂无评分' : '/ 100' }}</text>
@@ -218,7 +253,11 @@ onShareAppMessage((options) => {
             </view>
           </view>
 
-          <TrainingFeedbackBodyMap v-if="overallAngles.length" :angles="overallAngles" />
+          <TrainingFeedbackBodyMap
+            v-if="overallAngles.length"
+            :angles="overallAngles"
+            :gender="feedbackGender"
+          />
 
           <view class="feedback-page__trend-block">
             <view class="feedback-page__section-head">
@@ -233,8 +272,10 @@ onShareAppMessage((options) => {
         </section>
 
         <section class="feedback-page__summary-card">
-          <text class="feedback-page__section-eyebrow">本次建议</text>
-          <text class="feedback-page__section-title">继续调整动作细节</text>
+          <view class="feedback-page__summary-head">
+            <text class="feedback-page__section-eyebrow">本次建议</text>
+            <text class="feedback-page__section-title">继续调整动作细节</text>
+          </view>
           <text class="feedback-page__summary">{{ feedbackSummary }}</text>
         </section>
 
@@ -244,7 +285,6 @@ onShareAppMessage((options) => {
               <text class="feedback-page__section-eyebrow">动作明细</text>
               <text class="feedback-page__section-title">逐项查看表现</text>
             </view>
-            <text class="feedback-page__section-meta">点击展开</text>
           </view>
           <view class="feedback-page__action-list">
             <TrainingFeedbackActionCard
@@ -254,6 +294,7 @@ onShareAppMessage((options) => {
               :index="index"
               :expanded="expandedActionKey === actionKey(action)"
               :trend="actionTrend(action)"
+              :gender="feedbackGender"
               @toggle="toggleAction(action)"
             />
           </view>
@@ -273,8 +314,8 @@ onShareAppMessage((options) => {
         </section>
 
         <view class="feedback-page__footer-actions">
-          <button class="feedback-page__primary-action" type="button" hover-class="feedback-page__primary-action--pressed" @click="goHome">返回首页</button>
-          <button class="feedback-page__secondary-action" type="button" hover-class="feedback-page__secondary-action--pressed" @click="goGrowthCenter">查看成长中心</button>
+          <button class="feedback-page__secondary-action" type="button" hover-class="feedback-page__secondary-action--pressed" @click="goHome">返回首页</button>
+          <button class="feedback-page__primary-action" type="button" hover-class="feedback-page__primary-action--pressed" @click="goGrowthCenter">查看成长中心</button>
         </view>
       </template>
     </view>
@@ -319,22 +360,21 @@ onShareAppMessage((options) => {
 .feedback-page__state-copy { color: var(--feedback-muted); font-size: 23rpx; line-height: 1.55; }
 
 .feedback-page__overview-card,
-.feedback-page__summary-card,
 .feedback-page__actions-card { display: flex; flex-direction: column; gap: 24rpx; padding: 28rpx; }
+.feedback-page__summary-card { display: flex; flex-direction: column; gap: 14rpx; padding: 28rpx; }
 .feedback-page__overview-head,
 .feedback-page__score-row,
 .feedback-page__section-head,
 .feedback-page__badge-card,
 .feedback-page__footer-actions { display: flex; }
-.feedback-page__overview-head { align-items: flex-start; gap: 28rpx; }
+.feedback-page__overview-head { align-items: flex-end; gap: 28rpx; }
 .feedback-page__score-block,
 .feedback-page__score-copy,
 .feedback-page__section-head > view,
 .feedback-page__trend-block,
 .feedback-page__badge-copy { display: flex; flex-direction: column; }
-.feedback-page__score-block { min-width: 154rpx; gap: 8rpx; }
-.feedback-page__score-label { color: #718096; font-size: 20rpx; font-weight: 800; }
-.feedback-page__score-copy { min-width: 0; flex: 1; gap: 12rpx; }
+.feedback-page__score-block { min-width: 154rpx; gap: 6rpx; }
+.feedback-page__score-copy { min-width: 0; flex: 1; align-items: flex-start; gap: 8rpx; padding-bottom: 2rpx; }
 .feedback-page__score-row { align-items: baseline; gap: 6rpx; }
 .feedback-page__score-value { color: var(--feedback-ink); font-size: 62rpx; font-weight: 900; line-height: 0.95; }
 .feedback-page__score-unit { color: var(--feedback-muted); font-size: 19rpx; font-weight: 700; }
@@ -350,6 +390,7 @@ onShareAppMessage((options) => {
 }
 .feedback-page__description,
 .feedback-page__summary { color: var(--feedback-muted); font-size: 22rpx; font-weight: 700; line-height: 1.55; }
+.feedback-page__summary-head { display: flex; flex-direction: column; gap: 4rpx; }
 .feedback-page__trend-block { gap: 14rpx; padding-top: 4rpx; }
 .feedback-page__section-head { align-items: flex-end; justify-content: space-between; gap: 20rpx; }
 .feedback-page__section-head > view,
@@ -375,9 +416,12 @@ onShareAppMessage((options) => {
 .feedback-page__badge-score-label { margin-top: 5rpx; color: #9a7430; font-size: 16rpx; font-weight: 800; }
 .feedback-page__badge-copy { min-width: 0; flex: 1; }
 .feedback-page__share-action {
+  display: inline-flex;
   min-width: 106rpx;
-  min-height: 64rpx;
+  height: 64rpx;
   flex: none;
+  align-items: center;
+  justify-content: center;
   margin: 0;
   padding: 0 16rpx;
   border: 2rpx solid rgba(255, 139, 139, 0.4);
@@ -386,27 +430,29 @@ onShareAppMessage((options) => {
   color: #b75d56;
   font-size: 20rpx;
   font-weight: 900;
+  line-height: 1;
 }
 
-.feedback-page__footer-actions { flex-direction: column; gap: 16rpx; padding-top: 8rpx; }
+.feedback-page__footer-actions { gap: 30rpx; padding: 8rpx 10rpx 10rpx; }
 .feedback-page__primary-action,
 .feedback-page__secondary-action {
   display: flex;
-  width: 100%;
-  min-height: 92rpx;
+  min-width: 0;
+  height: 88rpx;
+  flex: 1;
   align-items: center;
   justify-content: center;
   margin: 0;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
+  padding: 0 16rpx;
+  border-radius: 24rpx;
   box-sizing: border-box;
-  font-size: 27rpx;
-  font-weight: 900;
-  line-height: 1.2;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 88rpx;
 }
-.feedback-page__primary-action { border: 2rpx solid var(--feedback-ink); background: var(--feedback-ink); color: #fffaf4; }
-.feedback-page__secondary-action { border: 2rpx solid #d7cabd; background: #fffaf4; color: #394756; }
-.feedback-page__primary-action--pressed { background: #152432; }
+.feedback-page__primary-action { border: 0; background: #ff8b8b; box-shadow: 0 10rpx 0 #de7272; color: #ffffff; }
+.feedback-page__secondary-action { border: 2rpx solid #ff8b7b; background: rgba(255, 250, 244, 0.68); color: #ff6f62; }
+.feedback-page__primary-action--pressed { box-shadow: 0 4rpx 0 #de7272; transform: translateY(6rpx); }
 .feedback-page__secondary-action--pressed,
 .feedback-page__share-action--pressed { background: #f4ede4; }
 .feedback-page__primary-action::after,

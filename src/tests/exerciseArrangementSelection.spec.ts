@@ -7,7 +7,10 @@ const controls = vi.hoisted(() => ({
   onLoadHandler: null as null | ((query?: Record<string, unknown>) => void),
   listArrangements: vi.fn(),
   ensureAccess: vi.fn(),
-  navigateTo: vi.fn()
+  navigateTo: vi.fn(),
+  completeTrainingSession: vi.fn(),
+  invalidateTrainingProgress: vi.fn(),
+  invalidateGrowthOverview: vi.fn()
 }))
 
 vi.mock('@dcloudio/uni-app', () => ({
@@ -28,6 +31,20 @@ vi.mock('../uni-app/api/reportBackendSyncError', () => ({
 
 vi.mock('../uni-app/composables/useNavigationGuard', () => ({
   ensureProtectedStudentAccess: controls.ensureAccess
+}))
+
+vi.mock('../uni-app/composables/useStudentStore', () => ({
+  useStudentStore: () => ({
+    completeTrainingSession: controls.completeTrainingSession
+  })
+}))
+
+vi.mock('../uni-app/composables/useTrainingProgress', () => ({
+  useTrainingProgress: () => ({ invalidate: controls.invalidateTrainingProgress })
+}))
+
+vi.mock('../uni-app/composables/useGrowthOverview', () => ({
+  invalidateGrowthOverview: controls.invalidateGrowthOverview
 }))
 
 const arrangementFixtures = [
@@ -81,7 +98,36 @@ describe('exercise arrangement selection page', () => {
     controls.listArrangements.mockReset().mockResolvedValue(arrangementFixtures)
     controls.ensureAccess.mockReset().mockResolvedValue(true)
     controls.navigateTo.mockReset()
+    controls.completeTrainingSession.mockReset()
+    controls.invalidateTrainingProgress.mockReset()
+    controls.invalidateGrowthOverview.mockReset()
+    vi.stubEnv('VITE_TRAINING_MOCK_ENABLED', 'false')
     vi.stubGlobal('uni', { navigateTo: controls.navigateTo })
+  })
+
+  it('uses local arrangements and bypasses playback when the mock environment is enabled', async () => {
+    vi.stubEnv('VITE_TRAINING_MOCK_ENABLED', 'true')
+    const wrapper = await mountPage()
+    controls.onLoadHandler?.({ modality: 'hiit' })
+    await flushPromises()
+
+    expect(controls.listArrangements).not.toHaveBeenCalled()
+    expect(wrapper.findAll('.exercise-sets-page__card')).toHaveLength(2)
+    expect(wrapper.findAll('.exercise-sets-page__card')[0].text()).toContain('Mock · 自重抗阻基础套组')
+    await wrapper.findAll('.exercise-sets-page__card')[0].trigger('click')
+    await flushPromises()
+
+    expect(controls.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: expect.stringMatching(/^mock-/),
+      modality: 'hiit',
+      qualityScore: 86,
+      countsAsCompletion: true
+    }))
+    expect(controls.invalidateTrainingProgress).toHaveBeenCalledOnce()
+    expect(controls.invalidateGrowthOverview).toHaveBeenCalledOnce()
+    expect(controls.navigateTo).toHaveBeenCalledWith({
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=mock-.*&mock=1&modality=hiit$/)
+    })
   })
 
   it('loads backend arrangements for the selected modality and launches the chosen set', async () => {
@@ -90,7 +136,7 @@ describe('exercise arrangement selection page', () => {
     await flushPromises()
 
     expect(controls.listArrangements).toHaveBeenCalledWith('hiit')
-    expect(wrapper.get('.test-title').text()).toBe('选择自重抗阻套组')
+    expect(wrapper.get('.test-title').text()).toBe('选择套组')
     expect(wrapper.findAll('.exercise-sets-page__card')).toHaveLength(2)
     expect(wrapper.findAll('.exercise-sets-page__card')[0].text()).toContain('第1套')
     expect(wrapper.findAll('.exercise-sets-page__card')[0].text()).toContain('自重抗阻基础套组')

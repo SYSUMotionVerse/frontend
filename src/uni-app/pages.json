@@ -79,13 +79,17 @@
     {
       "path": "pages/training/short-questionnaire",
       "style": {
-        "navigationBarTitleText": "简短问卷"
+        "navigationBarTitleText": "简短问卷",
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {
       "path": "pages/training/feedback",
       "style": {
-        "navigationBarTitleText": "训练反馈"
+        "navigationBarTitleText": "训练反馈",
+        "navigationStyle": "custom",
+        "backgroundColor": "#FCF7F0"
       }
     },
     {

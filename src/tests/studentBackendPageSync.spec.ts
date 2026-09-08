@@ -1361,12 +1361,7 @@ describe('page-level backend sync wiring', () => {
       feltArousalScale: 5
     })
     expect(store.submitShortQuestionnaireForLatestSession).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('反馈已保存，正在打开训练反馈')
-    expect(currentUni().redirectTo).not.toHaveBeenCalled()
-
-    await vi.advanceTimersByTimeAsync(300)
-    await flushPromises()
-
+    expect(wrapper.text()).not.toContain('反馈已保存')
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/feedback?sessionId=session-routed'
     })
@@ -1504,12 +1499,7 @@ describe('page-level backend sync wiring', () => {
     await wrapper.get('.submit-short').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('反馈已保存，正在打开训练反馈')
-    expect(currentUni().redirectTo).not.toHaveBeenCalled()
-
-    await vi.advanceTimersByTimeAsync(300)
-    await flushPromises()
-
+    expect(wrapper.text()).not.toContain('反馈已保存')
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
       url: '/pages/training/feedback?sessionId=session-short-2'
     })

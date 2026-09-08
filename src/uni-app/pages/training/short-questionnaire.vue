@@ -4,9 +4,9 @@ import { onLoad } from '@dcloudio/uni-app'
 import ShortQuestionnaireForm from '../../../components/training/ShortQuestionnaireForm.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
-import { useSubmissionHandoff } from '../../composables/useSubmissionHandoff'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
+import { isTrainingMockEnabled } from '../../../features/training/trainingMock'
 
 type SubmissionStatus = 'idle' | 'error' | 'saved-locally' | 'submitted'
 type StatusAction = 'retry' | 'home' | 'feedback'
@@ -16,16 +16,15 @@ type ShortQuestionnaireResponse = {
 }
 
 const store = useStudentStore()
+const mockEnabled = isTrainingMockEnabled()
 const isSubmitting = shallowRef(false)
 const submissionStatus = shallowRef<SubmissionStatus>('idle')
 const submissionMessage = shallowRef('')
 const submissionAction = shallowRef<StatusAction>('retry')
 const routeSessionId = shallowRef('')
+const mockSession = shallowRef(false)
+const mockModality = shallowRef<'wushu' | 'hiit'>('wushu')
 const feedbackNavigationTimeoutMs = 5_000
-const submissionHandoffDelayMs = 260
-const { waitForConfirmation } = useSubmissionHandoff({
-  delayMs: submissionHandoffDelayMs
-})
 let isOpeningFeedback = false
 const activeSessionId = computed(() => {
   if (routeSessionId.value) {
@@ -36,6 +35,8 @@ const activeSessionId = computed(() => {
 
 onLoad((query) => {
   routeSessionId.value = query?.sessionId?.toString() ?? ''
+  mockSession.value = mockEnabled && query?.mock?.toString() === '1'
+  mockModality.value = query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
 })
 
 onMounted(() => {
@@ -72,6 +73,15 @@ async function submitResponse(payload: ShortQuestionnaireResponse) {
 
   setSubmissionStatus('idle')
   isSubmitting.value = true
+  if (mockSession.value) {
+    store.submitShortQuestionnaireForSession(activeSessionId.value, payload)
+    const sessionId = activeSessionId.value
+    setSubmissionStatus('submitted', '', 'feedback')
+    await openFeedback(sessionId)
+    isSubmitting.value = false
+    return
+  }
+
   let result: Awaited<ReturnType<typeof studentBackendSync.syncShortQuestionnaire>>
   try {
     result = await studentBackendSync.syncShortQuestionnaire({
@@ -82,9 +92,8 @@ async function submitResponse(payload: ShortQuestionnaireResponse) {
     // The durable save itself may have failed (quota/storage or validation).
     // Do not claim the data was safely stored — give a truthful retry message.
     setSubmissionStatus('error', '反馈保存失败，请重试提交。')
-    return
-  } finally {
     isSubmitting.value = false
+    return
   }
 
   store.submitShortQuestionnaireForSession(activeSessionId.value, payload)
@@ -96,14 +105,14 @@ async function submitResponse(payload: ShortQuestionnaireResponse) {
         : '反馈已安全保存在本机，待后端开放接口后再同步。',
       'home'
     )
+    isSubmitting.value = false
     return
   }
 
   const sessionId = activeSessionId.value
-  setSubmissionStatus('submitted', '反馈已保存，正在打开训练反馈。', 'feedback')
-  if (await waitForConfirmation()) {
-    await openFeedback(sessionId)
-  }
+  setSubmissionStatus('submitted', '', 'feedback')
+  await openFeedback(sessionId)
+  isSubmitting.value = false
 }
 
 async function openFeedback(sessionId = activeSessionId.value) {
@@ -143,8 +152,11 @@ function redirectToFeedback(sessionId: string) {
     }
 
     try {
+      const mockQuery = mockSession.value
+        ? `&mock=1&modality=${mockModality.value}`
+        : ''
       Promise.resolve(uni.redirectTo({
-        url: `/pages/training/feedback?sessionId=${encodeURIComponent(sessionId)}`
+        url: `/pages/training/feedback?sessionId=${encodeURIComponent(sessionId)}${mockQuery}`
       })).then(
         () => settle(resolve),
         error => settle(() => reject(error))
@@ -163,7 +175,7 @@ function goHome() {
 </script>
 
 <template>
-  <UniTrainingPageShell :show-dock="false" page-title="简短问卷" show-back show-decorations>
+  <UniTrainingPageShell :show-dock="false" page-title="简短问卷" show-navigation scroll-content show-back show-decorations>
     <view class="short-questionnaire-page">
       <ShortQuestionnaireForm
         :submitting="isSubmitting"
