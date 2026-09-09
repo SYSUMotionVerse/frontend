@@ -200,7 +200,7 @@ async function handlePullDownRefresh() {
 </template>
 
 <style scoped>
-.detail-page__section-title { margin: 0 0 20rpx; color: #203042; font-size: 32rpx; }
+.detail-page__section-title { margin: 0 0 20rpx; color: #203042; font-size: 32rpx; font-weight: 800; }
 
 .detail-page__card {
   border: 2rpx solid rgba(255, 211, 132, 0.3);

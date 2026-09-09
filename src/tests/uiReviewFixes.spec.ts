@@ -1028,4 +1028,16 @@ describe('ui review fixes', () => {
     expect(existsSync(resolve('src/uni-app/composables/useRegistrationAvatar.ts'))).toBe(false)
     expect(existsSync(resolve('src/uni-app/composables/useProfileAvatarEditor.ts'))).toBe(false)
   })
+
+  it('keeps growth detail section headings visually prominent', () => {
+    const adherencePage = readFileSync(resolve('src/uni-app/pages/growth/adherence.vue'), 'utf8')
+    const metricsPage = readFileSync(resolve('src/uni-app/pages/growth/metrics.vue'), 'utf8')
+    const historyPage = readFileSync(resolve('src/uni-app/pages/growth/history.vue'), 'utf8')
+
+    expect(adherencePage).toMatch(
+      /\.detail-page__section-title\s*\{[^}]*font-weight:\s*800;/
+    )
+    expect(metricsPage).toMatch(/\.detail-page__heading\s*\{[^}]*font-weight:\s*800;/)
+    expect(historyPage).toMatch(/\.detail-page__heading\s*\{[^}]*font-weight:\s*800;/)
+  })
 })
