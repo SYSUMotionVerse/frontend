@@ -76,8 +76,12 @@ export interface WeeklyAdherenceState {
 
 export interface PhysicalMetricTrend {
   label: string
-  values: readonly number[]
+  values: readonly (number | null)[]
   unit: string
+  before?: number | null
+  after?: number | null
+  change?: number | null
+  changePercent?: number | null
 }
 
 export interface StudentAppState {

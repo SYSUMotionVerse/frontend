@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PhysicalMetricsState } from '../../features/growth/summary'
+import type { PhysicalMetricTrend } from '../../domain/student/types'
 
 const props = defineProps<{
   metricsState: PhysicalMetricsState
@@ -15,6 +16,38 @@ function hasPhysicalMetrics(
 const hasMetrics = computed(() => props.metricsState.hasMetrics)
 const emptyMessage = computed(() => hasPhysicalMetrics(props.metricsState) ? '' : props.metricsState.message)
 const metrics = computed(() => hasPhysicalMetrics(props.metricsState) ? props.metricsState.metrics : [])
+
+function metricValue(metric: PhysicalMetricTrend, position: 'before' | 'after') {
+  if (position === 'before') {
+    return metric.before ?? metric.values[0] ?? null
+  }
+  return metric.after ?? metric.values[1] ?? null
+}
+
+function formatValue(value: number | null) {
+  return value === null ? '—' : String(value)
+}
+
+function formatChange(metric: PhysicalMetricTrend) {
+  const before = metricValue(metric, 'before')
+  const after = metricValue(metric, 'after')
+  const change = metric.change ?? (
+    before !== null && after !== null
+      ? Math.round((after - before) * 100) / 100
+      : null
+  )
+  if (change === null) return '—'
+
+  const sign = change > 0 ? '+' : ''
+  const changePercent = metric.changePercent ?? (
+    before !== null && before !== 0
+      ? Math.round((change / before) * 10000) / 100
+      : null
+  )
+  return changePercent === null
+    ? `${sign}${change}`
+    : `${sign}${change}（${sign}${changePercent}%）`
+}
 </script>
 
 <template>
@@ -27,10 +60,19 @@ const metrics = computed(() => hasPhysicalMetrics(props.metricsState) ? props.me
         <text class="metric-card__unit">{{ metric.unit }}</text>
       </view>
 
-      <view class="metric-card__trend" aria-label="指标趋势值">
-        <text v-for="(value, index) in metric.values" :key="index" class="metric-card__point">
-          {{ value }}
-        </text>
+      <view class="metric-card__comparison" aria-label="实验前后成绩对比">
+        <view class="metric-card__column">
+          <text class="metric-card__caption">实验前</text>
+          <text class="metric-card__value">{{ formatValue(metricValue(metric, 'before')) }}</text>
+        </view>
+        <view class="metric-card__column">
+          <text class="metric-card__caption">实验后</text>
+          <text class="metric-card__value">{{ formatValue(metricValue(metric, 'after')) }}</text>
+        </view>
+        <view class="metric-card__column metric-card__column--change">
+          <text class="metric-card__caption">变化</text>
+          <text class="metric-card__value">{{ formatChange(metric) }}</text>
+        </view>
       </view>
     </view>
   </view>
@@ -85,20 +127,38 @@ const metrics = computed(() => hasPhysicalMetrics(props.metricsState) ? props.me
   letter-spacing: 0.05em;
 }
 
-.metric-card__trend {
+.metric-card__comparison {
   display: flex;
-  gap: 16rpx;
-  flex-wrap: wrap;
+  gap: 12rpx;
   margin: 24rpx 0 0;
   padding: 0;
 }
 
-.metric-card__point {
-  border-radius: 999px;
+.metric-card__column {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+  border-radius: 20rpx;
   background: rgba(137, 207, 255, 0.15);
-  color: #1A202C;
-  padding: 8rpx 24rpx;
-  font-size: 26rpx;
+  padding: 16rpx 12rpx;
+  text-align: center;
+}
+
+.metric-card__column--change {
+  background: rgba(255, 211, 132, 0.2);
+}
+
+.metric-card__caption {
+  color: #64748B;
+  font-size: 22rpx;
   font-weight: 700;
+}
+
+.metric-card__value {
+  color: #1A202C;
+  font-size: 26rpx;
+  font-weight: 800;
 }
 </style>

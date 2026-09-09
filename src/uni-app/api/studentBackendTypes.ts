@@ -441,7 +441,9 @@ export interface BackendStairRecord {
 
 export interface BackendPhysicalTrendEntry {
   test_round: number
-  test_date: string
+  test_date: string | null
+  height: number | null
+  weight: number | null
   bmi: number | null
   body_fat_rate: number | null
   vital_capacity: number | null
@@ -453,10 +455,24 @@ export interface BackendPhysicalTrendEntry {
   eight_hundred_meter_run: number | null
   thousand_meter_run: number | null
   grip_strength: number | null
+  source_sequence?: string
+  group_name?: string
+  measurements?: Record<string, number>
+}
+
+export interface BackendPhysicalMetricComparison {
+  key: string
+  label: string
+  unit: string
+  before: number | null
+  after: number | null
+  change: number | null
+  change_percent: number | null
 }
 
 export interface BackendPhysicalTrendResponse {
   trend: BackendPhysicalTrendEntry[]
+  metrics?: BackendPhysicalMetricComparison[]
   total_tests: number
 }
 

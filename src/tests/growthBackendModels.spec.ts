@@ -324,6 +324,8 @@ describe('growth backend read models', () => {
           {
             test_round: 1,
             test_date: '2026-03-01',
+            height: 165,
+            weight: 52.8,
             bmi: 19.4,
             body_fat_rate: 17.2,
             vital_capacity: 2600,
@@ -339,6 +341,8 @@ describe('growth backend read models', () => {
           {
             test_round: 2,
             test_date: '2026-04-01',
+            height: 166,
+            weight: 52.6,
             bmi: 19.1,
             body_fat_rate: 16.8,
             vital_capacity: 2750,
@@ -352,49 +356,82 @@ describe('growth backend read models', () => {
             grip_strength: 25.3
           }
         ],
+        metrics: [
+          {
+            key: '腰围',
+            label: '腰围',
+            unit: 'cm',
+            before: 72,
+            after: 69.5,
+            change: -2.5,
+            change_percent: -3.47
+          },
+          {
+            key: '自定义爆发力',
+            label: '自定义爆发力',
+            unit: '',
+            before: 42,
+            after: null,
+            change: null,
+            change_percent: null
+          }
+        ],
         total_tests: 2
       })
     ).toEqual([
       {
-        label: 'BMI',
+        label: '腰围',
+        unit: 'cm',
+        values: [72, 69.5],
+        before: 72,
+        after: 69.5,
+        change: -2.5,
+        changePercent: -3.47
+      },
+      {
+        label: '自定义爆发力',
         unit: '',
-        values: [19.4, 19.1]
-      },
-      {
-        label: '肺活量',
-        unit: 'ml',
-        values: [2600, 2750]
-      },
-      {
-        label: '50 米跑',
-        unit: 's',
-        values: [9.1, 8.9]
-      },
-      {
-        label: '立定跳远',
-        unit: 'cm',
-        values: [165, 171]
-      },
-      {
-        label: '坐位体前屈',
-        unit: 'cm',
-        values: [13.5, 15]
-      },
-      {
-        label: '1 分钟仰卧起坐',
-        unit: '次',
-        values: [36, 40]
-      },
-      {
-        label: '800 米跑',
-        unit: 's',
-        values: [230, 224]
-      },
-      {
-        label: '握力',
-        unit: 'kg',
-        values: [24.5, 25.3]
+        values: [42, null],
+        before: 42,
+        after: null,
+        change: null,
+        changePercent: null
       }
     ])
+  })
+
+  it('keeps experiment rounds aligned when a legacy metric is missing once', async () => {
+    const { mapBackendPhysicalMetrics } = await import('../uni-app/api/growthBackendModels')
+    const base = {
+      height: null,
+      weight: null,
+      bmi: null,
+      body_fat_rate: null,
+      vital_capacity: null,
+      fifty_meter_run: null,
+      standing_long_jump: null,
+      sit_and_reach: null,
+      one_minute_sit_ups: null,
+      pull_ups: null,
+      eight_hundred_meter_run: null,
+      thousand_meter_run: null,
+      grip_strength: null
+    }
+
+    expect(mapBackendPhysicalMetrics({
+      trend: [
+        { ...base, test_round: 1, test_date: null, vital_capacity: null },
+        { ...base, test_round: 2, test_date: null, vital_capacity: 2800 }
+      ],
+      total_tests: 2
+    })).toEqual([{
+      label: '肺活量',
+      unit: 'ml',
+      values: [null, 2800],
+      before: null,
+      after: 2800,
+      change: null,
+      changePercent: null
+    }])
   })
 })

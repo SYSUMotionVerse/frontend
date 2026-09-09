@@ -169,30 +169,58 @@ export function mapBackendAchievementAwards(response: BackendAchievementAwards) 
 export function mapBackendPhysicalMetrics(
   response: BackendPhysicalTrendResponse
 ): PhysicalMetricTrend[] {
+  if (response.metrics) {
+    return response.metrics.map(metric => ({
+      label: metric.label,
+      unit: metric.unit,
+      values: [metric.before, metric.after],
+      before: metric.before,
+      after: metric.after,
+      change: metric.change,
+      changePercent: metric.change_percent
+    }))
+  }
+
   const fieldDefinitions = [
+    { label: '身高', unit: 'cm', field: 'height' },
+    { label: '体重', unit: 'kg', field: 'weight' },
     { label: 'BMI', unit: '', field: 'bmi' },
+    { label: '体脂率', unit: '%', field: 'body_fat_rate' },
     { label: '肺活量', unit: 'ml', field: 'vital_capacity' },
     { label: '50 米跑', unit: 's', field: 'fifty_meter_run' },
     { label: '立定跳远', unit: 'cm', field: 'standing_long_jump' },
     { label: '坐位体前屈', unit: 'cm', field: 'sit_and_reach' },
     { label: '1 分钟仰卧起坐', unit: '次', field: 'one_minute_sit_ups' },
+    { label: '引体向上', unit: '次', field: 'pull_ups' },
     { label: '800 米跑', unit: 's', field: 'eight_hundred_meter_run' },
+    { label: '1000 米跑', unit: 's', field: 'thousand_meter_run' },
     { label: '握力', unit: 'kg', field: 'grip_strength' }
   ] as const
 
-  return fieldDefinitions.reduce<PhysicalMetricTrend[]>((metrics, definition) => {
-    const values = response.trend
-      .map(entry => entry[definition.field])
-      .filter((value): value is number => typeof value === 'number')
+  const entriesByRound = new Map(response.trend.map(entry => [entry.test_round, entry]))
 
-    if (values.length === 0) {
+  return fieldDefinitions.reduce<PhysicalMetricTrend[]>((metrics, definition) => {
+    const before = entriesByRound.get(1)?.[definition.field] ?? null
+    const after = entriesByRound.get(2)?.[definition.field] ?? null
+
+    if (before === null && after === null) {
       return metrics
     }
+
+    const rawChange = before !== null && after !== null ? after - before : null
+    const change = rawChange !== null ? Math.round(rawChange * 100) / 100 : null
+    const changePercent = rawChange !== null && before !== null && before !== 0
+      ? Math.round((rawChange / before) * 10000) / 100
+      : null
 
     metrics.push({
       label: definition.label,
       unit: definition.unit,
-      values
+      values: [before, after],
+      before,
+      after,
+      change,
+      changePercent
     })
 
     return metrics

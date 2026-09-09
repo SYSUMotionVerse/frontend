@@ -81,7 +81,15 @@ describe('production growth reads', () => {
       ]
     })
     studentBackendSync.loadPhysicalMetrics.mockResolvedValue([
-      { label: '肺活量', unit: 'ml', values: [2600, 2750] }
+      {
+        label: '肺活量',
+        unit: 'ml',
+        values: [2600, 2750],
+        before: 2600,
+        after: 2750,
+        change: 150,
+        changePercent: 5.77
+      }
     ])
     studentBackendSync.loadVisualScoreTrend.mockResolvedValue({
       trend: [
@@ -198,6 +206,9 @@ describe('production growth reads', () => {
     expect(studentBackendSync.loadAchievementAwards).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('2600')
     expect(wrapper.text()).toContain('2750')
+    expect(wrapper.text()).toContain('实验前')
+    expect(wrapper.text()).toContain('实验后')
+    expect(wrapper.text()).toContain('+150（+5.77%）')
     expect(wrapper.text()).toContain('91')
     expect(wrapper.text()).toContain('稳定性')
   })
