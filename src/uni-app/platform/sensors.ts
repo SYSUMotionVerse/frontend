@@ -124,6 +124,12 @@ const BASELINE_RECALIBRATION_SAMPLE_INTERVAL = 10
 const GRAVITY_EMA_TAU_MS = 1_200
 const ASCENT_RATIO_THRESHOLD = 1
 const ASCENT_STEP_RATIO_THRESHOLD = 0.5
+const ALREADY_STARTED_SENSOR_ERROR_MARKERS = [
+  'has enable',
+  'already enabled',
+  'already started',
+  '已开启'
+]
 
 export async function startStairSensorCapture(
   input: StartStairSensorCaptureInput
@@ -196,7 +202,17 @@ export async function startStairSensorCapture(
         'callback',
         SENSOR_START_TIMEOUT_MS,
         'Motion sensor startup timed out.'
-      )
+      ).catch(error => {
+        // WeChat Android: registering onAccelerometerChange implicitly starts
+        // the sensor, so the explicit start fails with "has enable, should
+        // stop pre". The sensor is already running and our handler is
+        // registered, which is exactly the desired end state — treat it as
+        // success instead of failing the whole capture (iOS is idempotent).
+        if (isSensorAlreadyStartedError(error)) {
+          return
+        }
+        throw error
+      })
     ]
     if (shouldCaptureGyroscope) {
       sensorStarts.push(
@@ -208,7 +224,12 @@ export async function startStairSensorCapture(
           'callback',
           SENSOR_START_TIMEOUT_MS,
           'Motion sensor startup timed out.'
-        )
+        ).catch(error => {
+          if (isSensorAlreadyStartedError(error)) {
+            return
+          }
+          throw error
+        })
       )
     }
     await Promise.all(sensorStarts)
@@ -1254,6 +1275,22 @@ async function callUniSensorMethod(
       settle('resolve')
     }
   })
+}
+
+// WeChat Android reports an already-running sensor as
+// "startAccelerometer:fail has enable, should stop pre"; the actual message
+// varies across base library versions, so match on the stable markers.
+function isSensorAlreadyStartedError(error: unknown) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error !== null && typeof (error as { errMsg?: unknown }).errMsg === 'string'
+      ? (error as { errMsg: string }).errMsg
+      : ''
+  if (!message) {
+    return false
+  }
+  const normalized = message.toLowerCase()
+  return ALREADY_STARTED_SENSOR_ERROR_MARKERS.some(marker => normalized.includes(marker))
 }
 
 function toSensorError(error: unknown) {

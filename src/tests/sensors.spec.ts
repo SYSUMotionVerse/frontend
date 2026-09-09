@@ -633,6 +633,55 @@ describe('startStairSensorCapture', () => {
     expect(uniMock.stopAccelerometer).toHaveBeenCalledTimes(1)
   })
 
+  it('treats an already-started accelerometer (WeChat Android double start) as success', async () => {
+    const capturedHandlers: {
+      accelerometer: ((sample: { x: number; y: number; z: number }) => void) | null
+    } = {
+      accelerometer: null
+    }
+    const uniMock = {
+      startAccelerometer: vi.fn((options: { fail?: (error: { errMsg: string }) => void }) => {
+        options.fail?.({ errMsg: 'startAccelerometer:fail has enable, should stop pre' })
+      }),
+      stopAccelerometer: vi.fn((options: { success?: () => void }) => options.success?.()),
+      onAccelerometerChange: vi.fn((handler: typeof capturedHandlers.accelerometer) => {
+        capturedHandlers.accelerometer = handler
+      }),
+      offAccelerometerChange: vi.fn(() => {
+        capturedHandlers.accelerometer = null
+      })
+    }
+    vi.stubGlobal('uni', uniMock)
+
+    const session = await startStairSensorCapture({ completedIntervals: 0 })
+
+    capturedHandlers.accelerometer?.({ x: 13.2, y: 0, z: 0 })
+    const result = await session.stop()
+
+    expect(result.samples).toHaveLength(1)
+    expect(uniMock.startAccelerometer).toHaveBeenCalledTimes(1)
+    expect(uniMock.stopAccelerometer).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not treat a generic start failure containing started as already enabled', async () => {
+    const uniMock = {
+      startAccelerometer: vi.fn((options: { fail?: (error: { errMsg: string }) => void }) => {
+        options.fail?.({ errMsg: 'startAccelerometer:fail started service is unavailable' })
+      }),
+      stopAccelerometer: vi.fn((options: { success?: () => void }) => options.success?.()),
+      onAccelerometerChange: vi.fn(),
+      offAccelerometerChange: vi.fn()
+    }
+    vi.stubGlobal('uni', uniMock)
+
+    await expect(startStairSensorCapture({
+      completedIntervals: 0
+    })).rejects.toThrow('started service is unavailable')
+
+    expect(uniMock.offAccelerometerChange).toHaveBeenCalledTimes(1)
+    expect(uniMock.stopAccelerometer).toHaveBeenCalledTimes(1)
+  })
+
   it('degrades safely when uni motion sensor APIs are unavailable', async () => {
     vi.stubGlobal('uni', {})
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(3000)

@@ -228,6 +228,15 @@ vi.mock('../uni-app/platform/sensors', async () => {
   }
 })
 
+const { startHorizontalEvidenceCapture, horizontalEvidenceSession } = vi.hoisted(() => ({
+  startHorizontalEvidenceCapture: vi.fn(),
+  horizontalEvidenceSession: { stop: vi.fn() }
+}))
+
+vi.mock('../uni-app/platform/horizontalEvidence', () => ({
+  startHorizontalEvidenceCapture: () => startHorizontalEvidenceCapture()
+}))
+
 vi.mock('../uni-app/platform/trainingFeedback', () => ({
   notifyTrainingComplete
 }))
@@ -370,6 +379,15 @@ describe('page-level backend sync wiring', () => {
     startStairSensorCapture.mockResolvedValue(stairSensorCaptureSession)
     notifyTrainingComplete.mockReset()
     notifyTrainingComplete.mockResolvedValue(undefined)
+    startHorizontalEvidenceCapture.mockReset()
+    startHorizontalEvidenceCapture.mockResolvedValue(horizontalEvidenceSession)
+    horizontalEvidenceSession.stop.mockReset()
+    horizontalEvidenceSession.stop.mockResolvedValue({
+      available: true,
+      sampleCount: 12,
+      medianSpeedMps: 0.2,
+      isImmobile: true
+    })
 
     studentBackendSync.bootstrapAccess.mockResolvedValue({
       targetPageUrl: '/pages/training/home'
@@ -2986,6 +3004,74 @@ describe('page-level backend sync wiring', () => {
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
     expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
+    }))
+  })
+
+  it('records horizontal movement sessions as walking without stair credit', async () => {
+    vi.useFakeTimers()
+    horizontalEvidenceSession.stop.mockResolvedValue({
+      available: true,
+      sampleCount: 12,
+      medianSpeedMps: 1.2,
+      isImmobile: false
+    })
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
+      completedIntervals: 0,
+      summary: expect.objectContaining({
+        summaryText: expect.stringContaining('水平移动明显')
+      })
+    }))
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
+      countsAsCompletion: false
+    }))
+  })
+
+  it('falls back to sensor-only evidence when location capture is denied', async () => {
+    vi.useFakeTimers()
+    startHorizontalEvidenceCapture.mockRejectedValueOnce(new Error('auth deny'))
+
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          StairTrainingPanel: {
+            emits: ['start'],
+            template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
+      completedIntervals: 1
+    }))
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
+      countsAsCompletion: true
     }))
   })
 

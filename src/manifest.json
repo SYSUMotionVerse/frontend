@@ -7,6 +7,15 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wx9c6cccd49637b32e",
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于确认爬楼期间无水平移动，以区分爬楼与平地走"
+      }
+    },
+    "requiredPrivateInfos": [
+      "startLocationUpdate",
+      "onLocationChange"
+    ],
     "optimization": {
       "subPackages": true
     },
