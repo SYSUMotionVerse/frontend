@@ -37,7 +37,7 @@ The pinned toolchain is:
 开始前请准备以下工具：
 
 - `Node.js 24.6.0`
-- `pnpm 11.12.0`
+- `pnpm 12.3.4`
 - WeChat DevTools for previewing generated mini-program bundles / 用于预览生成后的小程序产物的微信开发者工具
 
 ## Project Structure / 项目结构
