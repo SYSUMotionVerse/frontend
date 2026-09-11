@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { StairTrainingStageId } from '../../features/training/stairTrainingGuide'
 
 const props = defineProps<{
   secondsLeft: number
   isRunning: boolean
+  isFinishing: boolean
+  stageLabel: string
+  stageId: StairTrainingStageId
+  currentInstruction: string
+  safetyNotice: string
   cadenceSpm: number
   estimatedStepCount: number
   estimatedVerticalSpeedMps: number
@@ -31,60 +37,43 @@ function formatDecimal(value: number, fractionDigits = 1) {
   return Number.isFinite(value) ? value.toFixed(fractionDigits) : '0.0'
 }
 
+function formatClock(seconds: number) {
+  const normalized = Math.max(0, Math.floor(seconds))
+  const minutes = Math.floor(normalized / 60)
+  const remainingSeconds = normalized % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
 function resolveSensorStatusLabel(status: typeof props.sensorStatus) {
-  if (status === 'collecting') {
-    return '传感器采集中'
-  }
-
-  if (status === 'stopped') {
-    return '本轮已完成'
-  }
-
-  if (status === 'unavailable') {
-    return '传感器不可用'
-  }
-
-  return '传感器就绪'
+  if (status === 'collecting') return '冲刺采集中'
+  if (status === 'stopped') return '冲刺已记录'
+  if (status === 'unavailable') return '传感器不可用'
+  return props.isRunning ? '等待冲刺采集' : '传感器就绪'
 }
 
 function resolveStatusHint() {
   if (props.questionnaireNavigationState === 'failed') {
-    return '本轮训练已保存，请继续填写训练反馈。'
+    return '本次训练已保存，请继续填写训练反馈。'
   }
-
   if (props.questionnaireNavigationState === 'opening') {
     return '训练已完成，正在打开训练反馈。'
   }
-
-  if (props.sensorStatus === 'collecting') {
-    return '保持连续上楼，系统正在记录你的节奏和步数。'
-  }
-
-  if (props.sensorStatus === 'stopped') {
-    return '本轮采集结束，正在整理这次训练记录。'
-  }
-
+  if (props.isFinishing) return '训练完成，正在整理记录并播放结束提示。'
+  if (props.isRunning) return props.currentInstruction
   if (props.sensorStatus === 'unavailable') {
     return '请检查传感器权限后重试，避免记录不完整。'
   }
-
-  return '准备好后开始 30 秒连续上楼。'
+  return '跟随语音完成热身、30 秒冲刺和拉伸放松。'
 }
 
 function resolveRunStateLabel() {
-  if (props.questionnaireNavigationState === 'failed') {
-    return '等待填写反馈'
-  }
-
-  if (props.questionnaireNavigationState === 'opening') {
-    return '正在打开反馈'
-  }
-
-  if (props.sensorStatus === 'stopped') {
+  if (props.questionnaireNavigationState === 'failed') return '等待填写反馈'
+  if (props.questionnaireNavigationState === 'opening') return '正在打开反馈'
+  if (props.isFinishing) return '正在完成训练'
+  if (props.stageId === 'complete' || props.sensorStatus === 'stopped' && !props.isRunning) {
     return '训练完成'
   }
-
-  return props.isRunning ? '训练进行中' : '等待开始'
+  return props.isRunning ? props.stageLabel : '等待开始'
 }
 
 const currentMetrics = computed<CurrentMetric[]>(() => [
@@ -102,9 +91,11 @@ const currentMetrics = computed<CurrentMetric[]>(() => [
   }
 ])
 
+const formattedTimeLeft = computed(() => formatClock(props.secondsLeft))
+const showMetrics = computed(() => props.isRunning || props.sensorStatus === 'stopped')
 const sensorStatusClass = computed(() => `stair-panel__sensor-chip--${props.sensorStatus}`)
 const isPrimaryActionDisabled = computed(() =>
-  props.isRunning || props.questionnaireNavigationState === 'opening'
+  props.isRunning || props.isFinishing || props.questionnaireNavigationState === 'opening'
 )
 const primaryActionLabel = computed(() => {
   if (props.questionnaireNavigationState === 'failed') {
@@ -114,8 +105,9 @@ const primaryActionLabel = computed(() => {
   if (props.questionnaireNavigationState === 'opening') {
     return '正在打开反馈'
   }
+  if (props.isFinishing) return '正在完成'
 
-  return props.isRunning ? '训练进行中' : '开始 30 秒训练'
+  return props.isRunning ? '训练进行中' : '开始 5 分钟训练'
 })
 
 function handlePrimaryAction() {
@@ -133,8 +125,8 @@ function handlePrimaryAction() {
     <view class="stair-panel__hero">
       <view class="stair-panel__hero-head">
         <view class="stair-panel__hero-copy">
-          <text class="stair-panel__eyebrow">{{ resolveRunStateLabel() }}</text>
-          <text class="stair-panel__hero-title">阶梯训练</text>
+          <text class="stair-panel__hero-title">冲刺爬楼</text>
+          <text class="stair-panel__stage-label">{{ resolveRunStateLabel() }}</text>
           <text class="stair-panel__hero-support">{{ resolveStatusHint() }}</text>
         </view>
 
@@ -146,17 +138,16 @@ function handlePrimaryAction() {
 
       <view class="stair-panel__countdown-card">
         <view class="stair-panel__countdown-copy">
-          <text class="stair-panel__countdown-label">本轮剩余</text>
+          <text class="stair-panel__countdown-label">全程剩余</text>
           <view class="stair-panel__countdown-value-row">
-            <text class="stair-panel__countdown-value">{{ secondsLeft }}</text>
-            <text class="stair-panel__countdown-unit">秒</text>
+            <text class="stair-panel__countdown-value">{{ formattedTimeLeft }}</text>
           </view>
-          <text class="stair-panel__countdown-state">{{ resolveRunStateLabel() }}</text>
+          <text class="stair-panel__countdown-state">语音将自动提示下一步</text>
         </view>
-        <text class="stair-panel__countdown-goal">连续上楼 30 秒</text>
+        <text class="stair-panel__countdown-goal">{{ stageLabel }}</text>
       </view>
 
-      <view class="stair-panel__metric-strip" aria-label="本轮实时数据">
+      <view v-if="showMetrics" class="stair-panel__metric-strip" aria-label="冲刺实时数据">
         <view
           v-for="metric in currentMetrics"
           :key="metric.key"
@@ -168,6 +159,11 @@ function handlePrimaryAction() {
             <text class="stair-panel__metric-unit">{{ metric.unit }}</text>
           </view>
         </view>
+      </view>
+
+      <view v-if="!isRunning && sensorStatus === 'ready'" class="stair-panel__safety-note">
+        <text class="stair-panel__safety-title">开始前请确认安全</text>
+        <text class="stair-panel__safety-copy">{{ safetyNotice }}</text>
       </view>
 
       <view class="stair-panel__actions">
@@ -213,7 +209,8 @@ function handlePrimaryAction() {
   min-height: 0;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 40rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
 }
 
@@ -234,11 +231,10 @@ function handlePrimaryAction() {
   gap: 10rpx;
 }
 
-.stair-panel__eyebrow {
+.stair-panel__stage-label {
   color: #966451;
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: 800;
-  letter-spacing: 0.06em;
   line-height: 1.25;
 }
 
@@ -332,7 +328,7 @@ function handlePrimaryAction() {
   color: #fff7e9;
   font-size: 80rpx;
   font-weight: 900;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.035em;
   line-height: 0.86;
 }
 
@@ -401,7 +397,7 @@ function handlePrimaryAction() {
   color: #263442;
   font-size: 46rpx;
   font-weight: 900;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.035em;
   line-height: 0.95;
 }
 
@@ -411,6 +407,31 @@ function handlePrimaryAction() {
   font-size: 20rpx;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.stair-panel__safety-note {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  margin-top: 24rpx;
+  padding: 22rpx 24rpx;
+  border: 2rpx solid #e2d2bf;
+  border-radius: 24rpx;
+  background: #fbf3e8;
+}
+
+.stair-panel__safety-title {
+  color: #714c2a;
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.stair-panel__safety-copy {
+  color: #654f3d;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1.55;
 }
 
 .stair-panel__actions {

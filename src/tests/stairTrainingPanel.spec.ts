@@ -7,16 +7,21 @@ import StairTrainingPanel from '../components/training/StairTrainingPanel.vue'
 function mountPanel(overrides: Partial<InstanceType<typeof StairTrainingPanel>['$props']> = {}) {
   return mount(StairTrainingPanel, {
     props: {
-      secondsLeft: 18,
-      isRunning: true,
-      cadenceSpm: 126.4,
-      estimatedStepCount: 38,
-      estimatedVerticalSpeedMps: 0.47,
-      estimatedFloorsPerMin: 3.2,
-      confidence: 0.84,
-      sensorStatus: 'collecting',
-      sampleCount: 24,
-      ...overrides
+      ...overrides,
+      secondsLeft: overrides.secondsLeft ?? 138,
+      isRunning: overrides.isRunning ?? true,
+      isFinishing: overrides.isFinishing ?? false,
+      stageLabel: overrides.stageLabel ?? '快速爬楼',
+      stageId: overrides.stageId ?? 'sprint',
+      currentInstruction: overrides.currentInstruction ?? 'Go！快速爬楼，保持目标强度和稳定节奏。',
+      safetyNotice: overrides.safetyNotice ?? '确认楼梯照明良好、台阶完整且无障碍物。',
+      cadenceSpm: overrides.cadenceSpm ?? 126.4,
+      estimatedStepCount: overrides.estimatedStepCount ?? 38,
+      estimatedVerticalSpeedMps: overrides.estimatedVerticalSpeedMps ?? 0.47,
+      estimatedFloorsPerMin: overrides.estimatedFloorsPerMin ?? 3.2,
+      confidence: overrides.confidence ?? 0.84,
+      sensorStatus: overrides.sensorStatus ?? 'collecting',
+      sampleCount: overrides.sampleCount ?? 24
     }
   })
 }
@@ -30,8 +35,9 @@ describe('stair training panel', () => {
     expect(wrapper.find('.stair-panel__sensor-chip').exists()).toBe(true)
     expect(wrapper.find('.stair-panel__metric-strip').exists()).toBe(true)
     expect(wrapper.findAll('.stair-panel__metric-card')).toHaveLength(2)
-    expect(wrapper.text()).toContain('阶梯训练')
-    expect(wrapper.text()).toContain('18')
+    expect(wrapper.text()).toContain('冲刺爬楼')
+    expect(wrapper.text()).toContain('02:18')
+    expect(wrapper.text()).toContain('快速爬楼')
     expect(wrapper.text()).toContain('126.4')
     expect(wrapper.text()).toContain('38')
     expect(wrapper.text()).toContain('采集中')
@@ -57,11 +63,20 @@ describe('stair training panel', () => {
       sampleCount: 0
     })
 
-    expect(wrapper.find('.stair-panel__hero-support').text()).toContain('准备好后开始')
-    expect(wrapper.find('.stair-panel__primary-action').text()).toContain('30 秒训练')
+    expect(wrapper.find('.stair-panel__hero-support').text()).toContain('跟随语音')
+    expect(wrapper.find('.stair-panel__primary-action').text()).toContain('5 分钟训练')
+    expect(wrapper.text()).toContain('开始前请确认安全')
+    expect(wrapper.text()).toContain('确认楼梯照明良好')
     expect(wrapper.text()).toContain('传感器就绪')
     expect(wrapper.text()).toContain('等待开始')
     expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+  })
+
+  it('disables restart while the session is finishing', () => {
+    const wrapper = mountPanel({ isRunning: false, isFinishing: true, sensorStatus: 'stopped' })
+
+    expect(wrapper.find('.stair-panel__primary-action').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.stair-panel__primary-action').text()).toContain('正在完成')
   })
 
   it('keeps the primary and secondary session actions wired to their explicit events', async () => {
@@ -82,7 +97,7 @@ describe('stair training panel', () => {
     })
 
     expect(wrapper.text()).toContain('继续填写反馈')
-    expect(wrapper.text()).toContain('本轮训练已保存')
+    expect(wrapper.text()).toContain('本次训练已保存')
     await wrapper.get('.stair-panel__primary-action').trigger('click')
 
     expect(wrapper.emitted('continueQuestionnaire')).toHaveLength(1)
@@ -114,9 +129,23 @@ describe('stair training panel', () => {
     expect(stopSource).toContain('if (isFinishing.value) return')
     expect(stopSource).toContain('completedIntervals: 0')
     expect(stopSource).not.toContain('wasRunning')
-    expect(stopSource).toContain('secondsLeft.value = 30')
+    expect(stopSource).toContain('secondsLeft.value = stairTrainingDurationSeconds')
     expect(stopSource).toContain("sensorStatus.value = 'ready'")
     expect(stopSource).toContain('resetLiveMetrics()')
+  })
+
+  it('preloads and schedules narration while cleaning playback up with the page lifecycle', () => {
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/pages/training/stair-session.vue'),
+      'utf8'
+    )
+
+    expect(pageSource).toContain('const ttsPlayer = createTrainingTtsPlayer()')
+    expect(pageSource).toContain('ttsPlayer.preload(stairTrainingTtsCues.map')
+    expect(pageSource).toContain('ttsPlayer.schedule(stairScheduledTtsCues)')
+    expect(pageSource).toContain('ttsPlayer.replace([stairCompletionTtsCue.audio_url])')
+    expect(pageSource).toContain('ttsPlayer.reset()')
+    expect(pageSource).toContain('ttsPlayer.destroy()')
   })
 
   it('updates provisional cadence twice per second without leaving a live timer behind', () => {

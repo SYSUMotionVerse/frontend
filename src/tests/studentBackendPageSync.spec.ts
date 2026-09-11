@@ -2743,7 +2743,7 @@ describe('page-level backend sync wiring', () => {
     expect(store.completeTrainingSession).not.toHaveBeenCalled()
   })
 
-  it('auto-completes stair sessions after 30 seconds and prevents duplicate starts before redirecting', async () => {
+  it('runs the five-minute guide, captures only the sprint window, and prevents duplicate starts', async () => {
     vi.useFakeTimers()
 
     const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
@@ -2775,17 +2775,22 @@ describe('page-level backend sync wiring', () => {
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
 
-    expect(startStairSensorCapture).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('0')
+    expect(startStairSensorCapture).not.toHaveBeenCalled()
 
-    vi.advanceTimersByTime(30000)
+    await vi.advanceTimersByTimeAsync(119_000)
+    expect(startStairSensorCapture).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(startStairSensorCapture).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(stairSensorCaptureSession.stop).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(150_000)
     await flushPromises()
 
     expect(stairSensorCaptureSession.stop).toHaveBeenCalledTimes(1)
     expect(notifyTrainingComplete).toHaveBeenCalledTimes(1)
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        durationSeconds: 30,
+        durationSeconds: 300,
         summary: expect.objectContaining({
           estimatedStepCount: 64,
           cadenceSpmAvg: 128
@@ -2826,7 +2831,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
@@ -2850,7 +2855,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.stair-panel__primary-action').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(wrapper.text()).toContain('继续填写反馈')
@@ -2905,7 +2910,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -2936,7 +2941,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
@@ -2945,6 +2950,7 @@ describe('page-level backend sync wiring', () => {
   })
 
   it('stops a capture that resolves after the stair page unmounts', async () => {
+    vi.useFakeTimers()
     const pendingCapture: {
       resolve: ((session: typeof stairSensorCaptureSession) => void) | null
     } = {
@@ -2968,6 +2974,7 @@ describe('page-level backend sync wiring', () => {
     })
 
     await wrapper.get('.start-stair-session').trigger('click')
+    await vi.advanceTimersByTimeAsync(120_000)
     wrapper.unmount()
     pendingCapture.resolve?.(stairSensorCaptureSession)
     await flushPromises()
@@ -2998,7 +3005,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledTimes(1)
@@ -3031,7 +3038,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -3064,7 +3071,7 @@ describe('page-level backend sync wiring', () => {
 
     await wrapper.get('.start-stair-session').trigger('click')
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
     expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -3075,7 +3082,8 @@ describe('page-level backend sync wiring', () => {
     }))
   })
 
-  it('does not record a stair session when motion sensors cannot start', async () => {
+  it('finishes without stair credit when motion sensors cannot start', async () => {
+    vi.useFakeTimers()
     startStairSensorCapture.mockRejectedValueOnce(
       new Error('Motion sensor APIs are unavailable.')
     )
@@ -3095,12 +3103,18 @@ describe('page-level backend sync wiring', () => {
     })
 
     await wrapper.get('.start-stair-session').trigger('click')
+    await vi.advanceTimersByTimeAsync(300_000)
     await flushPromises()
 
-    expect(studentBackendSync.syncStairSession).not.toHaveBeenCalled()
-    expect(store.completeTrainingSession).not.toHaveBeenCalled()
-    expect(currentUni().redirectTo).not.toHaveBeenCalledWith({
-      url: '/pages/training/short-questionnaire'
-    })
+    expect(studentBackendSync.syncStairSession).toHaveBeenCalledWith(expect.objectContaining({
+      durationSeconds: 300,
+      completedIntervals: 0
+    }))
+    expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
+      countsAsCompletion: false
+    }))
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
+    }))
   })
 })

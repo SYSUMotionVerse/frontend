@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, shallowRef } from 'vue'
 import { onHide } from '@dcloudio/uni-app'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
+import {
+  resolveStairTrainingInstruction,
+  resolveStairTrainingStage,
+  stairCompletionTtsCue,
+  stairScheduledTtsCues,
+  stairSprintDurationSeconds,
+  stairSprintStartSeconds,
+  stairTrainingDurationSeconds,
+  stairTrainingSafetyNotice,
+  stairTrainingTtsCues
+} from '../../../features/training/stairTrainingGuide'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import { createTrainingSessionId } from '../../platform/trainingSessionId'
@@ -20,19 +31,31 @@ import {
   startHorizontalEvidenceCapture,
   type HorizontalEvidenceSession
 } from '../../platform/horizontalEvidence'
+import {
+  configureTrainingAudioOutput,
+  createTrainingTtsPlayer
+} from '../../platform/trainingTts'
 import type { StairSessionSummary } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
 const trainingSessionId = createTrainingSessionId('stairs')
 const LIVE_METRICS_INTERVAL_MS = 500
 const QUESTIONNAIRE_NAVIGATION_TIMEOUT_MS = 5_000
+const SESSION_TIMER_INTERVAL_MS = 250
 let timerId: ReturnType<typeof setInterval> | null = null
+let sessionStartedAtMs: number | null = null
 let liveMetricsTimerId: ReturnType<typeof setInterval> | null = null
 let captureGeneration = 0
 let captureSession: StairSensorCaptureSession | null = null
+let captureStartPromise: Promise<StairSensorCaptureSession | null> | null = null
+let captureStopPromise: Promise<StairCaptureResult | null> | null = null
 let horizontalCapturePromise: Promise<HorizontalEvidenceSession | null> | null = null
 let horizontalEvidenceSession: HorizontalEvidenceSession | null = null
-const secondsLeft = shallowRef(30)
+let horizontalEvidenceResultPromise: Promise<Awaited<ReturnType<HorizontalEvidenceSession['stop']>> | null> | null = null
+let sprintCaptureStarted = false
+let sprintCaptureEnded = false
+const ttsPlayer = createTrainingTtsPlayer()
+const secondsLeft = shallowRef(stairTrainingDurationSeconds)
 const isRunning = shallowRef(false)
 const isFinishing = shallowRef(false)
 const questionnaireNavigationState = shallowRef<'idle' | 'opening' | 'failed'>('idle')
@@ -43,6 +66,15 @@ const estimatedFloorsPerMin = shallowRef(0)
 const confidence = shallowRef(0)
 const sensorStatus = shallowRef<'ready' | 'collecting' | 'stopped' | 'unavailable'>('ready')
 const sampleCount = shallowRef(0)
+
+type StairCaptureResult = Awaited<ReturnType<StairSensorCaptureSession['stop']>>
+
+const elapsedSeconds = computed(() => stairTrainingDurationSeconds - secondsLeft.value)
+const currentStage = computed(() => resolveStairTrainingStage(elapsedSeconds.value))
+const currentInstruction = computed(() => resolveStairTrainingInstruction(elapsedSeconds.value))
+
+void ttsPlayer.preload(stairTrainingTtsCues.map(cue => cue.audio_url))
+  .catch(error => reportBackendSyncError('楼梯训练语音预加载', error))
 
 function resetLiveMetrics() {
   cadenceSpm.value = 0
@@ -68,97 +100,171 @@ function syncLiveMetrics(
   sampleCount.value = samplesLength
 }
 
+function sprintElapsedSeconds() {
+  return Math.max(0, Math.min(
+    stairSprintDurationSeconds,
+    elapsedSeconds.value - stairSprintStartSeconds
+  ))
+}
+
 function refreshLiveSnapshot() {
-  if (!captureSession) {
-    return
-  }
+  if (!captureSession) return
 
   const snapshot = captureSession.getSnapshot({
-    durationSeconds: 30 - secondsLeft.value,
-    completedIntervals: isRunning.value ? 1 : 0
+    durationSeconds: sprintElapsedSeconds(),
+    completedIntervals: isRunning.value && !sprintCaptureEnded ? 1 : 0
   })
-
   syncLiveMetrics(snapshot.analysis, snapshot.samples.length, true)
 }
 
-async function startTimer() {
-  if (timerId || isRunning.value || isFinishing.value) {
-    return
-  }
+function beginSprintCapture() {
+  if (sprintCaptureStarted || !isRunning.value || isFinishing.value) return
 
-  const startGeneration = ++captureGeneration
-  secondsLeft.value = 30
-  resetLiveMetrics()
+  sprintCaptureStarted = true
   sensorStatus.value = 'collecting'
-  isRunning.value = true
-
-  // 定位采集与传感器并行启动；授权弹窗不阻塞训练计时，
-  // 拿不到定位证据时按仅加速度证据降级。
+  const startGeneration = captureGeneration
   horizontalEvidenceSession = null
   horizontalCapturePromise = startHorizontalEvidenceCapture()
     .then(session => {
+      if (startGeneration !== captureGeneration) {
+        void session.stop().catch(error => reportBackendSyncError('楼梯训练定位停止', error))
+        return null
+      }
       horizontalEvidenceSession = session
       return session
     })
     .catch(error => {
-      horizontalEvidenceSession = null
       reportBackendSyncError('楼梯训练定位采集', error)
       return null
     })
 
-  try {
-    const startedSession = await startStairSensorCapture({
-      completedIntervals: 0
+  captureStartPromise = startStairSensorCapture({ completedIntervals: 0 })
+    .then(session => {
+      if (startGeneration !== captureGeneration) {
+        void session.stop({
+          durationSeconds: 0,
+          completedIntervals: 0
+        }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
+        return null
+      }
+      captureSession = session
+      refreshLiveSnapshot()
+      liveMetricsTimerId = setInterval(refreshLiveSnapshot, LIVE_METRICS_INTERVAL_MS)
+      return session
     })
-    if (startGeneration !== captureGeneration) {
-      void startedSession.stop({
-        durationSeconds: 0,
-        completedIntervals: 0
-      }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
-      return
-    }
+    .catch(error => {
+      if (startGeneration === captureGeneration) sensorStatus.value = 'unavailable'
+      reportBackendSyncError('楼梯训练传感器启动', error)
+      return null
+    })
+}
 
-    captureSession = startedSession
-    refreshLiveSnapshot()
-    liveMetricsTimerId = setInterval(refreshLiveSnapshot, LIVE_METRICS_INTERVAL_MS)
-  } catch (error) {
-    if (startGeneration !== captureGeneration) {
-      return
-    }
+function clearLiveMetricsTimer() {
+  if (!liveMetricsTimerId) return
+  clearInterval(liveMetricsTimerId)
+  liveMetricsTimerId = null
+}
 
+function finishSprintCapture(completedIntervals: 0 | 1) {
+  if (captureStopPromise) return captureStopPromise
+
+  sprintCaptureEnded = true
+  clearLiveMetricsTimer()
+  const stopGeneration = captureGeneration
+  captureStopPromise = (async () => {
+    const activeSession = captureSession ?? await captureStartPromise
     captureSession = null
-    sensorStatus.value = 'unavailable'
-    isRunning.value = false
-    reportBackendSyncError('楼梯训练传感器启动', error)
-    void collectHorizontalEvidence()
-    return
-  }
+    if (!activeSession) {
+      sensorStatus.value = 'unavailable'
+      return null
+    }
+
+    try {
+      const result = await activeSession.stop({
+        durationSeconds: stairSprintDurationSeconds,
+        completedIntervals
+      })
+      if (stopGeneration === captureGeneration) {
+        syncLiveMetrics(result.analysis, result.samples.length)
+        sensorStatus.value = 'stopped'
+      }
+      return result
+    } catch (error) {
+      if (stopGeneration === captureGeneration) sensorStatus.value = 'unavailable'
+      reportBackendSyncError('楼梯训练传感器停止', error)
+      return null
+    }
+  })()
+  return captureStopPromise
+}
+
+function collectHorizontalEvidence() {
+  if (horizontalEvidenceResultPromise) return horizontalEvidenceResultPromise
+
+  horizontalEvidenceResultPromise = (async () => {
+    const session = horizontalEvidenceSession ?? await horizontalCapturePromise
+    horizontalCapturePromise = null
+    horizontalEvidenceSession = null
+    if (!session) return null
+    return session.stop().catch(error => {
+      reportBackendSyncError('楼梯训练定位停止', error)
+      return null
+    })
+  })()
+  return horizontalEvidenceResultPromise
+}
+
+function startTimer() {
+  if (timerId || isRunning.value || isFinishing.value) return
+
+  configureTrainingAudioOutput()
+  secondsLeft.value = stairTrainingDurationSeconds
+  resetLiveMetrics()
+  sensorStatus.value = 'ready'
+  questionnaireNavigationState.value = 'idle'
+  sprintCaptureStarted = false
+  sprintCaptureEnded = false
+  captureStartPromise = null
+  captureStopPromise = null
+  horizontalCapturePromise = null
+  horizontalEvidenceResultPromise = null
+  isRunning.value = true
+  sessionStartedAtMs = Date.now()
+  ttsPlayer.schedule(stairScheduledTtsCues)
 
   timerId = setInterval(() => {
-    secondsLeft.value -= 1
+    if (sessionStartedAtMs === null) return
+    const elapsed = Math.min(
+      stairTrainingDurationSeconds,
+      Math.floor((Date.now() - sessionStartedAtMs) / 1000)
+    )
+    secondsLeft.value = stairTrainingDurationSeconds - elapsed
 
+    if (elapsed >= stairSprintStartSeconds && !sprintCaptureStarted) {
+      beginSprintCapture()
+    }
+    if (
+      elapsed >= stairSprintStartSeconds + stairSprintDurationSeconds
+      && sprintCaptureStarted
+      && !sprintCaptureEnded
+    ) {
+      void finishSprintCapture(1)
+      void collectHorizontalEvidence()
+    }
     if (secondsLeft.value <= 0) {
-      clearTimer()
+      clearSessionTimer()
       void finishSession()
     }
-  }, 1000)
+  }, SESSION_TIMER_INTERVAL_MS)
 }
 
-function clearTimer() {
-  if (timerId) {
-    clearInterval(timerId)
-    timerId = null
-  }
-
-  if (liveMetricsTimerId) {
-    clearInterval(liveMetricsTimerId)
-    liveMetricsTimerId = null
-  }
+function clearSessionTimer() {
+  if (timerId) clearInterval(timerId)
+  timerId = null
+  sessionStartedAtMs = null
 }
 
-function resolveSummaryPayload(
-  analysis: SensorSessionAnalysis
-): StairSessionSummary {
+function resolveSummaryPayload(analysis: SensorSessionAnalysis): StairSessionSummary {
   return {
     summaryText: analysis.summary,
     estimatedStepCount: analysis.estimatedStepCount,
@@ -171,54 +277,21 @@ function resolveSummaryPayload(
   }
 }
 
-async function collectHorizontalEvidence() {
-  const pending = horizontalCapturePromise
-  const session = pending ? await pending.catch(() => null) : horizontalEvidenceSession
-  horizontalCapturePromise = null
-  horizontalEvidenceSession = null
-  if (!session) {
-    return null
-  }
-
-  return session.stop().catch(error => {
-    reportBackendSyncError('楼梯训练定位停止', error)
-    return null
-  })
-}
-
 async function finishSession() {
-  if (isFinishing.value) {
-    return
-  }
+  if (isFinishing.value) return
 
   isFinishing.value = true
-  clearTimer()
+  clearSessionTimer()
+  clearLiveMetricsTimer()
   isRunning.value = false
-  const durationSeconds = 30 - secondsLeft.value
-  const completedIntervals = durationSeconds > 0 ? 1 : 0
-  const activeSession = captureSession
-  captureSession = null
-  let captureResult = null
-  if (activeSession) {
-    try {
-      captureResult = await activeSession.stop({
-        durationSeconds,
-        completedIntervals
-      })
-    } catch (error) {
-      reportBackendSyncError('楼梯训练传感器停止', error)
-    }
-  }
+  const captureResult = await finishSprintCapture(1)
   const analysis = captureResult?.analysis ?? createSensorSessionAnalysis({
-    durationSeconds,
-    completedIntervals
+    durationSeconds: stairSprintDurationSeconds,
+    completedIntervals: 0
   })
-  syncLiveMetrics(analysis, captureResult?.samples.length ?? 0)
-  sensorStatus.value = captureResult ? 'stopped' : 'unavailable'
+  if (!captureResult) sensorStatus.value = 'unavailable'
   const horizontalEvidence = await collectHorizontalEvidence()
 
-  // 双证据门槛：加速度给出竖直节奏证据，定位给出水平静止证据。
-  // 定位拒绝授权或拿不到有效定位点时降级为仅加速度证据。
   const gpsEligible = !horizontalEvidence
     || !horizontalEvidence.available
     || horizontalEvidence.isImmobile
@@ -234,10 +307,9 @@ async function finishSession() {
   summaryPayload.summaryText = summaryText
   const completedAt = new Date().toISOString()
 
-  void notifyTrainingComplete().catch(error => reportBackendSyncError('楼梯训练完成提示', error))
   void studentBackendSync.syncStairSession({
     sessionId: trainingSessionId,
-    durationSeconds,
+    durationSeconds: stairTrainingDurationSeconds,
     completedIntervals: countsAsCompletion ? analysis.completedIntervals : 0,
     qualityScore: analysis.qualityScore,
     summary: summaryPayload,
@@ -254,19 +326,21 @@ async function finishSession() {
   })
   useTrainingProgress().invalidate()
   invalidateGrowthOverview()
+
+  await ttsPlayer.replace([stairCompletionTtsCue.audio_url])
+  await notifyTrainingComplete().catch(error => reportBackendSyncError('楼梯训练完成提示', error))
   await openShortQuestionnaire()
 }
 
 async function openShortQuestionnaire() {
-  if (questionnaireNavigationState.value === 'opening') {
-    return
-  }
+  if (questionnaireNavigationState.value === 'opening') return
 
   questionnaireNavigationState.value = 'opening'
   try {
     await redirectToShortQuestionnaire()
   } catch (error) {
     questionnaireNavigationState.value = 'failed'
+    isFinishing.value = false
     reportBackendSyncError('楼梯训练问卷跳转', error)
   }
 }
@@ -279,9 +353,7 @@ function redirectToShortQuestionnaire() {
     }, QUESTIONNAIRE_NAVIGATION_TIMEOUT_MS)
 
     function settle(action: () => void) {
-      if (settled) {
-        return
-      }
+      if (settled) return
       settled = true
       clearTimeout(timeout)
       action()
@@ -300,48 +372,58 @@ function redirectToShortQuestionnaire() {
   })
 }
 
+function resetCaptureState() {
+  captureSession = null
+  captureStartPromise = null
+  captureStopPromise = null
+  horizontalCapturePromise = null
+  horizontalEvidenceSession = null
+  horizontalEvidenceResultPromise = null
+  sprintCaptureStarted = false
+  sprintCaptureEnded = false
+}
+
 function stopActiveCapture() {
-  // Natural completion owns the capture from this point; a hide or unmount
-  // racing the finish flow must not clobber its final state.
   if (isFinishing.value) return
 
   captureGeneration += 1
-  clearTimer()
+  clearSessionTimer()
+  clearLiveMetricsTimer()
+  ttsPlayer.reset()
   isRunning.value = false
   const activeSession = captureSession
   captureSession = null
   void collectHorizontalEvidence()
 
-  // The 30-second interval was interrupted, so it is not credited as a
-  // completed interval — only a timer-driven finish may report one.
   if (activeSession) {
     void activeSession.stop({
-      durationSeconds: 30 - secondsLeft.value,
+      durationSeconds: sprintElapsedSeconds(),
       completedIntervals: 0
     }).catch(error => reportBackendSyncError('楼梯训练传感器停止', error))
   }
 
-  // Leave the panel in a clean ready state for the next run — the truncated
-  // capture cannot resume, so stale countdown/metric values would mislead.
-  secondsLeft.value = 30
+  secondsLeft.value = stairTrainingDurationSeconds
   sensorStatus.value = 'ready'
   resetLiveMetrics()
+  resetCaptureState()
 }
 
 function interruptSession() {
   stopActiveCapture()
-
-  void uni.switchTab({
-    url: '/pages/training/select'
-  })
+  void uni.switchTab({ url: '/pages/training/select' })
 }
 
 onHide(() => {
+  if (isFinishing.value) {
+    ttsPlayer.reset()
+    return
+  }
   stopActiveCapture()
 })
 
 onBeforeUnmount(() => {
-  stopActiveCapture()
+  if (!isFinishing.value) stopActiveCapture()
+  ttsPlayer.destroy()
 })
 </script>
 
@@ -357,7 +439,12 @@ onBeforeUnmount(() => {
   >
     <StairTrainingPanel
       :is-running="isRunning"
+      :is-finishing="isFinishing"
       :seconds-left="secondsLeft"
+      :stage-label="currentStage.label"
+      :stage-id="currentStage.id"
+      :current-instruction="currentInstruction"
+      :safety-notice="stairTrainingSafetyNotice"
       :cadence-spm="cadenceSpm"
       :estimated-step-count="estimatedStepCount"
       :estimated-vertical-speed-mps="estimatedVerticalSpeedMps"
