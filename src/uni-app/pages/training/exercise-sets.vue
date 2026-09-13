@@ -5,6 +5,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import type { TrainingModality } from '../../../domain/student/types'
 import type { ExerciseArrangementSummary } from '../../api/studentBackendTypes'
 import { studentBackendSync } from '../../api/studentBackend'
+import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { ensureProtectedStudentAccess } from '../../composables/useNavigationGuard'
@@ -88,13 +89,15 @@ async function selectArrangement(arrangement: ExerciseArrangementSummary) {
     trainingProgress.invalidate()
     invalidateGrowthOverview()
     void uni.navigateTo({
-      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(completion.sessionId)}&mock=1&modality=${modality.value}`
+      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(completion.sessionId)}&timing=PRE&next=${encodeURIComponent(`/pages/training/short-questionnaire?sessionId=${encodeURIComponent(completion.sessionId)}&mock=1&modality=${modality.value}`)}&mock=1&modality=${modality.value}`
     })
     return
   }
 
+  const sessionId = createTrainingSessionId('visual')
+  const trainingUrl = `/subpackages/training/visual-session?modality=${modality.value}&arrangementId=${arrangement.id}&sessionId=${encodeURIComponent(sessionId)}`
   void uni.navigateTo({
-    url: `/subpackages/training/visual-session?modality=${modality.value}&arrangementId=${arrangement.id}`
+    url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(sessionId)}&timing=PRE&next=${encodeURIComponent(trainingUrl)}`
   })
 }
 

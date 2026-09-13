@@ -23,13 +23,15 @@ const form = reactive<RegistrationPayload>({
   age: 0,
   major: '',
   grade: '',
+  college: '',
+  educationLevel: '',
   heightCm: 0,
-  weightKg: 0,
-  restingHeartRate: 0
+  weightKg: 0
 })
 
 const genderOptions = ['女', '男']
 const gradeOptions = ['一年级', '二年级', '三年级', '四年级']
+const educationOptions = ['本科生', '研究生', '博士生'] as const
 const consentGiven = shallowRef(false)
 
 const selectedGenderIndex = computed(() => {
@@ -41,6 +43,11 @@ const selectedGenderIndex = computed(() => {
 const selectedGradeIndex = computed(() => {
   const index = gradeOptions.indexOf(form.grade)
 
+  return index >= 0 ? index : 0
+})
+
+const selectedEducationIndex = computed(() => {
+  const index = educationOptions.indexOf(form.educationLevel || '本科生')
   return index >= 0 ? index : 0
 })
 
@@ -76,7 +83,7 @@ function handleStudentIdInput(event: Event | { detail?: { value?: string | numbe
 }
 
 function handleNumericFieldInput(
-  field: 'age' | 'heightCm' | 'weightKg' | 'restingHeartRate',
+  field: 'age' | 'heightCm' | 'weightKg',
   event: Event | { detail?: { value?: string | number }; target?: { value?: string | number } }
 ) {
   const digits = sanitizeDigits(readInputValue(event))
@@ -91,10 +98,11 @@ const canSubmit = computed(() => {
     genderOptions.includes(form.gender) &&
     form.major.trim().length > 0 &&
     form.grade.trim().length > 0 &&
+    Boolean(form.college?.trim()) &&
+    educationOptions.includes(form.educationLevel as typeof educationOptions[number]) &&
     form.age > 0 &&
     form.heightCm > 0 &&
-    form.weightKg > 0 &&
-    form.restingHeartRate > 0
+    form.weightKg > 0
     && consentGiven.value
   )
 })
@@ -117,6 +125,11 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
   const nextIndex = Number(event.detail?.value ?? 0)
 
   form.grade = gradeOptions[nextIndex] ?? ''
+}
+
+function handleEducationChange(event: { detail?: { value?: string | number } }) {
+  const nextIndex = Number(event.detail?.value ?? 0)
+  form.educationLevel = educationOptions[nextIndex] ?? ''
 }
 
 function handleConsentChange(event: { detail?: { value?: string[] } }) {
@@ -210,6 +223,29 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
           </picker>
         </view>
       </view>
+
+      <view class="form-row">
+        <view class="form-row__field">
+          <text class="registration-label">学院</text>
+          <input v-model.trim="form.college" aria-label="学院" autocomplete="organization" class="input-shell registration-input-shell" name="college" placeholder="例如：体育学院" />
+        </view>
+
+        <view class="form-row__field">
+          <text class="registration-label">在读学历</text>
+          <picker
+            aria-label="在读学历"
+            class="registration-picker-shell"
+            mode="selector"
+            :range="educationOptions"
+            :value="selectedEducationIndex"
+            @change="handleEducationChange"
+          >
+            <view class="input-shell registration-input-shell registration-input-shell--picker flex items-center">
+              {{ form.educationLevel || '请选择' }}
+            </view>
+          </picker>
+        </view>
+      </view>
     </view>
 
     <view class="form-card form-card--teal">
@@ -253,21 +289,6 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
         </view>
       </view>
 
-      <view class="form-stack-field">
-        <text class="registration-label">静息心率 (bpm)</text>
-        <input
-          :value="form.restingHeartRate > 0 ? String(form.restingHeartRate) : ''"
-          aria-label="静息心率"
-          autocomplete="off"
-          class="input-shell registration-input-shell"
-          inputmode="numeric"
-          maxlength="3"
-          name="restingHeartRate"
-          placeholder="70"
-          type="text"
-          @input="handleNumericFieldInput('restingHeartRate', $event)"
-        />
-      </view>
     </view>
 
     <checkbox-group class="registration-consent" @change="handleConsentChange">

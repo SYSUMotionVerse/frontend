@@ -240,7 +240,7 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(later.find('.questionnaire-runner__introduction').exists()).toBe(false)
   })
 
-  it('keeps next visible but disabled until an answer is selected', async () => {
+  it('automatically advances after a single-choice answer is selected', async () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: { questionnaire: createQuestionnaire() }
     })
@@ -250,10 +250,11 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(wrapper.get('.questionnaire-runner__primary').classes())
       .toContain('questionnaire-runner__navigation-button--disabled')
     await wrapper.find('.questionnaire-runner__option').trigger('click')
+    expect(wrapper.text()).toContain('第 2 个问题')
     expect(wrapper.get('.questionnaire-runner__footer').text()).toContain('下一题')
-    expect(wrapper.get('.questionnaire-runner__primary').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.questionnaire-runner__primary').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.questionnaire-runner__primary').classes())
-      .not.toContain('questionnaire-runner__navigation-button--disabled')
+      .toContain('questionnaire-runner__navigation-button--disabled')
     expect(wrapper.text()).not.toContain('已保存在本机')
   })
 

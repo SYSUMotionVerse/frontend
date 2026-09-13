@@ -19,6 +19,8 @@ const EMPTY_PROFILE: StudentProfile = {
   age: 18,
   major: '',
   grade: '',
+  college: '',
+  educationLevel: '',
   heightCm: 0,
   weightKg: 0,
   restingHeartRate: 0,
@@ -50,6 +52,13 @@ export function createInitialStudentState(): StudentAppState {
     longQuestionnaires: {
       baseline: {
         checkpoint: 'baseline',
+        completed: false,
+        score: null,
+        percentage: null,
+        submittedAt: null
+      },
+      daily: {
+        checkpoint: 'daily',
         completed: false,
         score: null,
         percentage: null,

@@ -31,6 +31,8 @@ const props = withDefaults(defineProps<{
   completedQuestionCountBefore?: number
   totalQuestionCount?: number
   estimatedMinutes?: number
+  instructionsCollapsible?: boolean
+  instructionsDefaultExpanded?: boolean
 }>(), {
   submitting: false,
   submitLabel: '提交答案',
@@ -38,7 +40,9 @@ const props = withDefaults(defineProps<{
   initialQuestionIndex: 0,
   questionnaireCount: 1,
   questionnaireNumber: 1,
-  completedQuestionCountBefore: 0
+  completedQuestionCountBefore: 0,
+  instructionsCollapsible: false,
+  instructionsDefaultExpanded: true
 })
 
 const emit = defineEmits<{
@@ -69,6 +73,16 @@ function initializeAnswers(
       answers[question.id] = Array.isArray(restoredAnswer)
         ? restoredAnswer.filter(optionId => question.options.some(option => option.id === optionId))
         : []
+      continue
+    }
+
+    if (
+      restoredAnswer
+      && typeof restoredAnswer === 'object'
+      && !Array.isArray(restoredAnswer)
+      && question.options.some(option => option.id === restoredAnswer.selectedOptionId)
+    ) {
+      answers[question.id] = { ...restoredAnswer }
       continue
     }
 
@@ -129,7 +143,7 @@ const totalQuestionCount = computed(() =>
 const completedQuestionCount = computed(() => Math.min(
   totalQuestionCount.value,
   props.completedQuestionCountBefore + visibleQuestions.value.filter(
-    question => hasAnswer(answers[question.id])
+    question => hasAnswer(answers[question.id], question)
   ).length
 ))
 const overallProgressPercent = computed(() => {
@@ -181,9 +195,27 @@ watch(() => props.questionnaire, (nextQuestionnaire) => {
   validationMessage.value = ''
 }, { flush: 'pre' })
 
-function hasAnswer(answer: PsychologyQuestionnaireAnswer | undefined) {
+function hasAnswer(
+  answer: PsychologyQuestionnaireAnswer | undefined,
+  question?: PsychologyQuestionnaireModel['questions'][number]
+) {
   if (Array.isArray(answer)) return answer.length > 0
-  return typeof answer === 'number' ? answer > 0 : Boolean(answer?.trim())
+  if (typeof answer === 'number') return answer > 0
+  if (answer && typeof answer === 'object') {
+    return answer.selectedOptionId > 0 && answer.text.trim().length > 0
+  }
+  if (typeof answer !== 'string' || !answer.trim()) return false
+  if (question?.responseConfig?.input_type !== 'compound') return true
+  try {
+    const parsed = JSON.parse(answer) as Record<string, unknown>
+    const fields = question.responseConfig.fields
+    return Array.isArray(fields) && fields.every(field => {
+      const key = typeof field === 'object' && field ? (field as { key?: unknown }).key : undefined
+      return typeof key === 'string' && Number.isInteger(parsed[key])
+    })
+  } catch {
+    return false
+  }
 }
 
 function emitDraft() {
@@ -214,8 +246,50 @@ function handleResponseChange(questionId: number, optionId: number) {
     }
     answers[questionId] = selected
   } else {
-    answers[questionId] = optionId
+    const selectedOption = question?.options.find(option => option.id === optionId)
+    const detailOrder = Number(question?.responseConfig?.detail_option_order)
+    const requiresDetail = selectedOption && Number.isInteger(detailOrder)
+      && (selectedOption.order ?? question!.options.indexOf(selectedOption) + 1) === detailOrder
+    answers[questionId] = requiresDetail
+      ? { selectedOptionId: optionId, text: '' }
+      : optionId
   }
+  validationMessage.value = ''
+  emitDraft()
+  if (
+    question?.questionType !== 'MULTIPLE'
+    && typeof answers[questionId] === 'number'
+    && currentQuestion.value?.id === questionId
+    && !isLastQuestion.value
+  ) {
+    currentQuestionIndex.value += 1
+    emitDraft()
+  }
+}
+
+function handleDetailInput(value: string) {
+  if (!currentQuestion.value) return
+  const current = answers[currentQuestion.value.id]
+  if (!current || typeof current !== 'object' || Array.isArray(current)) return
+  answers[currentQuestion.value.id] = {
+    selectedOptionId: current.selectedOptionId,
+    text: value.trim()
+  }
+  validationMessage.value = ''
+  emitDraft()
+}
+
+function handleCompoundInput(field: string, value: number) {
+  if (!currentQuestion.value) return
+  let current: Record<string, number> = {}
+  if (typeof currentAnswer.value === 'string' && currentAnswer.value.startsWith('{')) {
+    try {
+      current = JSON.parse(currentAnswer.value) as Record<string, number>
+    } catch {
+      current = {}
+    }
+  }
+  answers[currentQuestion.value.id] = JSON.stringify({ ...current, [field]: value })
   validationMessage.value = ''
   emitDraft()
 }
@@ -261,7 +335,7 @@ function showPreviousQuestion() {
 }
 
 function showNextQuestion() {
-  if (!hasAnswer(currentAnswer.value)) {
+  if (!hasAnswer(currentAnswer.value, currentQuestion.value ?? undefined)) {
     validationMessage.value = '请先完成本题。'
     return
   }
@@ -275,7 +349,7 @@ function handleSubmit() {
   if (props.submitting) return
 
   const firstUnansweredIndex = visibleQuestions.value.findIndex(
-    question => !hasAnswer(answers[question.id])
+    question => !hasAnswer(answers[question.id], question)
   )
   if (firstUnansweredIndex >= 0) {
     currentQuestionIndex.value = firstUnansweredIndex
@@ -312,12 +386,15 @@ function handleSubmit() {
       <QuestionnaireInstructionsCard
         :instructions="instructionsCopy"
         :legend-items="legendItems"
+        :collapsible="instructionsCollapsible"
+        :default-expanded="instructionsDefaultExpanded"
       />
     </view>
 
     <view class="questionnaire-runner__block questionnaire-runner__block--spaced">
       <QuestionnaireQuestionPanel
         v-if="currentQuestion"
+        :key="currentQuestion.id"
         :question="currentQuestion"
         :answer="currentAnswer"
         :question-number="currentQuestionNumber"
@@ -325,6 +402,8 @@ function handleSubmit() {
         @select="handleResponseChange"
         @integer-input="handleIntegerInput"
         @duration-input="handleDurationInput"
+        @detail-input="handleDetailInput"
+        @compound-input="handleCompoundInput"
       />
       <view v-else class="questionnaire-runner__empty-state" aria-live="polite">
         <text class="questionnaire-runner__empty-title">这份问卷暂时没有可作答的题目。</text>
@@ -349,7 +428,7 @@ function handleSubmit() {
 
     <view class="questionnaire-runner__block questionnaire-runner__block--spaced">
       <QuestionnaireBottomNavigation
-        :can-continue="hasAnswer(currentAnswer)"
+        :can-continue="hasAnswer(currentAnswer, currentQuestion || undefined)"
         :can-go-back="!isFirstQuestion"
         :last-question="isLastQuestion"
         :submitting="submitting"

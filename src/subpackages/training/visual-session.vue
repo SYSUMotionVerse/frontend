@@ -15,6 +15,7 @@ import {
 
 const modality = shallowRef<Exclude<TrainingModality, 'stair'>>('wushu')
 const arrangementId = shallowRef<number | null>(null)
+const sessionIdOverride = shallowRef('')
 const comparisonMode = shallowRef(false)
 const emptySafeAreaInsets: VisualSessionSafeAreaInsets = {
   top: 0,
@@ -28,7 +29,7 @@ const viewport = shallowRef({
   safeAreaInsets: emptySafeAreaInsets
 })
 const orientationReady = shallowRef(false)
-const session = useVisualTrainingSession({ modality, arrangementId })
+const session = useVisualTrainingSession({ modality, arrangementId, sessionIdOverride })
 type WeChatExitGuardApi = typeof wx & {
   enableAlertBeforeUnload?: (options: {
     message: string
@@ -212,6 +213,7 @@ function updateOrientationFromRuntime() {
 updateOrientationFromRuntime()
 
 onLoad((query) => {
+  sessionIdOverride.value = query?.sessionId?.toString() ?? ''
   modality.value = query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
   const parsedArrangementId = Number(query?.arrangementId)
   arrangementId.value = Number.isInteger(parsedArrangementId) && parsedArrangementId > 0

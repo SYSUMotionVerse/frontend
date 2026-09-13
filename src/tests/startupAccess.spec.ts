@@ -17,6 +17,8 @@ function createBackendUser(overrides: Partial<BackendCurrentUser> = {}): Backend
     gender: 2,
     student_id: '20260001',
     major: 'Sports Science',
+    college: '体育学院',
+    education_level: 'undergraduate',
     height: 160,
     weight: 45,
     age: 15,
@@ -30,6 +32,8 @@ function createCompleteSeedProfile(overrides: Partial<StudentProfile> = {}) {
   return createSeedProfile({
     age: 15,
     grade: '高一',
+    college: '体育学院',
+    educationLevel: '本科生',
     restingHeartRate: 68,
     ...overrides
   })
@@ -113,7 +117,6 @@ describe('startup access bootstrap', () => {
         weightKg: 45,
         age: 15,
         grade: '高一',
-        restingHeartRate: 68,
         completed: true
       })
     )
@@ -333,7 +336,8 @@ describe('startup access bootstrap', () => {
       profile: expect.objectContaining({
         age: 15,
         grade: '高一',
-        restingHeartRate: 68,
+        college: '体育学院',
+        educationLevel: '本科生',
         completed: true
       })
     }))

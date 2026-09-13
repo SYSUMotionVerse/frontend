@@ -16,7 +16,19 @@ const emit = defineEmits<{
   select: [questionId: number, optionId: number]
   integerInput: [value: string]
   durationInput: [field: 'hours' | 'minutes', value: string]
+  detailInput: [value: string]
+  compoundInput: [field: string, value: number]
 }>()
+
+interface CompoundField {
+  key: string
+  label: string
+  unit: string
+  min?: number
+  max?: number
+  step?: number
+  values?: number[]
+}
 
 const inputType = computed(() =>
   String(props.question.responseConfig?.input_type ?? '')
@@ -48,11 +60,68 @@ const durationValue = computed(() => {
     return { hours: '', minutes: '' }
   }
 })
+const detailOptionOrder = computed(() => Number(
+  props.question.responseConfig?.detail_option_order
+))
+const selectedOptionId = computed(() => {
+  if (typeof props.answer === 'number') return props.answer
+  if (props.answer && typeof props.answer === 'object' && !Array.isArray(props.answer)) {
+    return props.answer.selectedOptionId
+  }
+  return 0
+})
+const detailSelected = computed(() => props.question.options.some((option, index) => (
+  option.id === selectedOptionId.value
+  && (option.order ?? index + 1) === detailOptionOrder.value
+)))
+const detailValue = computed(() => (
+  props.answer && typeof props.answer === 'object' && !Array.isArray(props.answer)
+    ? props.answer.text
+    : ''
+))
+const compoundFields = computed<CompoundField[]>(() => {
+  const fields = props.question.responseConfig?.fields
+  if (!Array.isArray(fields)) return []
+  return fields.filter((field): field is CompoundField => (
+    Boolean(field)
+    && typeof field === 'object'
+    && typeof (field as CompoundField).key === 'string'
+  ))
+})
+const compoundValues = computed<Record<string, number>>(() => {
+  if (typeof props.answer !== 'string' || !props.answer.startsWith('{')) return {}
+  try {
+    return JSON.parse(props.answer) as Record<string, number>
+  } catch {
+    return {}
+  }
+})
 
 function isOptionSelected(optionId: number) {
   return Array.isArray(props.answer)
     ? props.answer.includes(optionId)
-    : props.answer === optionId
+    : selectedOptionId.value === optionId
+}
+
+function compoundOptions(field: CompoundField) {
+  if (Array.isArray(field.values)) return field.values
+  const minimum = field.min ?? 0
+  const maximum = field.max ?? minimum
+  const step = field.step ?? 1
+  return Array.from(
+    { length: Math.floor((maximum - minimum) / step) + 1 },
+    (_, index) => minimum + index * step
+  )
+}
+
+function compoundPickerIndex(field: CompoundField) {
+  return Math.max(0, compoundOptions(field).indexOf(compoundValues.value[field.key]))
+}
+
+function handleCompoundPicker(field: CompoundField, event: unknown) {
+  const index = Number((event as { detail?: { value?: unknown } }).detail?.value ?? 0)
+  const value = compoundOptions(field)[index]
+  if (value !== undefined) emit('compoundInput', field.key, value)
 }
 
 function optionCode(score: number, index: number) {
@@ -88,6 +157,42 @@ function inputEventValue(event: unknown) {
         </text>
         <text class="questionnaire-runner__option-label">{{ option.label }}</text>
       </button>
+      <label v-if="detailSelected" class="questionnaire-runner__field questionnaire-runner__field--detail">
+        <text class="questionnaire-runner__field-label">
+          {{ question.responseConfig?.detail_label || '请补充说明' }}
+        </text>
+        <view class="questionnaire-runner__input-wrap">
+          <input
+            :type="question.responseConfig?.detail_min === undefined ? 'text' : 'number'"
+            :inputmode="question.responseConfig?.detail_min === undefined ? 'text' : 'numeric'"
+            :value="detailValue"
+            placeholder="请输入"
+            @input="emit('detailInput', inputEventValue($event))"
+          >
+          <text v-if="question.responseConfig?.detail_unit">{{ question.responseConfig.detail_unit }}</text>
+        </view>
+      </label>
+    </view>
+
+    <view v-else-if="inputType === 'compound'" class="questionnaire-runner__compound">
+      <label
+        v-for="field in compoundFields"
+        :key="field.key"
+        class="questionnaire-runner__field"
+      >
+        <text class="questionnaire-runner__field-label">{{ field.label }}</text>
+        <picker
+          mode="selector"
+          :range="compoundOptions(field)"
+          :value="compoundPickerIndex(field)"
+          @change="handleCompoundPicker(field, $event)"
+        >
+          <view class="questionnaire-runner__input-wrap questionnaire-runner__picker-wrap">
+            <text>{{ compoundValues[field.key] ?? '请选择' }}</text>
+            <text>{{ field.unit }}</text>
+          </view>
+        </picker>
+      </label>
     </view>
 
     <view v-else-if="inputType === 'duration'" class="questionnaire-runner__duration">
@@ -227,6 +332,21 @@ function inputEventValue(event: unknown) {
   grid-template-columns: 1fr 1fr;
   gap: 18rpx;
   margin-top: 30rpx;
+}
+
+.questionnaire-runner__compound {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22rpx 18rpx;
+  margin-top: 30rpx;
+}
+
+.questionnaire-runner__field--detail {
+  margin-top: 10rpx;
+}
+
+.questionnaire-runner__picker-wrap {
+  justify-content: space-between;
 }
 
 .questionnaire-runner__field {

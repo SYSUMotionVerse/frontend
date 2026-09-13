@@ -1,16 +1,20 @@
 import { studentBackendSync } from '../api/studentBackend'
 import type { VisualSessionSyncInput } from '../api/studentBackendTypes'
 import { createTrainingSessionId } from '../platform/trainingSessionId'
+import type { ShallowRef } from 'vue'
 
 type VisualTrainingSubmissionInput = Omit<VisualSessionSyncInput, 'sessionId'>
 
-export function useVisualTrainingSubmission() {
-  const sessionId = createTrainingSessionId('visual')
+export function useVisualTrainingSubmission(sessionIdOverride?: ShallowRef<string>) {
+  const generatedSessionId = createTrainingSessionId('visual')
+  const resolveSessionId = () => sessionIdOverride?.value.trim() || generatedSessionId
   let trainingCredential: string | undefined
   let submissionSnapshot: VisualTrainingSubmissionInput | undefined
 
   return {
-    sessionId,
+    get sessionId() {
+      return resolveSessionId()
+    },
     async prepare(input: {
       modality: VisualSessionSyncInput['modality']
       videoId: number
@@ -18,7 +22,7 @@ export function useVisualTrainingSubmission() {
       arrangementFingerprint?: string
     }) {
       const issued = await studentBackendSync.prepareVisualTrainingSession({
-        sessionId,
+        sessionId: resolveSessionId(),
         ...input
       })
       trainingCredential = issued?.credential
@@ -30,7 +34,7 @@ export function useVisualTrainingSubmission() {
       // backend can safely return the existing record for this session ID.
       submissionSnapshot ??= input
       return studentBackendSync.syncVisualSession({
-        sessionId,
+        sessionId: resolveSessionId(),
         ...(trainingCredential ? { trainingCredential } : {}),
         ...submissionSnapshot
       })

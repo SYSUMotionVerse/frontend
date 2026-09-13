@@ -146,7 +146,9 @@ describe('training home next action', () => {
     await flushPromises()
 
     expect(controls.navigateTo).toHaveBeenCalledWith({
-      url: '/pages/training/stair-session'
+      url: expect.stringMatching(
+        /^\/pages\/training\/short-questionnaire\?sessionId=stairs-.+&timing=PRE&next=%2Fpages%2Ftraining%2Fstair-session%3FsessionId%3Dstairs-/
+      )
     })
   })
 

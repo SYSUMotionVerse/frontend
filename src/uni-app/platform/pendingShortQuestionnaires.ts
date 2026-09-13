@@ -5,6 +5,7 @@ export type ShortQuestionnaireResponse = {
 
 export type PendingShortQuestionnaireSubmission = {
   sessionId: string
+  timing?: 'PRE' | 'POST'
   response: ShortQuestionnaireResponse
   queuedAt: string
 }
@@ -12,7 +13,7 @@ export type PendingShortQuestionnaireSubmission = {
 export interface PendingShortQuestionnaireStore {
   list: () => PendingShortQuestionnaireSubmission[]
   save: (submission: PendingShortQuestionnaireSubmission) => void
-  remove: (sessionId: string) => void
+  remove: (sessionId: string, timing?: 'PRE' | 'POST') => void
   clear: () => void
 }
 
@@ -63,6 +64,7 @@ function isPendingSubmission(value: unknown): value is PendingShortQuestionnaire
     Boolean(response) &&
     isFeelingScaleValue(response?.feelingScale) &&
     isFeltArousalScaleValue(response?.feltArousalScale)
+    && (submission.timing === undefined || submission.timing === 'PRE' || submission.timing === 'POST')
   )
 }
 
@@ -121,12 +123,21 @@ export function createPendingShortQuestionnaireStore(
     },
     save(submission) {
       const { entries: raw } = readRaw()
-      const remaining = raw.filter(item => item !== null && typeof item === 'object' && (item as { sessionId?: string }).sessionId !== submission.sessionId)
+      const timing = submission.timing ?? 'POST'
+      const remaining = raw.filter(item => {
+        if (item === null || typeof item !== 'object') return false
+        const existing = item as PendingShortQuestionnaireSubmission
+        return existing.sessionId !== submission.sessionId || (existing.timing ?? 'POST') !== timing
+      })
       write(prune([...remaining, submission]))
     },
-    remove(sessionId) {
+    remove(sessionId, timing = 'POST') {
       const { entries: raw } = readRaw()
-      write(prune(raw.filter(item => item !== null && typeof item === 'object' && (item as { sessionId?: string }).sessionId !== sessionId)))
+      write(prune(raw.filter(item => {
+        if (item === null || typeof item !== 'object') return false
+        const existing = item as PendingShortQuestionnaireSubmission
+        return existing.sessionId !== sessionId || (existing.timing ?? 'POST') !== timing
+      })))
     },
     clear() {
       write([])

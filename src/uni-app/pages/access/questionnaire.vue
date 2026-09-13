@@ -107,6 +107,9 @@ const startLabel = computed(() =>
     ? '继续填写'
     : '开始填写'
 )
+const instructionsDefaultExpanded = computed(() =>
+  checkpoint.value !== 'daily' || (questionnairePlan.value?.completed_day_count ?? 0) < 3
+)
 
 onMounted(() => {
   if (hasLoaded.value) {
@@ -455,6 +458,8 @@ function returnToQuestionnaireList() {
             :completed-question-count-before="completedQuestionCountBefore"
             :total-question-count="totalQuestionCount"
             :estimated-minutes="estimatedMinutes"
+            :instructions-collapsible="checkpoint === 'daily'"
+            :instructions-default-expanded="instructionsDefaultExpanded"
             @draft-change="handleDraftChange"
             @reload="loadQuestionnaire"
             @submit="handleSubmit"

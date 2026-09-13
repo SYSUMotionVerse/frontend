@@ -10,6 +10,7 @@ import { useStudentStore } from '../../composables/useStudentStore'
 import { useStationNotifications } from '../../composables/useStationNotifications'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
+import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import {
   continueRequiredQuestionnaire,
   ensureProtectedStudentAccess,
@@ -177,7 +178,11 @@ async function chooseMode(modality: TrainingModality) {
   if (!canExecute) return
 
   if (modality === 'stair') {
-    void uni.navigateTo({ url: '/pages/training/stair-session' })
+    const sessionId = createTrainingSessionId('stairs')
+    const trainingUrl = `/pages/training/stair-session?sessionId=${encodeURIComponent(sessionId)}`
+    void uni.navigateTo({
+      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(sessionId)}&timing=PRE&next=${encodeURIComponent(trainingUrl)}`
+    })
     return
   }
 

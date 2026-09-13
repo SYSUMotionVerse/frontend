@@ -110,7 +110,7 @@ describe('stair training panel', () => {
       'utf8'
     )
 
-    expect(pageSource).toContain("import { onHide } from '@dcloudio/uni-app'")
+    expect(pageSource).toMatch(/import \{[^}]*onHide[^}]*\} from '@dcloudio\/uni-app'/)
     expect(pageSource).toContain('function stopActiveCapture()')
     expect(pageSource).toMatch(/onHide\(\(\) => \{[\s\S]*stopActiveCapture\(\)/)
     expect(pageSource).toMatch(/onBeforeUnmount\(\(\) => \{[\s\S]*stopActiveCapture\(\)/)

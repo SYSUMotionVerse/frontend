@@ -74,6 +74,7 @@ export interface VisualTrainingCaptureApi {
 interface UseVisualTrainingSessionOptions {
   modality: ShallowRef<Exclude<TrainingModality, 'stair'>>
   arrangementId: ShallowRef<number | null>
+  sessionIdOverride?: ShallowRef<string>
 }
 
 type PoseRecognitionStatus = 'idle' | 'preparing' | 'ready' | 'failed'
@@ -274,7 +275,7 @@ export function buildSessionScoringResult(
 
 export function useVisualTrainingSession(options: UseVisualTrainingSessionOptions) {
   const store = useStudentStore()
-  const submission = useVisualTrainingSubmission()
+  const submission = useVisualTrainingSubmission(options.sessionIdOverride)
   const capture = shallowRef<VisualTrainingCaptureApi | null>(null)
   const arrangement = shallowRef<ExerciseArrangementDetail | null>(null)
   const cachedVideoPaths = shallowRef<Record<string, string>>({})

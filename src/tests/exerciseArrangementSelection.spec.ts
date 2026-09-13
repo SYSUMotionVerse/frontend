@@ -149,7 +149,9 @@ describe('exercise arrangement selection page', () => {
 
     expect(controls.ensureAccess).toHaveBeenCalledWith('execute')
     expect(controls.navigateTo).toHaveBeenCalledWith({
-      url: '/subpackages/training/visual-session?modality=hiit&arrangementId=8'
+      url: expect.stringMatching(
+        /^\/pages\/training\/short-questionnaire\?sessionId=visual-.+&timing=PRE&next=%2Fsubpackages%2Ftraining%2Fvisual-session%3Fmodality%3Dhiit%26arrangementId%3D8%26sessionId%3Dvisual-/
+      )
     })
   })
 

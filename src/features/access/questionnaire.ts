@@ -15,6 +15,7 @@ export interface LongQuestionnaireSubmission {
 
 export const CHECKPOINT_LABELS: Record<CheckpointKey, string> = {
   baseline: '基线',
+  daily: '每日',
   week4: '第4周',
   week8: '第8周',
   week12: '第12周'
@@ -30,13 +31,14 @@ const SHARED_LONG_QUESTIONS: LongQuestion[] = [
 
 export const LONG_QUESTIONNAIRES: Record<CheckpointKey, LongQuestion[]> = {
   baseline: SHARED_LONG_QUESTIONS,
+  daily: SHARED_LONG_QUESTIONS,
   week4: SHARED_LONG_QUESTIONS,
   week8: SHARED_LONG_QUESTIONS,
   week12: SHARED_LONG_QUESTIONS
 }
 
 export function normalizeCheckpoint(value: string | undefined): CheckpointKey {
-  if (value === 'week4' || value === 'week8' || value === 'week12') {
+  if (value === 'daily' || value === 'week4' || value === 'week8' || value === 'week12') {
     return value
   }
 

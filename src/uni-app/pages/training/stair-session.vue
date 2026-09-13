@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef } from 'vue'
-import { onHide } from '@dcloudio/uni-app'
+import { onHide, onLoad } from '@dcloudio/uni-app'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
 import {
   resolveStairTrainingInstruction,
@@ -38,7 +38,7 @@ import {
 import type { StairSessionSummary } from '../../api/studentBackendTypes'
 
 const store = useStudentStore()
-const trainingSessionId = createTrainingSessionId('stairs')
+let trainingSessionId = createTrainingSessionId('stairs')
 const LIVE_METRICS_INTERVAL_MS = 500
 const QUESTIONNAIRE_NAVIGATION_TIMEOUT_MS = 5_000
 const SESSION_TIMER_INTERVAL_MS = 250
@@ -75,6 +75,10 @@ const currentInstruction = computed(() => resolveStairTrainingInstruction(elapse
 
 void ttsPlayer.preload(stairTrainingTtsCues.map(cue => cue.audio_url))
   .catch(error => reportBackendSyncError('楼梯训练语音预加载', error))
+
+onLoad((query) => {
+  trainingSessionId = query?.sessionId?.toString() || trainingSessionId
+})
 
 function resetLiveMetrics() {
   cadenceSpm.value = 0

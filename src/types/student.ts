@@ -1,6 +1,8 @@
 import type { ScoredActionResult } from '../domain/training/actionScoringTypes'
 
-export type CheckpointKey = 'baseline' | 'week4' | 'week8' | 'week12'
+export type CheckpointKey = 'baseline' | 'daily' | 'week4' | 'week8' | 'week12'
+
+export type EducationLevel = '本科生' | '研究生' | '博士生'
 
 export type TrainingModality = 'wushu' | 'hiit' | 'stair'
 
@@ -11,9 +13,12 @@ export interface StudentProfile {
   age: number
   major: string
   grade: string
+  college?: string
+  educationLevel?: EducationLevel | ''
   heightCm: number
   weightKg: number
-  restingHeartRate: number
+  /** Legacy field retained only for reading older locally cached profiles. */
+  restingHeartRate?: number
   completed: boolean
 }
 

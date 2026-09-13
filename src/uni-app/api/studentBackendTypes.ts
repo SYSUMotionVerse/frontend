@@ -26,11 +26,12 @@ export interface UserUpdatePayload {
   gender?: 1 | 2
   student_id?: string
   major?: string
+  college?: string | null
+  education_level?: 'undergraduate' | 'master' | 'doctoral' | null
   height?: number
   weight?: number
   age?: number | null
   grade?: string | null
-  resting_heart_rate?: number | null
 }
 
 export interface BackendCurrentUser {
@@ -39,11 +40,12 @@ export interface BackendCurrentUser {
   gender: 1 | 2 | null
   student_id: string | null
   major: string | null
+  college?: string | null
+  education_level?: 'undergraduate' | 'master' | 'doctoral' | null
   height: number | string | null
   weight: number | string | null
   age?: number | null
   grade?: string | null
-  resting_heart_rate?: number | null
   [key: string]: unknown
 }
 
@@ -97,6 +99,7 @@ export interface BackendQuestionnairePlan {
   available: boolean
   delay_days: number
   is_late: boolean
+  completed_day_count?: number
   questionnaire_count: number
   completed_questionnaire_count: number
   estimated_total_minutes: number
@@ -112,6 +115,13 @@ export interface BackendQuestionnairePlan {
     completed: boolean
     description?: string
   }>
+}
+
+export interface BackendPsychologyNextMessage {
+  message: string
+  checkpoint?: CheckpointKey
+  available?: boolean
+  scheduled_at?: string | null
 }
 
 export interface BackendPsychologyRecord {
@@ -143,6 +153,7 @@ export interface PsychologyQuestionnaireOption {
   id: number
   label: string
   score: number
+  order?: number
 }
 
 export interface PsychologyQuestionnaireQuestion {
@@ -167,7 +178,16 @@ export interface PsychologyQuestionnaireModel {
   questions: PsychologyQuestionnaireQuestion[]
 }
 
-export type PsychologyQuestionnaireAnswer = number | number[] | string
+export interface PsychologyChoiceWithDetailAnswer {
+  selectedOptionId: number
+  text: string
+}
+
+export type PsychologyQuestionnaireAnswer =
+  | number
+  | number[]
+  | string
+  | PsychologyChoiceWithDetailAnswer
 
 export interface LongQuestionnaireSyncInput {
   checkpoint: CheckpointKey
@@ -541,12 +561,14 @@ export interface LongQuestionnaireSyncResult extends BackendSyncResult {
 
 export interface ShortQuestionnaireSyncInput {
   sessionId: string
+  timing?: 'PRE' | 'POST'
   feelingScale: number
   feltArousalScale: number
 }
 
 export interface ShortQuestionnaireCreatePayload {
   training_session_id: string
+  timing?: 'PRE' | 'POST'
   feeling_scale: number
   felt_arousal_scale: number
 }
@@ -555,6 +577,7 @@ export interface BackendShortQuestionnaireRecord {
   id: number
   user: number
   training_session_id: string
+  timing?: 'PRE' | 'POST'
   definition_code?: string | null
   feeling_scale: number
   felt_arousal_scale: number
@@ -611,7 +634,7 @@ export interface StudentBackendSyncDependencies {
   getPsychologyQuestionnairePlan?: (
     checkpoint: CheckpointKey
   ) => Promise<BackendQuestionnairePlan>
-  getNextPsychologyScale: () => Promise<BackendPsychologyScale | { message: string }>
+  getNextPsychologyScale: () => Promise<BackendPsychologyScale | BackendPsychologyNextMessage>
   submitPsychologyScale: (payload: PsychologyScaleSubmitPayload) => Promise<PsychologyScaleSubmitResponse>
   listPsychologyRecords: () => Promise<BackendPsychologyRecord[]>
   listExerciseRecords: () => Promise<BackendExerciseRecord[]>

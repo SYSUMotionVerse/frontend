@@ -8,7 +8,7 @@ export interface RegistrationProfileStorage {
 
 const storageKey = 'sport-snack:registration-profile'
 // Short privacy TTL for locally cached registration fields.  The backend now
-// persists age, grade, and resting_heart_rate on the User model, so these
+// persists all required study fields on the User model, so these
 // fields are authoritative on the backend and returned via /users/me/.  This
 // local cache is only a fallback when the backend payload is unavailable or
 // missing those fields (e.g. legacy accounts that have not yet re-registered).
@@ -43,9 +43,11 @@ function isStoredProfile(value: unknown): value is StudentProfile {
     isFiniteNumber(profile.age) &&
     typeof profile.major === 'string' &&
     typeof profile.grade === 'string' &&
+    (profile.college === undefined || typeof profile.college === 'string') &&
+    (profile.educationLevel === undefined || typeof profile.educationLevel === 'string') &&
     isFiniteNumber(profile.heightCm) &&
     isFiniteNumber(profile.weightKg) &&
-    isFiniteNumber(profile.restingHeartRate) &&
+    (profile.restingHeartRate === undefined || isFiniteNumber(profile.restingHeartRate)) &&
     typeof profile.completed === 'boolean'
   )
 }

@@ -129,17 +129,27 @@ function resolveGenderValue(gender: StudentProfile['gender']) {
   return undefined
 }
 
+function resolveEducationValue(
+  educationLevel: StudentProfile['educationLevel']
+): UserUpdatePayload['education_level'] {
+  if (educationLevel === '本科生') return 'undergraduate'
+  if (educationLevel === '研究生') return 'master'
+  if (educationLevel === '博士生') return 'doctoral'
+  return undefined
+}
+
 export function mapStudentProfileToUserUpdatePayload(profile: RegistrationSyncInput): UserUpdatePayload {
   return omitUndefined({
     name: profile.name.trim() || undefined,
     gender: resolveGenderValue(profile.gender),
     student_id: profile.studentId.trim() || undefined,
     major: profile.major.trim() || undefined,
+    college: profile.college?.trim() || undefined,
+    education_level: resolveEducationValue(profile.educationLevel),
     height: profile.heightCm > 0 ? profile.heightCm : undefined,
     weight: profile.weightKg > 0 ? profile.weightKg : undefined,
     age: profile.age > 0 ? profile.age : undefined,
-    grade: profile.grade.trim() || undefined,
-    resting_heart_rate: profile.restingHeartRate > 0 ? profile.restingHeartRate : undefined
+    grade: profile.grade.trim() || undefined
   })
 }
 
@@ -388,11 +398,12 @@ export function isBackendProfileComplete(user: BackendCurrentUser) {
     user.gender !== null &&
     hasTextValue(user.student_id) &&
     hasTextValue(user.major) &&
+    hasTextValue(user.college) &&
+    ['undergraduate', 'master', 'doctoral'].includes(user.education_level || '') &&
     toPositiveNumber(user.height) !== null &&
     toPositiveNumber(user.weight) !== null &&
     toPositiveNumber(user.age) !== null &&
-    hasTextValue(user.grade) &&
-    toPositiveNumber(user.resting_heart_rate) !== null
+    hasTextValue(user.grade)
   )
 }
 
@@ -400,7 +411,8 @@ function hasRequiredStudyProfileFields(profile: StudentProfile) {
   return (
     profile.age > 0 &&
     profile.grade.trim().length > 0 &&
-    profile.restingHeartRate > 0
+    Boolean(profile.college?.trim()) &&
+    ['本科生', '研究生', '博士生'].includes(profile.educationLevel || '')
   )
 }
 
@@ -411,8 +423,11 @@ export function mapBackendCurrentUserToStudentProfile(
   const heightCm = toPositiveNumber(user.height)
   const weightKg = toPositiveNumber(user.weight)
   const age = toPositiveNumber(user.age)
-  const restingHeartRate = toPositiveNumber(user.resting_heart_rate)
   const grade = hasTextValue(user.grade) ? user.grade.trim() : ''
+  const educationLevel: StudentProfile['educationLevel'] =
+    user.education_level === 'undergraduate' ? '本科生'
+      : user.education_level === 'master' ? '研究生'
+        : user.education_level === 'doctoral' ? '博士生' : ''
 
   return {
     ...seedProfile,
@@ -420,11 +435,12 @@ export function mapBackendCurrentUserToStudentProfile(
     name: hasTextValue(user.name) ? user.name.trim() : '',
     gender: resolveBackendGenderLabel(user.gender),
     major: hasTextValue(user.major) ? user.major.trim() : '',
+    college: hasTextValue(user.college) ? user.college.trim() : '',
+    educationLevel: educationLevel || '',
     heightCm: heightCm ?? 0,
     weightKg: weightKg ?? 0,
     age: age ?? seedProfile.age,
     grade: grade || seedProfile.grade,
-    restingHeartRate: restingHeartRate ?? seedProfile.restingHeartRate,
     completed: isBackendProfileComplete(user)
   }
 }
@@ -466,6 +482,7 @@ function buildShortQuestionnairePayload(
   }
   return {
     training_session_id: input.sessionId,
+    ...(input.timing ? { timing: input.timing } : {}),
     feeling_scale: input.feelingScale,
     felt_arousal_scale: input.feltArousalScale
   }
@@ -478,7 +495,10 @@ function resolveCompletedPsychologyCheckpoints(
   const checkpoints = new Set<CheckpointKey>()
   for (const record of records) {
     if (record?.scale_info && typeof record.scale_info.order === 'number') {
-      checkpoints.add(mapPsychologyRecordSummary(record).checkpoint)
+      const checkpoint = mapPsychologyRecordSummary(record).checkpoint
+      if (checkpoint !== 'daily') {
+        checkpoints.add(checkpoint)
+      }
     }
   }
   if (
@@ -530,6 +550,9 @@ function resolveDueCheckpoint(
   }
 
   if (nextScale && typeof nextScale.message === 'string' && nextScale.message.trim().length > 0) {
+    if (nextScale.checkpoint === 'daily' && nextScale.available === false) {
+      return undefined
+    }
     if (isAllScalesCompletedMessage(nextScale.message)) {
       return undefined
     }
@@ -619,8 +642,9 @@ export function createStudentBackendSync(
         async () => {
           // A concurrent retry or a newer response may have already changed
           // this session while this job waited for its per-session turn.
+          const submissionTiming = submission.timing ?? 'POST'
           const current = submissionOptions.pendingShortQuestionnaires.list()
-            .find(item => item.sessionId === submission.sessionId)
+            .find(item => item.sessionId === submission.sessionId && (item.timing ?? 'POST') === submissionTiming)
           if (!current) {
             return false
           }
@@ -634,10 +658,11 @@ export function createStudentBackendSync(
           try {
             await submitShortQuestionnaire({
               training_session_id: current.sessionId,
+              ...(current.timing ? { timing: current.timing } : {}),
               feeling_scale: current.response.feelingScale,
               felt_arousal_scale: current.response.feltArousalScale
             })
-            submissionOptions.pendingShortQuestionnaires.remove(current.sessionId)
+            submissionOptions.pendingShortQuestionnaires.remove(current.sessionId, current.timing)
             return true
           } catch {
             // Keep failed and ambiguous submissions durable for a later retry.
@@ -914,6 +939,7 @@ export function createStudentBackendSync(
 
       const submission = {
         sessionId: input.sessionId,
+        ...(input.timing ? { timing: input.timing } : {}),
         response: {
           feelingScale: input.feelingScale,
           feltArousalScale: input.feltArousalScale
@@ -937,7 +963,7 @@ export function createStudentBackendSync(
         try {
           await dependencies.ensureSession()
           await submitShortQuestionnaire(buildShortQuestionnairePayload(input))
-          submissionOptions.pendingShortQuestionnaires.remove(input.sessionId)
+          submissionOptions.pendingShortQuestionnaires.remove(input.sessionId, input.timing)
           return { synced: true } as const
         } catch {
           // Network/submit failed but the durable save succeeded.

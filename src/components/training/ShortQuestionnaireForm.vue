@@ -17,11 +17,13 @@ const props = withDefaults(defineProps<{
   status?: SubmissionStatus
   statusMessage?: string
   statusAction?: StatusAction
+  timing?: 'PRE' | 'POST'
 }>(), {
   submitting: false,
   status: 'idle',
   statusMessage: '',
-  statusAction: 'retry'
+  statusAction: 'retry',
+  timing: 'POST'
 })
 
 const form = reactive({
@@ -42,19 +44,19 @@ const questionSections: Array<{
     field: 'feelingScale',
     index: '01',
     title: '总体主观感受',
-    hint: '选择最符合你此刻运动感受的一项',
+    hint: '评价此刻总体感觉的愉快或不愉快程度',
     values: Array.from({ length: 11 }, (_, index) => index - 5),
-    lowLabel: '非常糟糕',
-    highLabel: '非常好'
+    lowLabel: '-5 非常糟糕',
+    highLabel: '+5 非常好'
   },
   {
     field: 'feltArousalScale',
     index: '02',
     title: '激活／唤醒状态',
-    hint: '选择最符合你此刻激活程度的一项',
+    hint: '评价此刻身体和心理的激活／唤醒程度',
     values: [1, 2, 3, 4, 5, 6],
-    lowLabel: '低唤醒',
-    highLabel: '高唤醒'
+    lowLabel: '1 非常低',
+    highLabel: '6 非常高'
   }
 ]
 
@@ -84,7 +86,7 @@ const primaryLabel = computed(() => {
   if (isFeedbackRecovery.value) return '重新打开训练反馈'
   if (showPrimaryLoading.value) return '正在提交'
   if (props.status === 'error') return '重新提交反馈'
-  return '提交并查看反馈'
+  return props.timing === 'PRE' ? '保存并开始训练' : '提交并查看反馈'
 })
 const statusLabel = computed(() => (
   props.status === 'saved-locally'
@@ -121,9 +123,9 @@ function handleSubmit() {
     @submit.prevent="handleSubmit"
   >
     <view class="short-questionnaire-form__intro">
-      <text class="short-questionnaire-form__eyebrow">训练已完成</text>
-      <text class="short-questionnaire-form__title">记录这次感受</text>
-      <text class="short-questionnaire-form__copy">两个问题，约 20 秒。请按此刻的真实感受选择。</text>
+      <text class="short-questionnaire-form__eyebrow">{{ props.timing === 'PRE' ? '运动前测量' : '训练已完成' }}</text>
+      <text class="short-questionnaire-form__title">记录此刻感受</text>
+      <text class="short-questionnaire-form__copy">两个问题，约 20 秒。请按此刻的真实感受选择；同一次运动前后各记录一次。</text>
     </view>
 
     <view

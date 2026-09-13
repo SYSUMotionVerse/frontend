@@ -1,18 +1,51 @@
 <script setup lang="ts">
-defineProps<{
+import { shallowRef, watch } from 'vue'
+
+const props = withDefaults(defineProps<{
   instructions: string
   legendItems: Array<{
     key: string
     label: string
   }>
-}>()
+  collapsible?: boolean
+  defaultExpanded?: boolean
+}>(), {
+  collapsible: false,
+  defaultExpanded: true
+})
+
+const expanded = shallowRef(!props.collapsible || props.defaultExpanded)
+
+watch(
+  () => [props.collapsible, props.defaultExpanded] as const,
+  ([collapsible, defaultExpanded]) => {
+    expanded.value = !collapsible || defaultExpanded
+  }
+)
+
+function toggleInstructions() {
+  if (!props.collapsible) return
+  expanded.value = !expanded.value
+}
 </script>
 
 <template>
   <view class="questionnaire-instructions">
-    <text class="questionnaire-instructions__title">作答说明</text>
-    <text class="questionnaire-instructions__copy">{{ instructions }}</text>
-    <view v-if="legendItems.length" class="questionnaire-instructions__legend" aria-label="作答图例">
+    <view class="questionnaire-instructions__header">
+      <text class="questionnaire-instructions__title">作答说明</text>
+      <button
+        v-if="collapsible"
+        class="questionnaire-instructions__toggle"
+        type="button"
+        :aria-expanded="expanded"
+        aria-label="查看作答说明"
+        @click="toggleInstructions"
+      >
+        ?
+      </button>
+    </view>
+    <text v-if="expanded" class="questionnaire-instructions__copy">{{ instructions }}</text>
+    <view v-if="expanded && legendItems.length" class="questionnaire-instructions__legend" aria-label="作答图例">
       <view
         v-for="item in legendItems"
         :key="`${item.key}-${item.label}`"
@@ -44,6 +77,35 @@ defineProps<{
   color: #1a202c;
   font-size: 27rpx;
   font-weight: 900;
+}
+
+.questionnaire-instructions__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.questionnaire-instructions__toggle {
+  display: inline-flex;
+  width: 48rpx;
+  height: 48rpx;
+  flex: 0 0 48rpx;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 2rpx solid rgba(255, 139, 139, 0.4);
+  border-radius: 50%;
+  background: #fff;
+  color: #c35f6b;
+  font-size: 25rpx;
+  font-weight: 900;
+  line-height: 48rpx;
+}
+
+.questionnaire-instructions__toggle::after {
+  border: none;
 }
 
 .questionnaire-instructions__legend {

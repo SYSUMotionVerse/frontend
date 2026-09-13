@@ -9,6 +9,8 @@ function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile 
     age: 12,
     major: 'Sports Science',
     grade: '一年级',
+    college: '体育学院',
+    educationLevel: '本科生',
     heightCm: 160,
     weightKg: 45,
     restingHeartRate: 72,
@@ -28,11 +30,12 @@ describe('student backend API payload mapping', () => {
       gender: 2,
       student_id: '20260001',
       major: 'Sports Science',
+      college: '体育学院',
+      education_level: 'undergraduate',
       height: 160,
       weight: 45,
       age: 12,
-      grade: '一年级',
-      resting_heart_rate: 72
+      grade: '一年级'
     })
   })
 
@@ -69,8 +72,8 @@ describe('student backend API payload mapping', () => {
           id: 11,
           prompt: '您最近一周的运动频率如何？',
           options: [
-            { id: 101, label: '每天都运动', score: 5 },
-            { id: 102, label: '3-5天', score: 4 }
+            { id: 101, label: '每天都运动', score: 5, order: 1 },
+            { id: 102, label: '3-5天', score: 4, order: 2 }
           ]
         }
       ]
@@ -115,6 +118,21 @@ describe('student backend API payload mapping', () => {
           selected_options: [101, 102]
         }
       ]
+    })
+  })
+
+  it('submits a conditional choice together with its required detail', async () => {
+    const { buildPsychologyScaleSubmitPayload } = await import('../uni-app/api/psychologyModels')
+
+    expect(buildPsychologyScaleSubmitPayload(9, {
+      21: { selectedOptionId: 214, text: '27' }
+    })).toEqual({
+      scale_id: 9,
+      answers: [{
+        question_id: 21,
+        selected_options: [214],
+        text_answer: '27'
+      }]
     })
   })
 

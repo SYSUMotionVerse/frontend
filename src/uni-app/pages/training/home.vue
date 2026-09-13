@@ -17,6 +17,7 @@ import { useReminderReturn } from '../../composables/useReminderReturn'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
 import { prefetchGrowthOverview } from '../../composables/useGrowthOverview'
+import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import {
   continueRequiredQuestionnaire,
   ensureProtectedStudentAccess,
@@ -185,7 +186,11 @@ async function startNextTraining() {
   if (!canExecute) return
 
   if (next.id === 'stair') {
-    void uni.navigateTo({ url: '/pages/training/stair-session' })
+    const sessionId = createTrainingSessionId('stairs')
+    const trainingUrl = `/pages/training/stair-session?sessionId=${encodeURIComponent(sessionId)}`
+    void uni.navigateTo({
+      url: `/pages/training/short-questionnaire?sessionId=${encodeURIComponent(sessionId)}&timing=PRE&next=${encodeURIComponent(trainingUrl)}`
+    })
     return
   }
 

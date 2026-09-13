@@ -68,7 +68,8 @@ export function mapBackendScaleToQuestionnaire(
           .map(option => ({
             id: option.id,
             label: option.option_text,
-            score: option.score
+            score: option.score,
+            order: option.order
           }))
       }))
   }
@@ -86,16 +87,22 @@ export function buildPsychologyScaleSubmitPayload(
             question_id: Number(questionId),
             selected_options: answer
           }
-        : typeof answer === 'number'
+          : typeof answer === 'number'
           ? {
               question_id: Number(questionId),
               selected_options: [answer]
             }
-          : {
+          : typeof answer === 'string'
+            ? {
               question_id: Number(questionId),
               selected_options: [],
               text_answer: answer
-            })
+            }
+            : {
+                question_id: Number(questionId),
+                selected_options: [answer.selectedOptionId],
+                text_answer: answer.text
+              })
       .sort((left, right) => left.question_id - right.question_id)
   }
 }

@@ -1301,7 +1301,8 @@ describe('page-level backend sync wiring', () => {
     expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
       sessionId: 'session-short-1',
       feelingScale: 4,
-      feltArousalScale: 5
+      feltArousalScale: 5,
+      timing: 'POST'
     })
     expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-short-1', {
       feelingScale: 4,
@@ -1372,7 +1373,8 @@ describe('page-level backend sync wiring', () => {
     expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
       sessionId: 'session-routed',
       feelingScale: 4,
-      feltArousalScale: 5
+      feltArousalScale: 5,
+      timing: 'POST'
     })
     expect(store.submitShortQuestionnaireForSession).toHaveBeenCalledWith('session-routed', {
       feelingScale: 4,

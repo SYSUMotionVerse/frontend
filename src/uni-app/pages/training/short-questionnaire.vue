@@ -22,6 +22,8 @@ const submissionStatus = shallowRef<SubmissionStatus>('idle')
 const submissionMessage = shallowRef('')
 const submissionAction = shallowRef<StatusAction>('retry')
 const routeSessionId = shallowRef('')
+const timing = shallowRef<'PRE' | 'POST'>('POST')
+const nextTrainingUrl = shallowRef('')
 const mockSession = shallowRef(false)
 const mockModality = shallowRef<'wushu' | 'hiit'>('wushu')
 const feedbackNavigationTimeoutMs = 5_000
@@ -35,6 +37,11 @@ const activeSessionId = computed(() => {
 
 onLoad((query) => {
   routeSessionId.value = query?.sessionId?.toString() ?? ''
+  timing.value = query?.timing?.toString() === 'PRE' ? 'PRE' : 'POST'
+  const next = query?.next?.toString() ?? ''
+  nextTrainingUrl.value = (
+    next.startsWith('/pages/training/') || next.startsWith('/subpackages/training/')
+  ) ? next : ''
   mockSession.value = mockEnabled && query?.mock?.toString() === '1'
   mockModality.value = query?.modality?.toString() === 'hiit' ? 'hiit' : 'wushu'
 })
@@ -74,10 +81,13 @@ async function submitResponse(payload: ShortQuestionnaireResponse) {
   setSubmissionStatus('idle')
   isSubmitting.value = true
   if (mockSession.value) {
-    store.submitShortQuestionnaireForSession(activeSessionId.value, payload)
+    if (timing.value === 'POST') {
+      store.submitShortQuestionnaireForSession(activeSessionId.value, payload)
+    }
     const sessionId = activeSessionId.value
     setSubmissionStatus('submitted', '', 'feedback')
-    await openFeedback(sessionId)
+    if (timing.value === 'PRE') await openTraining()
+    else await openFeedback(sessionId)
     isSubmitting.value = false
     return
   }
@@ -86,12 +96,20 @@ async function submitResponse(payload: ShortQuestionnaireResponse) {
   try {
     result = await studentBackendSync.syncShortQuestionnaire({
       sessionId: activeSessionId.value,
+      timing: timing.value,
       ...payload
     })
   } catch {
     // The durable save itself may have failed (quota/storage or validation).
     // Do not claim the data was safely stored — give a truthful retry message.
     setSubmissionStatus('error', '反馈保存失败，请重试提交。')
+    isSubmitting.value = false
+    return
+  }
+
+  if (timing.value === 'PRE') {
+    setSubmissionStatus('submitted', '', 'feedback')
+    await openTraining()
     isSubmitting.value = false
     return
   }
@@ -172,12 +190,26 @@ function goHome() {
     url: '/pages/training/home'
   })
 }
+
+async function openTraining() {
+  if (!nextTrainingUrl.value) {
+    setSubmissionStatus('error', '未找到待开始的训练，请返回训练首页后重试。', 'home')
+    return
+  }
+  try {
+    await Promise.resolve(uni.redirectTo({ url: nextTrainingUrl.value }))
+  } catch (error) {
+    reportBackendSyncError('运动前问卷跳转', error)
+    setSubmissionStatus('error', '问卷已保存，但训练页暂时无法打开。', 'home')
+  }
+}
 </script>
 
 <template>
   <UniTrainingPageShell :show-dock="false" page-title="简短问卷" show-navigation scroll-content show-back show-decorations>
     <view class="short-questionnaire-page">
       <ShortQuestionnaireForm
+        :timing="timing"
         :submitting="isSubmitting"
         :status="submissionStatus"
         :status-message="submissionMessage"
