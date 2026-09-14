@@ -85,6 +85,14 @@ export type BootstrapAccessResult = {
   targetPage: StartupTargetPage
   targetPageUrl: StartupTargetPageUrl
   checkpoint?: CheckpointKey
+  /**
+   * A follow-up or daily questionnaire may be available while training
+   * remains open. Keep that discovery attached to the bootstrap response so
+   * the home page can offer an explicit entry without treating it as a gate.
+   */
+  questionnaireCheckpoint?: CheckpointKey
+  questionnaireAvailable?: boolean
+  questionnaireScheduledAt?: string | null
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T) {
@@ -445,18 +453,43 @@ export function mapBackendCurrentUserToStudentProfile(
   }
 }
 
-function buildBootstrapAccessResult(checkpoint?: CheckpointKey): BootstrapAccessResult {
-  if (checkpoint) {
+type QuestionnaireAccessResolution = {
+  checkpoint?: CheckpointKey
+  available: boolean
+  scheduledAt?: string | null
+}
+
+function buildBootstrapAccessResult(
+  questionnaire?: QuestionnaireAccessResolution
+): BootstrapAccessResult {
+  if (questionnaire?.checkpoint === 'baseline' && questionnaire.available) {
     return {
       targetPage: 'questionnaire',
-      targetPageUrl: `/pages/access/questionnaire?checkpoint=${checkpoint}`,
-      checkpoint
+      targetPageUrl: `/pages/access/questionnaire?checkpoint=${questionnaire.checkpoint}`,
+      checkpoint: questionnaire.checkpoint,
+      questionnaireCheckpoint: questionnaire.checkpoint,
+      questionnaireAvailable: true,
+      ...(questionnaire.scheduledAt !== undefined
+        ? { questionnaireScheduledAt: questionnaire.scheduledAt }
+        : {})
     }
   }
 
   return {
     targetPage: 'home',
-    targetPageUrl: '/pages/training/home'
+    targetPageUrl: '/pages/training/home',
+    ...(questionnaire?.checkpoint
+      ? { checkpoint: questionnaire.checkpoint }
+      : {}),
+    ...(questionnaire?.checkpoint
+      ? { questionnaireCheckpoint: questionnaire.checkpoint }
+      : {}),
+    ...(questionnaire?.checkpoint
+      ? { questionnaireAvailable: questionnaire.available }
+      : {}),
+    ...(questionnaire?.scheduledAt !== undefined
+      ? { questionnaireScheduledAt: questionnaire.scheduledAt }
+      : {})
   }
 }
 
@@ -528,6 +561,11 @@ function hasSequentialCompletedCheckpoints(completedCheckpoints: Set<CheckpointK
   return true
 }
 
+function resolveLocalActiveCheckpoint(completedCheckpoints: Set<CheckpointKey>) {
+  const order: CheckpointKey[] = ['week12', 'week8', 'week4', 'baseline']
+  return order.find(checkpoint => completedCheckpoints.has(checkpoint)) ?? 'baseline'
+}
+
 function isAllScalesCompletedMessage(message: string) {
   const normalized = message.trim().toLowerCase()
   return (
@@ -540,21 +578,30 @@ function isAllScalesCompletedMessage(message: string) {
 function resolveDueCheckpoint(
   nextScale: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>,
   completedCheckpoints: Set<CheckpointKey>
-) {
+): QuestionnaireAccessResolution {
   if (hasQuestions(nextScale)) {
     const checkpoint = mapBackendScaleToQuestionnaire(nextScale).checkpoint
     if (completedCheckpoints.has(checkpoint)) {
       throw new Error('Backend checkpoint state is inconsistent. Please contact the study administrator.')
     }
-    return checkpoint
+    return {
+      checkpoint,
+      available: true
+    }
   }
 
   if (nextScale && typeof nextScale.message === 'string' && nextScale.message.trim().length > 0) {
-    if (nextScale.checkpoint === 'daily' && nextScale.available === false) {
-      return undefined
+    if (nextScale.checkpoint && nextScale.available === false) {
+      return {
+        checkpoint: nextScale.checkpoint,
+        available: false,
+        ...(nextScale.scheduled_at !== undefined
+          ? { scheduledAt: nextScale.scheduled_at }
+          : {})
+      }
     }
     if (isAllScalesCompletedMessage(nextScale.message)) {
-      return undefined
+      return { available: false }
     }
 
     throw new Error(`Backend could not identify the next required questionnaire checkpoint: ${nextScale.message}`)
@@ -680,7 +727,20 @@ export function createStudentBackendSync(
 
   function startPendingShortQuestionnaireRetry() {
     if (pendingShortQuestionnaireRetry) {
-      return pendingShortQuestionnaireRetry
+      // The first retry snapshots the durable queue before a just-finished
+      // training session can save its POST answers. Reusing that promise
+      // alone would report success while leaving the new entry behind.
+      // Re-check the queue after the in-flight attempt settles so the stair
+      // completion path closes this race without issuing duplicate requests
+      // for entries that the original operation already removed.
+      return pendingShortQuestionnaireRetry.then(
+        async result => submissionOptions.pendingShortQuestionnaires.list().length > 0
+          ? retryPendingShortQuestionnairesNow()
+          : result,
+        async () => submissionOptions.pendingShortQuestionnaires.list().length > 0
+          ? retryPendingShortQuestionnairesNow()
+          : { attempted: 0, succeeded: 0 }
+      )
     }
 
     const retry = retryPendingShortQuestionnairesNow()
@@ -853,18 +913,25 @@ export function createStudentBackendSync(
         throw new Error('Backend checkpoint records are out of order.')
       }
       const registeredProfileHasNoPsychologyRecords = completedCheckpoints.size === 0 && psychologyRecords.length === 0
-      const dueCheckpoint = resolveDueCheckpoint(
+      const questionnaireAccess = resolveDueCheckpoint(
         await dependencies.getNextPsychologyScale(),
         completedCheckpoints
       )
-      if (registeredProfileHasNoPsychologyRecords && dueCheckpoint !== 'baseline') {
+      if (
+        registeredProfileHasNoPsychologyRecords
+        && questionnaireAccess.checkpoint !== 'baseline'
+      ) {
         throw new Error('Backend checkpoint order is invalid: baseline questionnaire is not completed.')
       }
 
       bootstrapAccess.hydrateAccessState({
         profile,
         completedQuestionnaireCheckpoints: [...completedCheckpoints],
-        activeCheckpoint: dueCheckpoint ?? 'baseline'
+        // Follow-up and daily windows are discoverable from the home hub but
+        // do not become a local execution gate while the backend says they
+        // are due. Keep the local active checkpoint on the latest completed
+        // record so legacy entry resolvers cannot lock training by accident.
+        activeCheckpoint: resolveLocalActiveCheckpoint(completedCheckpoints)
       })
 
       // After a successful authenticated bootstrap, retry any pending short
@@ -875,7 +942,7 @@ export function createStudentBackendSync(
       // can be enabled. See docs/mini-program-production-release.md.
       retryTrainingBeforeShortQuestionnaires()
 
-      return buildBootstrapAccessResult(dueCheckpoint)
+      return buildBootstrapAccessResult(questionnaireAccess)
     },
     async loadLongQuestionnaire(preferredCheckpoint?: CheckpointKey) {
       if (!dependencies.isEnabled()) {
@@ -992,7 +1059,8 @@ export function createStudentBackendSync(
         score: summary.score,
         percentage: summary.percentage,
         analysis: summary.analysis,
-        submittedAt: summary.submittedAt
+        submittedAt: summary.submittedAt,
+        ...(summary.scoringStatus ? { scoringStatus: summary.scoringStatus } : {})
       } satisfies LongQuestionnaireSyncResult
     },
     async loadVisualExerciseVideo(
@@ -1171,6 +1239,11 @@ export function createStudentBackendSync(
       if (submissionPersisted) {
         submissionOptions.pendingSubmissions.remove(input.sessionId)
       }
+      // The POST page can be reached before this upload finishes on a slow
+      // connection. Once the authoritative stair record exists, retry a
+      // matching pending short questionnaire so the two records converge
+      // without waiting for a later cold start.
+      await startPendingShortQuestionnaireRetry()
       return { synced: true } as const
     },
     async retryPendingTrainingSubmissions() {

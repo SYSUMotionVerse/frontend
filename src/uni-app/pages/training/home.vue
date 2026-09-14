@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeCoachCard from '../../../components/training/TrainingHomeCoachCard.vue'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import TrainingHomeProgressOverview from '../../../components/training/TrainingHomeProgressOverview.vue'
@@ -21,6 +21,7 @@ import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import {
   continueRequiredQuestionnaire,
   ensureProtectedStudentAccess,
+  refreshProtectedStudentAccess,
   useProtectedAccessState
 } from '../../composables/useNavigationGuard'
 
@@ -31,11 +32,24 @@ const reminderReturn = useReminderReturn()
 const trainingProgress = useTrainingProgress()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
+const pendingQuestionnaire = computed(() => {
+  const checkpoint = accessState.value.questionnaireCheckpoint
+  if (!checkpoint || checkpoint === 'baseline') return null
+  return {
+    checkpoint,
+    available: accessState.value.questionnaireAvailable !== false,
+    scheduledAt: accessState.value.questionnaireScheduledAt ?? null
+  }
+})
 const isRefreshing = ref(false)
 const coachQuote = ref(pickTrainingHomeQuote())
 const hasLoadedReminderStatus = ref(false)
 let hasStartedPrimaryTabPrefetch = false
 let quoteRotationTimer: ReturnType<typeof setInterval> | undefined
+const ACCESS_DISCOVERY_REFRESH_MS = 60_000
+let accessDiscoveryRefreshTimer: ReturnType<typeof setInterval> | undefined
+let lastAccessDiscoveryRefreshAt = 0
+let accessDiscoveryRefreshPromise: Promise<void> | null = null
 
 const displayName = computed(() => store.state.profile.name.trim() || '同学')
 const {
@@ -65,7 +79,46 @@ function stopQuoteRotation() {
   quoteRotationTimer = undefined
 }
 
-onBeforeUnmount(stopQuoteRotation)
+function stopAccessDiscoveryRefresh() {
+  if (!accessDiscoveryRefreshTimer) return
+  clearInterval(accessDiscoveryRefreshTimer)
+  accessDiscoveryRefreshTimer = undefined
+}
+
+async function refreshAccessDiscovery(force = false) {
+  if (accessDiscoveryRefreshPromise) return accessDiscoveryRefreshPromise
+
+  const now = Date.now()
+  if (!force && now - lastAccessDiscoveryRefreshAt < ACCESS_DISCOVERY_REFRESH_MS) return
+  lastAccessDiscoveryRefreshAt = now
+
+  const refresh = (async () => {
+    const result = await refreshProtectedStudentAccess()
+    if (result && result.targetPage !== 'home') {
+      await Promise.resolve(uni.reLaunch({ url: result.targetPageUrl }))
+    }
+  })().catch(() => undefined)
+  accessDiscoveryRefreshPromise = refresh
+  try {
+    await refresh
+  } finally {
+    if (accessDiscoveryRefreshPromise === refresh) {
+      accessDiscoveryRefreshPromise = null
+    }
+  }
+}
+
+function startAccessDiscoveryRefresh() {
+  if (accessDiscoveryRefreshTimer) return
+  accessDiscoveryRefreshTimer = setInterval(() => {
+    void refreshAccessDiscovery()
+  }, ACCESS_DISCOVERY_REFRESH_MS)
+}
+
+onBeforeUnmount(() => {
+  stopQuoteRotation()
+  stopAccessDiscoveryRefresh()
+})
 
 const trainingHints: Record<TrainingModality, string> = {
   wushu: '跟着示范完成一轮动作训练。',
@@ -137,10 +190,12 @@ onLoad((query) => {
 
 onShow(async () => {
   startQuoteRotation()
+  startAccessDiscoveryRefresh()
   await reminderReturn.resolvePending()
   if (reminderReturn.state.value.status === 'resolved') {
     store.setReminderSource('wechat-reminder')
   }
+  await refreshAccessDiscovery()
   await Promise.all([
     trainingProgress.refresh(),
     stationNotifications.refresh()
@@ -155,6 +210,10 @@ onShow(async () => {
     await reminderConsent.loadStatus()
     hasLoadedReminderStatus.value = true
   }
+})
+
+onHide(() => {
+  stopAccessDiscoveryRefresh()
 })
 
 async function handlePullDownRefresh() {
@@ -227,6 +286,13 @@ function authorizeTrainingReminders() {
 
       <QuestionnaireUnlockBanner
         v-if="isBrowseOnly"
+        @continue-questionnaire="continueRequiredQuestionnaire"
+      />
+      <QuestionnaireUnlockBanner
+        v-else-if="pendingQuestionnaire"
+        :checkpoint="pendingQuestionnaire.checkpoint"
+        :available="pendingQuestionnaire.available"
+        :scheduled-at="pendingQuestionnaire.scheduledAt"
         @continue-questionnaire="continueRequiredQuestionnaire"
       />
 

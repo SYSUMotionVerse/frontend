@@ -14,6 +14,7 @@ const reminderSyncState = { value: 'idle' }
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn((callback: typeof loadPage) => { loadPage = callback }),
   onPullDownRefresh: vi.fn(),
+  onHide: vi.fn(),
   onShow: vi.fn((callback: typeof showPage) => { showPage = callback })
 }))
 

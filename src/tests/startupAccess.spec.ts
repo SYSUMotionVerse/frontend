@@ -252,7 +252,7 @@ describe('startup access bootstrap', () => {
     expect(getNextPsychologyScale).toHaveBeenCalledTimes(1)
   })
 
-  it('routes startup to a due week 4 questionnaire from backend next-scale truth', async () => {
+  it('keeps training open while exposing a due week 4 questionnaire from backend next-scale truth', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
 
     const sync = createStudentBackendSync(
@@ -271,13 +271,47 @@ describe('startup access bootstrap', () => {
 
     const result = await sync.bootstrapAccess()
 
-    expect(result.targetPageUrl).toBe('/pages/access/questionnaire?checkpoint=week4')
+    expect(result).toMatchObject({
+      targetPageUrl: '/pages/training/home',
+      questionnaireCheckpoint: 'week4',
+      questionnaireAvailable: true
+    })
+  })
+
+  it('routes home for a legal future follow-up response and preserves its schedule', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+        listPsychologyRecords: vi.fn().mockResolvedValue([createCompletedScaleRecord(1)]),
+        getNextPsychologyScale: vi.fn().mockResolvedValue({
+          message: '下一时点量表尚未到填写时间',
+          checkpoint: 'week4' as const,
+          available: false,
+          scheduled_at: '2026-10-12T10:00:00Z'
+        })
+      },
+      {
+        hydrateAccessState: vi.fn(),
+        resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile())
+      }
+    )
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPageUrl: '/pages/training/home',
+      questionnaireCheckpoint: 'week4',
+      questionnaireAvailable: false,
+      questionnaireScheduledAt: '2026-10-12T10:00:00Z'
+    })
   })
 
   it.each([
     [3, 'week8'],
     [4, 'week12']
-  ] as const)('routes scale order %s to the %s checkpoint', async (order, checkpoint) => {
+  ] as const)('keeps a due %s questionnaire discoverable without making it a gate', async (order, checkpoint) => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const sync = createStudentBackendSync(
       {
@@ -297,7 +331,9 @@ describe('startup access bootstrap', () => {
     )
 
     await expect(sync.bootstrapAccess()).resolves.toMatchObject({
-      targetPageUrl: `/pages/access/questionnaire?checkpoint=${checkpoint}`
+      targetPageUrl: '/pages/training/home',
+      questionnaireCheckpoint: checkpoint,
+      questionnaireAvailable: true
     })
   })
 
@@ -470,7 +506,7 @@ describe('startup access bootstrap', () => {
     await sync.bootstrapAccess()
     expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
       completedQuestionnaireCheckpoints: ['baseline'],
-      activeCheckpoint: 'week4'
+      activeCheckpoint: 'baseline'
     }))
   })
 

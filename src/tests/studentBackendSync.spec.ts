@@ -138,6 +138,47 @@ describe('student backend sync orchestration', () => {
     })
   })
 
+  it('keeps raw-only questionnaire results unscored', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+
+    const submitPsychologyScale = vi.fn().mockResolvedValue({
+      record: {
+        total_score: null,
+        percentage: null,
+        scoring_status: 'raw_only',
+        analysis: '答案已保存，当前量表暂不提供可信总分。',
+        completed_at: '2026-04-11T15:30:00.000Z',
+        scale_info: {
+          id: 7,
+          title: '运动心理健康量表（维度记录）',
+          description: '保留原始作答',
+          order: 1,
+          created_at: '2026-04-11T09:00:00.000Z'
+        }
+      }
+    })
+
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession: vi.fn().mockResolvedValue(undefined),
+      submitPsychologyScale
+    })
+
+    await expect(sync.syncLongQuestionnaire({
+      checkpoint: 'baseline',
+      scaleId: 7,
+      answers: { 71: '保留原答' },
+      title: '运动心理健康量表（维度记录）'
+    })).resolves.toEqual({
+      synced: true,
+      score: null,
+      percentage: null,
+      analysis: '答案已保存，当前量表暂不提供可信总分。',
+      submittedAt: '2026-04-11T15:30:00.000Z',
+      scoringStatus: 'raw_only'
+    })
+  })
+
   it('binds a visual training credential to the loaded arrangement fingerprint', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const ensureSession = vi.fn().mockResolvedValue(undefined)
@@ -532,6 +573,132 @@ describe('student backend sync orchestration', () => {
         client_completed_at: '2026-08-24T10:01:00.000Z'
       })
     )
+  })
+
+  it('retries a pending POST questionnaire after the stair upload completes', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const pendingShort = new Map<string, {
+      sessionId: string
+      timing: 'POST'
+      response: { feelingScale: number; feltArousalScale: number }
+      queuedAt: string
+    }>([
+      ['stairs-race', {
+        sessionId: 'stairs-race',
+        timing: 'POST',
+        response: { feelingScale: 4, feltArousalScale: 5 },
+        queuedAt: '2026-08-24T10:01:00.000Z'
+      }]
+    ])
+    const order: string[] = []
+    const createStairsRecord = vi.fn().mockImplementation(async () => {
+      order.push('stair')
+      return { id: 41 }
+    })
+    const submitShortQuestionnaire = vi.fn().mockImplementation(async () => {
+      order.push('short')
+      return { id: 51 }
+    })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn().mockResolvedValue(undefined),
+        createStairsRecord,
+        submitShortQuestionnaire
+      },
+      {},
+      {
+        pendingSubmissions: pending.store,
+        pendingShortQuestionnaires: {
+          list: vi.fn(() => [...pendingShort.values()]),
+          save: vi.fn(entry => pendingShort.set(entry.sessionId, entry)),
+          remove: vi.fn((sessionId: string) => pendingShort.delete(sessionId)),
+          clear: vi.fn(() => pendingShort.clear())
+        }
+      }
+    )
+
+    await sync.syncStairSession({
+      sessionId: 'stairs-race',
+      durationSeconds: 300,
+      completedIntervals: 0,
+      qualityScore: 40,
+      summary: '质量反馈',
+      completedAt: '2026-08-24T10:01:00.000Z'
+    })
+
+    expect(order).toEqual(['stair', 'short'])
+    expect(submitShortQuestionnaire).toHaveBeenCalledWith({
+      training_session_id: 'stairs-race',
+      timing: 'POST',
+      feeling_scale: 4,
+      felt_arousal_scale: 5
+    })
+    expect(pendingShort.size).toBe(0)
+  })
+
+  it('rechecks a POST saved while an earlier short-questionnaire retry is in flight', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const pending = createPendingSubmissionStore()
+    const pendingShort = new Map<string, {
+      sessionId: string
+      timing: 'POST'
+      response: { feelingScale: number; feltArousalScale: number }
+      queuedAt: string
+    }>()
+    let releaseSession!: () => void
+    const sessionGate = new Promise<void>(resolve => {
+      releaseSession = resolve
+    })
+    const submitShortQuestionnaire = vi.fn().mockResolvedValue({ id: 52 })
+    const createStairsRecord = vi.fn().mockResolvedValue({ id: 42 })
+    const sync = createStudentBackendSync(
+      {
+        isEnabled: () => true,
+        ensureSession: vi.fn(() => sessionGate),
+        createStairsRecord,
+        submitShortQuestionnaire
+      },
+      {},
+      {
+        pendingSubmissions: pending.store,
+        pendingShortQuestionnaires: {
+          list: vi.fn(() => [...pendingShort.values()]),
+          save: vi.fn(entry => pendingShort.set(entry.sessionId, entry)),
+          remove: vi.fn((sessionId: string) => pendingShort.delete(sessionId)),
+          clear: vi.fn(() => pendingShort.clear())
+        }
+      }
+    )
+
+    const earlierRetry = sync.retryPendingShortQuestionnaires()
+    pendingShort.set('stairs-race-late', {
+      sessionId: 'stairs-race-late',
+      timing: 'POST',
+      response: { feelingScale: 3, feltArousalScale: 4 },
+      queuedAt: '2026-08-24T10:01:00.000Z'
+    })
+    const stairUpload = sync.syncStairSession({
+      sessionId: 'stairs-race-late',
+      durationSeconds: 300,
+      completedIntervals: 1,
+      qualityScore: 70,
+      summary: '完成训练。',
+      completedAt: '2026-08-24T10:01:00.000Z'
+    })
+
+    releaseSession()
+    await Promise.all([earlierRetry, stairUpload])
+
+    expect(createStairsRecord).toHaveBeenCalledTimes(1)
+    expect(submitShortQuestionnaire).toHaveBeenCalledWith({
+      training_session_id: 'stairs-race-late',
+      timing: 'POST',
+      feeling_scale: 3,
+      felt_arousal_scale: 4
+    })
+    expect(pendingShort.size).toBe(0)
   })
 
   it('attempts the live stair upload when durable queue storage is unavailable', async () => {

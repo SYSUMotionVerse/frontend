@@ -11,6 +11,9 @@ export type ProtectedAccessMode = 'browse' | 'execute'
 const accessState = shallowRef<{
   level: 'unknown' | 'browse' | 'execute'
   questionnaireUrl: string
+  questionnaireCheckpoint?: BootstrapAccessResult['questionnaireCheckpoint']
+  questionnaireAvailable?: boolean
+  questionnaireScheduledAt?: string | null
 }>({
   level: 'unknown',
   questionnaireUrl: '/pages/access/questionnaire?checkpoint=baseline'
@@ -23,10 +26,25 @@ export function resolveNextPageFromSnapshot(snapshot: StudentAppState) {
 }
 
 function updateAccessState(result: BootstrapAccessResult) {
+  const questionnaireCheckpoint = result.questionnaireCheckpoint ?? result.checkpoint
+  const questionnaireUrl = questionnaireCheckpoint
+    ? `/pages/access/questionnaire?checkpoint=${questionnaireCheckpoint}`
+    : accessState.value.questionnaireUrl
+  const questionnaireMetadata = questionnaireCheckpoint
+    ? {
+        questionnaireCheckpoint,
+        questionnaireAvailable: result.questionnaireAvailable ?? true,
+        ...(result.questionnaireScheduledAt !== undefined
+          ? { questionnaireScheduledAt: result.questionnaireScheduledAt }
+          : {})
+      }
+    : {}
+
   if (result.targetPage === 'home') {
     accessState.value = {
       level: 'execute',
-      questionnaireUrl: accessState.value.questionnaireUrl
+      questionnaireUrl,
+      ...questionnaireMetadata
     }
     return
   }
@@ -34,7 +52,8 @@ function updateAccessState(result: BootstrapAccessResult) {
   if (result.targetPage === 'questionnaire') {
     accessState.value = {
       level: 'browse',
-      questionnaireUrl: result.targetPageUrl
+      questionnaireUrl: result.targetPageUrl,
+      ...questionnaireMetadata
     }
   }
 }
@@ -71,11 +90,26 @@ export async function ensureProtectedStudentAccess(
   }
 }
 
+/**
+ * Refresh the authoritative access/checkpoint snapshot without redirecting.
+ * The training home uses this as a rate-limited foreground refresh so a daily
+ * window or follow-up checkpoint that opens while the app is warm becomes
+ * discoverable without turning a follow-up into an execution gate.
+ */
+export async function refreshProtectedStudentAccess() {
+  try {
+    return await resolveProtectedAccess()
+  } catch {
+    return null
+  }
+}
+
 export function useProtectedAccessState() {
   return readonly(accessState)
 }
 
 export function continueRequiredQuestionnaire() {
+  if (accessState.value.questionnaireAvailable === false) return
   void uni.reLaunch({
     url: accessState.value.questionnaireUrl
   })
@@ -84,7 +118,16 @@ export function continueRequiredQuestionnaire() {
 export function markProtectedStudentAccessComplete() {
   accessState.value = {
     level: 'execute',
-    questionnaireUrl: accessState.value.questionnaireUrl
+    questionnaireUrl: accessState.value.questionnaireUrl,
+    ...(accessState.value.questionnaireCheckpoint
+      ? { questionnaireCheckpoint: accessState.value.questionnaireCheckpoint }
+      : {}),
+    ...(accessState.value.questionnaireAvailable !== undefined
+      ? { questionnaireAvailable: accessState.value.questionnaireAvailable }
+      : {}),
+    ...(accessState.value.questionnaireScheduledAt !== undefined
+      ? { questionnaireScheduledAt: accessState.value.questionnaireScheduledAt }
+      : {})
   }
 }
 

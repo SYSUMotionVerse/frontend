@@ -16,6 +16,7 @@ const controls = vi.hoisted(() => ({
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
   onPullDownRefresh: vi.fn(),
+  onHide: vi.fn(),
   onShow: vi.fn()
 }))
 
