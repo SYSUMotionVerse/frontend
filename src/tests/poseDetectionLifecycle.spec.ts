@@ -29,6 +29,18 @@ describe('pose detector lifecycle disposal', () => {
     expect(webglAllocation).toBeGreaterThan(cameraReadyGate)
   })
 
+  it('finishes one real-frame inference before reporting training readiness', () => {
+    const readinessWarmup = source.indexOf('await warmDetectorFromCamera()')
+    const readySignal = source.indexOf("emitStats('ready')")
+
+    expect(readinessWarmup).toBeGreaterThan(-1)
+    expect(readySignal).toBeGreaterThan(readinessWarmup)
+    expect(source).toContain('(!detectionActive.value && !warmingForReadiness)')
+    expect(source).toMatch(
+      /if \(warmingForReadiness\) \{[\s\S]*warmMs = inferMs[\s\S]*resolveReadinessInference\(\)/
+    )
+  })
+
   it('does not retain a sampling fallback timer on unmount', () => {
     // The sampling-fallback timer machinery has been removed; unmount
     // cleans up via detector.dispose() and poseCamera.stopCamera() only.

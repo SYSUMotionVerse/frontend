@@ -50,7 +50,7 @@ describe('PoseDetectionView sampling performance', () => {
     expect(cameraSource).toContain('props.targetFps ?? 5')
   })
 
-  it('runs live inference only for formal training and enforces a completion-based cooldown', () => {
+  it('limits live inference to one readiness preflight plus formal training and enforces a completion-based cooldown', () => {
     const panelSource = readFileSync(
       resolve(process.cwd(), 'src/subpackages/training/components/VisualTrainingPanel.vue'),
       'utf8'
@@ -63,6 +63,8 @@ describe('PoseDetectionView sampling performance', () => {
     expect(panelSource).toContain(':detection-active="recognitionEnabled && trainingStarted && phaseKind === \'active\'"')
     expect(viewSource).toContain('detectionActive?: boolean')
     expect(viewSource).toContain('const detectionActive = computed(() => props.detectionActive ?? true)')
+    expect(viewSource).toContain('await warmDetectorFromCamera()')
+    expect(viewSource).toContain('(!detectionActive.value && !warmingForReadiness)')
     expect(viewSource).toContain('nextInferenceEligibleAt')
     expect(viewSource).toContain('Date.now() + getSamplingIntervalMs(effectiveSamplingFps.value)')
     expect(viewSource).toContain('updateEffectiveSamplingFps(inferMs)')

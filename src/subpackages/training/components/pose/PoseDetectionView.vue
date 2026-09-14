@@ -60,12 +60,19 @@ let frameListenerWaiter: {
   reject: (error: Error) => void
   timeoutId: ReturnType<typeof setTimeout>
 } | null = null
+let readinessInferenceWaiter: {
+  resolve: () => void
+  reject: (error: Error) => void
+  timeoutId: ReturnType<typeof setTimeout>
+} | null = null
+let readinessInferencePending = false
 const cameraReadyPromise = new Promise<void>((resolve, reject) => {
   resolveCameraReady = resolve
   rejectCameraReady = reject
 })
 
 const FRAME_LISTENER_READY_TIMEOUT_MS = 5000
+const READINESS_INFERENCE_TIMEOUT_MS = 15_000
 
 // Camera lifecycle state
 const cameraReady = ref(false);
@@ -147,8 +154,9 @@ onMounted(async () => {
     detector = loadedDetector;
     loadMs = Date.now() - t0;
 
-    // 3. Keep shader warm-up debug-only. Production performs its first
-    // inference on a bounded 256px sample instead of adding a startup spike.
+    // 3. Keep the synthetic warm-up debug-only. Production preflights one
+    // real camera frame below so both detector and landmark kernels compile
+    // before the workout clock can start.
     if (isDebugMode.value) {
       await warmDetector()
     }
@@ -156,15 +164,13 @@ onMounted(async () => {
     // Guard: unmount may have fired during warm-up
     if (!isMounted) return;
 
-    // 4. Keep the detector warm and camera preview available, but attach the
-    // continuous frame listener only when formal training actually needs pose
-    // scores. Countdown and demonstration inference has no scoring value and
-    // unnecessarily keeps Android CPU/GPU pipelines busy.
+    // 4. A loaded model is not yet ready for a timed workout: its first real
+    // inference compiles TFJS/WebGL kernels and can block rendering for several
+    // seconds. Complete exactly one unscored camera-frame inference before
+    // announcing readiness, then leave continuous inference to formal phases.
     detectorReadyForTraining = true
-    if (detectionActive.value) {
-      await startLiveDetection()
-      if (!isMounted) return
-    }
+    await warmDetectorFromCamera()
+    if (!isMounted) return
     emitStats('ready');
   } catch (err: any) {
     if (!isMounted) return;
@@ -184,6 +190,7 @@ onMounted(async () => {
 onUnmounted(() => {
   isMounted = false;
   stopLiveDetection()
+  rejectReadinessInference(new Error('pose detector unmounted before readiness inference'))
   rejectCameraReady?.(new Error('pose detector unmounted before camera ready'))
   // Dispose the TF.js detector to free WebGL/GPU resources.
   if (detector) {
@@ -231,7 +238,12 @@ function updateEffectiveSamplingFps(latencyMs: number) {
 }
 
 async function startLiveDetection() {
-  if (!isMounted || !detectorReadyForTraining || !detectionActive.value || frameListenerStarted) return
+  if (
+    !isMounted
+    || !detectorReadyForTraining
+    || (!detectionActive.value && !readinessInferencePending)
+    || frameListenerStarted
+  ) return
   const listenerReady = waitForFrameListenerStart()
   poseCamera.value?.startCamera()
   await listenerReady
@@ -293,6 +305,50 @@ function rejectFrameListenerStart(error: Error) {
   const { reject } = frameListenerWaiter
   frameListenerWaiter = null
   reject(error)
+}
+
+function waitForReadinessInference() {
+  readinessInferencePending = true
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      if (readinessInferenceWaiter?.timeoutId !== timeoutId) return
+      readinessInferenceWaiter = null
+      readinessInferencePending = false
+      reject(new Error('pose readiness inference timed out'))
+    }, READINESS_INFERENCE_TIMEOUT_MS)
+    readinessInferenceWaiter = { resolve, reject, timeoutId }
+  })
+}
+
+function resolveReadinessInference() {
+  readinessInferencePending = false
+  if (!readinessInferenceWaiter) return
+  clearTimeout(readinessInferenceWaiter.timeoutId)
+  const { resolve } = readinessInferenceWaiter
+  readinessInferenceWaiter = null
+  resolve()
+}
+
+function rejectReadinessInference(error: Error) {
+  readinessInferencePending = false
+  if (!readinessInferenceWaiter) return
+  clearTimeout(readinessInferenceWaiter.timeoutId)
+  const { reject } = readinessInferenceWaiter
+  readinessInferenceWaiter = null
+  reject(error)
+}
+
+async function warmDetectorFromCamera() {
+  const readinessInference = waitForReadinessInference()
+  try {
+    await startLiveDetection()
+  } catch (error) {
+    rejectReadinessInference(
+      error instanceof Error ? error : new Error('camera frame listener failed during pose warm-up')
+    )
+  }
+  await readinessInference
+  if (!detectionActive.value) stopLiveDetection()
 }
 
 async function warmDetector() {
@@ -420,7 +476,12 @@ async function runPhotoInference() {
 
 /** Called by PoseCamera for every camera frame (throttled to ~10 fps). */
 async function onFrame(frame: Frame) {
-  if (!detector || liveInferenceInFlight || !detectionActive.value) return;
+  const warmingForReadiness = readinessInferencePending
+  if (
+    !detector
+    || liveInferenceInFlight
+    || (!detectionActive.value && !warmingForReadiness)
+  ) return;
   const t = Date.now();
   if (t < nextInferenceEligibleAt) return
   const generation = inferenceGeneration
@@ -443,6 +504,10 @@ async function onFrame(frame: Frame) {
       rgbTensor.dispose();
     }
     inferMs = Date.now() - t;
+    if (warmingForReadiness) {
+      warmMs = inferMs
+      resolveReadinessInference()
+    }
     updateEffectiveSamplingFps(inferMs)
 
     // A completed inference may race with page hide, phase transitions, or
@@ -484,6 +549,7 @@ async function onFrame(frame: Frame) {
       detectorReadyForTraining = false
       cameraError.value = '姿态识别运行失败，请退出训练后重试'
       poseCamera.value?.stopCamera()
+      rejectReadinessInference(new Error(cameraError.value))
       emitStats('failed')
     }
   } finally {
