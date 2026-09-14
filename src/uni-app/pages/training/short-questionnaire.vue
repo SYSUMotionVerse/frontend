@@ -35,10 +35,21 @@ const activeSessionId = computed(() => {
   return store.getSnapshot().sessions.at(-1)?.id ?? ''
 })
 
+function decodeRouteValue(value: unknown) {
+  const encoded = value?.toString() ?? ''
+  if (!encoded) return ''
+
+  try {
+    return decodeURIComponent(encoded)
+  } catch {
+    return ''
+  }
+}
+
 onLoad((query) => {
-  routeSessionId.value = query?.sessionId?.toString() ?? ''
+  routeSessionId.value = decodeRouteValue(query?.sessionId)
   timing.value = query?.timing?.toString() === 'PRE' ? 'PRE' : 'POST'
-  const next = query?.next?.toString() ?? ''
+  const next = decodeRouteValue(query?.next)
   nextTrainingUrl.value = (
     next.startsWith('/pages/training/') || next.startsWith('/subpackages/training/')
   ) ? next : ''

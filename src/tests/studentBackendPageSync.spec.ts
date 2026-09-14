@@ -1314,6 +1314,46 @@ describe('page-level backend sync wiring', () => {
     })
   })
 
+  it('decodes the pretraining destination before opening the selected training set', async () => {
+    const trainingUrl = (
+      '/subpackages/training/visual-session'
+      + '?modality=hiit&arrangementId=8&sessionId=visual-pre-1'
+    )
+    const ShortQuestionnairePage = (
+      await import('../uni-app/pages/training/short-questionnaire.vue')
+    ).default
+    const wrapper = mount(ShortQuestionnairePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          ShortQuestionnaireForm: {
+            props: ['statusMessage'],
+            template: '<div><button class="submit-short" @click="$emit(\'submit\', { feelingScale: 4, feltArousalScale: 5})">submit</button><text class="short-questionnaire-status">{{ statusMessage }}</text></div>'
+          }
+        }
+      }
+    })
+    const uniApp = await import('@dcloudio/uni-app')
+    const onLoadHandler = vi.mocked(uniApp.onLoad).mock.calls.at(-1)?.[0]
+
+    onLoadHandler?.({
+      sessionId: 'visual-pre-1',
+      timing: 'PRE',
+      next: encodeURIComponent(trainingUrl)
+    })
+    await wrapper.get('.submit-short').trigger('click')
+    await flushPromises()
+
+    expect(studentBackendSync.syncShortQuestionnaire).toHaveBeenCalledWith({
+      sessionId: 'visual-pre-1',
+      feelingScale: 4,
+      feltArousalScale: 5,
+      timing: 'PRE'
+    })
+    expect(currentUni().redirectTo).toHaveBeenCalledWith({ url: trainingUrl })
+    expect(wrapper.text()).not.toContain('未找到待开始的训练')
+  })
+
   it('keeps local short-questionnaire state aligned with the session in the route', async () => {
     vi.useFakeTimers()
     store.getSnapshot.mockReturnValue({
