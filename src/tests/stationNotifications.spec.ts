@@ -10,6 +10,7 @@ const reportBackendSyncError = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
+  onHide: vi.fn(),
   onPullDownRefresh: vi.fn(),
   onShow: vi.fn((callback: () => unknown) => callback())
 }))

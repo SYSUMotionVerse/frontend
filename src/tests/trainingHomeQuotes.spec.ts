@@ -43,7 +43,7 @@ describe('training home coach quotes', () => {
     expect(home).toContain('const coachQuote = ref(pickTrainingHomeQuote())')
     expect(home).toContain('setInterval(rotateCoachQuote, 60_000)')
     expect(home).toMatch(/async function handlePullDownRefresh\(\)[\s\S]*rotateCoachQuote\(\)/)
-    expect(home).toContain('onBeforeUnmount(stopQuoteRotation)')
+    expect(home).toMatch(/onBeforeUnmount\(\(\) => \{\s*stopQuoteRotation\(\)/)
     expect(viewModel).toContain("footer: '屈萍老师'")
     expect(viewModel).not.toContain('Coach Harris')
     expect(card).not.toContain('<transition')
