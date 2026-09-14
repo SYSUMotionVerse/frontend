@@ -299,11 +299,19 @@ async function finishSession() {
   const gpsEligible = !horizontalEvidence
     || !horizontalEvidence.available
     || horizontalEvidence.isImmobile
-  const countsAsCompletion = analysis.isEligibleForCompletion && gpsEligible
+  const measurementEligible = analysis.isEligibleForCompletion && gpsEligible
+  // Completion is defined by reaching the end of the guided five-minute
+  // protocol. Sensor and location quality remain useful feedback and metrics,
+  // but they must not revoke the completed training fact locally.
+  const countsAsCompletion = true
   let summaryText = analysis.summary
   if (analysis.isEligibleForCompletion && !gpsEligible) {
-    summaryText = '本次检测到步伐，但水平移动明显，按步行记录，未计入爬楼训练。'
-  } else if (countsAsCompletion && horizontalEvidence && !horizontalEvidence.available) {
+    summaryText = '本次已完成楼梯引导，但检测到水平移动明显；楼梯动作质量仅作反馈。'
+  } else if (!analysis.isEligibleForCompletion) {
+    summaryText = analysis.estimatedStepCount > 0 && !analysis.isAscentEvidence
+      ? '本次已完成楼梯引导，但竖直上升证据不足；楼梯动作质量仅作反馈。'
+      : '本次已完成楼梯引导，传感器数据不足；楼梯动作质量仅作反馈。'
+  } else if (horizontalEvidence && !horizontalEvidence.available) {
     summaryText = `${summaryText}（未获取到有效定位证据，仅按运动传感器记录。）`
   }
 
@@ -314,7 +322,7 @@ async function finishSession() {
   void studentBackendSync.syncStairSession({
     sessionId: trainingSessionId,
     durationSeconds: stairTrainingDurationSeconds,
-    completedIntervals: countsAsCompletion ? analysis.completedIntervals : 0,
+    completedIntervals: measurementEligible ? analysis.completedIntervals : 0,
     qualityScore: analysis.qualityScore,
     summary: summaryPayload,
     completedAt

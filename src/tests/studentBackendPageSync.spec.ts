@@ -689,9 +689,9 @@ describe('page-level backend sync wiring', () => {
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
 
-    expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 0, 100)
+    expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', 6, 60)
     expect(currentUni().redirectTo).toHaveBeenCalledWith({
-      url: '/pages/access/questionnaire-result?checkpoint=baseline&score=0&percentage=100&questionnaireCount=1&submittedAt=2026-04-09T15%3A30%3A00.000Z'
+      url: '/pages/access/questionnaire-result?checkpoint=baseline&questionnaireCount=1&submittedAt=2026-04-09T15%3A30%3A00.000Z'
     })
     expect(currentUni().navigateTo).not.toHaveBeenCalled()
   })
@@ -2908,7 +2908,7 @@ describe('page-level backend sync wiring', () => {
     expect(currentUni().redirectTo).toHaveBeenCalledTimes(2)
   })
 
-  it('records an unqualified sensor session without awarding training completion', async () => {
+  it('records an unqualified sensor session while preserving guided training completion', async () => {
     vi.useFakeTimers()
     stairSensorCaptureSession.stop.mockResolvedValueOnce({
       samples: [],
@@ -2960,7 +2960,7 @@ describe('page-level backend sync wiring', () => {
       qualityScore: 40
     }))
     expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
-      countsAsCompletion: false
+      countsAsCompletion: true
     }))
   })
 
@@ -3056,7 +3056,7 @@ describe('page-level backend sync wiring', () => {
     }))
   })
 
-  it('records horizontal movement sessions as walking without stair credit', async () => {
+  it('records horizontal movement as quality feedback without revoking guided completion', async () => {
     vi.useFakeTimers()
     horizontalEvidenceSession.stop.mockResolvedValue({
       available: true,
@@ -3090,7 +3090,7 @@ describe('page-level backend sync wiring', () => {
       })
     }))
     expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
-      countsAsCompletion: false
+      countsAsCompletion: true
     }))
   })
 
@@ -3153,7 +3153,7 @@ describe('page-level backend sync wiring', () => {
       completedIntervals: 0
     }))
     expect(store.completeTrainingSession).toHaveBeenCalledWith(expect.objectContaining({
-      countsAsCompletion: false
+      countsAsCompletion: true
     }))
     expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringMatching(/^\/pages\/training\/short-questionnaire\?sessionId=stairs-/)
