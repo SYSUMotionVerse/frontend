@@ -15,17 +15,17 @@ const CHECKPOINT_BY_ORDER: Record<number, CheckpointKey> = {
   4: 'week12'
 }
 
-function toNumber(value: number | string | null | undefined) {
+function toNullableNumber(value: number | string | null | undefined) {
   if (typeof value === 'number') {
-    return value
+    return Number.isFinite(value) ? value : null
   }
 
   if (typeof value === 'string' && value.trim().length > 0) {
     const parsed = Number(value)
-    return Number.isNaN(parsed) ? 0 : parsed
+    return Number.isFinite(parsed) ? parsed : null
   }
 
-  return 0
+  return null
 }
 
 export function resolveCheckpointFromScaleOrder(order: number): CheckpointKey {
@@ -110,7 +110,12 @@ export function buildPsychologyScaleSubmitPayload(
 export function calculatePsychologyPercentage(
   scale: BackendPsychologyScale,
   totalScore: number | string | null
-): number {
+): number | null {
+  const normalizedTotalScore = toNullableNumber(totalScore)
+  if (normalizedTotalScore === null) {
+    return null
+  }
+
   const maxScore = scale.questions.reduce((sum, question) => {
     const maxOptionScore = question.options.reduce((currentMax, option) =>
       Math.max(currentMax, option.score), 0)
@@ -118,10 +123,10 @@ export function calculatePsychologyPercentage(
   }, 0)
 
   if (maxScore <= 0) {
-    return 0
+    return null
   }
 
-  return Math.round((toNumber(totalScore) / maxScore) * 100)
+  return Math.round((normalizedTotalScore / maxScore) * 100)
 }
 
 function hasQuestionDetails(
@@ -144,17 +149,25 @@ function toPercentage(value: number | string | null | undefined) {
 }
 
 export function mapPsychologyRecordSummary(record: BackendPsychologyRecord) {
+  const normalizedScore = toNullableNumber(record.total_score)
   const submittedPercentage = toPercentage(record.percentage)
+  const scoringStatus = record.scoring_status
+    ?? (normalizedScore !== null || submittedPercentage !== null
+      ? 'computed'
+      : 'raw_only')
   return {
     checkpoint: record.scale_info.checkpoint
       ?? resolveCheckpointFromScaleOrder(record.scale_info.order),
     title: record.scale_info.title,
-    score: toNumber(record.total_score),
-    percentage: submittedPercentage
-      ?? (hasQuestionDetails(record.scale_info)
-        ? calculatePsychologyPercentage(record.scale_info, record.total_score)
-        : 0),
+    score: scoringStatus === 'raw_only' ? null : normalizedScore,
+    percentage: scoringStatus === 'raw_only'
+      ? null
+      : submittedPercentage
+        ?? (hasQuestionDetails(record.scale_info)
+          ? calculatePsychologyPercentage(record.scale_info, record.total_score)
+          : null),
     analysis: record.analysis,
-    submittedAt: record.completed_at
+    submittedAt: record.completed_at,
+    ...(record.scoring_status ? { scoringStatus: record.scoring_status } : {})
   }
 }

@@ -144,9 +144,12 @@ export function useGrowthOverview(options: UseGrowthOverviewOptions = {}) {
       .map(questionnaire => ({
         checkpoint: questionnaire.checkpoint,
         title: `${CHECKPOINT_LABELS[questionnaire.checkpoint]} 长问卷`,
-        score: questionnaire.score ?? 0,
-        percentage: questionnaire.percentage ?? 0,
-        submittedAt: questionnaire.submittedAt
+        score: questionnaire.score,
+        percentage: questionnaire.percentage,
+        submittedAt: questionnaire.submittedAt,
+        scoringStatus: questionnaire.score !== null || questionnaire.percentage !== null
+          ? 'computed'
+          : 'raw_only'
       }))
   )
   const localSessions = computed<GrowthTrainingHistoryItem[]>(() =>
@@ -205,7 +208,8 @@ export function useGrowthOverview(options: UseGrowthOverviewOptions = {}) {
           checkpoint: latest.checkpoint,
           score: latest.score,
           percentage: latest.percentage,
-          submittedAt: latest.submittedAt
+          submittedAt: latest.submittedAt,
+          scoringStatus: latest.scoringStatus
         }
       : summary.value.latestAssessment
   })

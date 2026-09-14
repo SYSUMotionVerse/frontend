@@ -42,13 +42,21 @@ const assessmentTrend = computed<TrendPoint[]>(() =>
     .filter(assessment => assessment.submittedAt)
     .sort((left, right) => (left.submittedAt ?? '').localeCompare(right.submittedAt ?? ''))
     .slice(-6)
-    .map(assessment => ({
-      key: `${assessment.checkpoint}-${assessment.submittedAt}`,
-      label: assessment.title.replace('运动心理健康量表', '评估'),
-      value: assessment.percentage,
-      valueLabel: `${Math.round(assessment.percentage)}%`,
-      height: Math.max(8, Math.min(100, Math.round(assessment.percentage)))
-    }))
+    .map(assessment => {
+      const percentage = assessment.percentage
+      if (percentage === null) {
+        return null
+      }
+
+      return {
+        key: `${assessment.checkpoint}-${assessment.submittedAt}`,
+        label: assessment.title.replace('运动心理健康量表', '评估'),
+        value: percentage,
+        valueLabel: `${Math.round(percentage)}%`,
+        height: Math.max(8, Math.min(100, Math.round(percentage)))
+      }
+    })
+    .filter((point): point is TrendPoint => point !== null)
 )
 </script>
 

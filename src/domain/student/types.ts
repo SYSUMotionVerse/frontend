@@ -3,6 +3,7 @@ export type {
   DailyAdherenceState,
   LongQuestionnaireState,
   PhysicalMetricTrend,
+  PsychologyScoringStatus,
   SessionAnalysis,
   SessionRecord,
   SessionScoreDetails,

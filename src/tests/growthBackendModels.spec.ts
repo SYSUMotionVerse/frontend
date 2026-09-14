@@ -400,6 +400,33 @@ describe('growth backend read models', () => {
     ])
   })
 
+  it('keeps raw-only psychology records as completed entries without a fake score', async () => {
+    const { mapBackendAssessmentHistory } = await import('../uni-app/api/growthBackendModels')
+
+    expect(mapBackendAssessmentHistory([{
+      id: 10,
+      total_score: null,
+      percentage: null,
+      scoring_status: 'raw_only',
+      analysis: '答案已保存，当前量表暂不提供可信总分。',
+      completed_at: '2026-04-12T12:00:00Z',
+      scale_info: {
+        id: 7,
+        title: '运动心理健康量表（维度记录）',
+        description: '保留原始作答',
+        order: 1,
+        created_at: '2026-04-12T08:00:00Z'
+      }
+    }])).toEqual([{
+      checkpoint: 'baseline',
+      title: '运动心理健康量表（维度记录）',
+      score: null,
+      percentage: null,
+      submittedAt: '2026-04-12T12:00:00Z',
+      scoringStatus: 'raw_only'
+    }])
+  })
+
   it('keeps experiment rounds aligned when a legacy metric is missing once', async () => {
     const { mapBackendPhysicalMetrics } = await import('../uni-app/api/growthBackendModels')
     const base = {

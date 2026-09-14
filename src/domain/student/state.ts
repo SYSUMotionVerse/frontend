@@ -138,8 +138,8 @@ export function replaceStudentSessions(
 export function submitStudentLongQuestionnaire(
   state: StudentAppState,
   checkpoint: CheckpointKey,
-  score: number,
-  percentage: number
+  score: number | null,
+  percentage: number | null
 ): StudentAppState {
   const nextState = cloneState(state)
   const questionnaire = nextState.longQuestionnaires[checkpoint]

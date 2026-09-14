@@ -140,7 +140,8 @@ export function mapBackendAssessmentHistory(
       title: summary.title,
       score: summary.score,
       percentage: summary.percentage,
-      submittedAt: summary.submittedAt
+      submittedAt: summary.submittedAt,
+      ...(summary.scoringStatus ? { scoringStatus: summary.scoringStatus } : {})
     }
   })
 }

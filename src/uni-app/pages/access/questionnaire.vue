@@ -30,8 +30,8 @@ interface ConfirmedQuestionnaireSubmission {
   scaleId: number
   result: LongQuestionnaireSyncResult & {
     synced: true
-    score: number
-    percentage: number
+    score: number | null
+    percentage: number | null
     submittedAt: string
   }
 }
@@ -181,7 +181,7 @@ async function handleSubmit(payload: {
       ...payload
     })
 
-    if (!result.synced || result.score === undefined || result.percentage === undefined || !result.submittedAt) {
+    if (!result.synced || !result.submittedAt) {
       submitErrorMessage.value = '问卷提交失败，请检查网络后重新提交。'
       return
     }
@@ -194,8 +194,8 @@ async function handleSubmit(payload: {
       result: {
         ...result,
         synced: true,
-        score: result.score,
-        percentage: result.percentage,
+        score: result.score ?? null,
+        percentage: result.percentage ?? null,
         submittedAt: result.submittedAt
       }
     }
@@ -262,18 +262,16 @@ async function finishCheckpoint(result: ConfirmedQuestionnaireSubmission['result
   }
 
   isFinishingCheckpoint.value = true
-  checkpointCompletionError.value = ''
+    checkpointCompletionError.value = ''
   try {
     if (!hasFinalizedCheckpoint) {
-      store.submitLongQuestionnaire(checkpoint.value, 0, 100)
+      store.submitLongQuestionnaire(checkpoint.value, result.score, result.percentage)
       markProtectedStudentAccessComplete()
       hasFinalizedCheckpoint = true
     }
 
     const queryString = buildMiniProgramQueryString({
       checkpoint: checkpoint.value,
-      score: '0',
-      percentage: '100',
       questionnaireCount: String(questionnairePlan.value?.questionnaire_count ?? 1),
       submittedAt: result.submittedAt
     })

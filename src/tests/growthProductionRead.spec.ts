@@ -314,6 +314,34 @@ describe('production growth reads', () => {
     expect(wrapper.text()).toContain('80%')
   })
 
+  it('shows completion without inventing a score for raw-only assessments', async () => {
+    const GrowthSummaryCards = (await import('../components/growth/GrowthSummaryCards.vue')).default
+    const AssessmentHistoryList = (await import('../components/growth/AssessmentHistoryList.vue')).default
+    const assessment = {
+      checkpoint: 'baseline' as const,
+      title: '运动心理健康量表（维度记录）',
+      score: null,
+      percentage: null,
+      submittedAt: '2026-07-15T08:00:00Z' as string | null,
+      scoringStatus: 'raw_only' as const
+    }
+
+    const summaryWrapper = mount(GrowthSummaryCards, {
+      props: {
+        cards: [],
+        latestAssessment: assessment
+      }
+    })
+    const historyWrapper = mount(AssessmentHistoryList, {
+      props: { assessments: [assessment] }
+    })
+
+    expect(summaryWrapper.text()).toContain('已完成，评分待研究规则。')
+    expect(summaryWrapper.text()).not.toContain('得分 0')
+    expect(historyWrapper.text()).toContain('已完成，评分待研究规则。')
+    expect(historyWrapper.text()).not.toContain('得分 0')
+  })
+
   it('loads visual score trend through the authenticated backend sync seam', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const ensureSession = vi.fn().mockResolvedValue(undefined)

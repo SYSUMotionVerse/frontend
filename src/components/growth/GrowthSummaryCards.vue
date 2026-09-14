@@ -27,7 +27,9 @@ defineProps<{
       <text class="summary-card__description">
         {{
           latestAssessment
-            ? `得分 ${latestAssessment.score}（${latestAssessment.percentage}%）`
+            ? latestAssessment.score !== null && latestAssessment.percentage !== null
+              ? `得分 ${latestAssessment.score}（${latestAssessment.percentage}%）`
+              : '已完成，评分待研究规则。'
             : '完成长问卷后可解锁趋势。'
         }}
       </text>

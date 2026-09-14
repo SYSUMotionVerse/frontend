@@ -83,7 +83,11 @@ export function createStudentStore(initialState: StudentAppState = createInitial
     Object.assign(state, replaceStudentSessions(getSnapshot(), sessions))
   }
 
-  function submitLongQuestionnaire(checkpoint: CheckpointKey, score: number, percentage: number) {
+  function submitLongQuestionnaire(
+    checkpoint: CheckpointKey,
+    score: number | null,
+    percentage: number | null
+  ) {
     Object.assign(state, submitStudentLongQuestionnaire(getSnapshot(), checkpoint, score, percentage))
   }
 

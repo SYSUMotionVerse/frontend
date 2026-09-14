@@ -133,6 +133,21 @@ describe('student growth summaries', () => {
     })
   })
 
+  it('keeps a completed raw-only assessment unscored in the local summary', async () => {
+    const { buildGrowthSummary } = await loadGrowthModule()
+    const state = createInitialStudentState()
+    state.longQuestionnaires.baseline.completed = true
+
+    const summary = buildGrowthSummary(state)
+
+    expect(summary.latestAssessment).toMatchObject({
+      checkpoint: 'baseline',
+      score: null,
+      percentage: null,
+      scoringStatus: 'raw_only'
+    })
+  })
+
   it('does not award a score badge when the backend score is unavailable', async () => {
     const { buildSessionBadgesFromHistory } = await import('../domain/student/sessionBadges')
 

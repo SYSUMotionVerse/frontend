@@ -2,6 +2,8 @@ import type { ScoredActionResult } from '../domain/training/actionScoringTypes'
 
 export type CheckpointKey = 'baseline' | 'daily' | 'week4' | 'week8' | 'week12'
 
+export type PsychologyScoringStatus = 'computed' | 'raw_only'
+
 export type EducationLevel = '本科生' | '研究生' | '博士生'
 
 export type TrainingModality = 'wushu' | 'hiit' | 'stair'

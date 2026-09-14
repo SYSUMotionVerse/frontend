@@ -14,8 +14,11 @@ defineProps<{
       <view v-for="assessment in assessments" :key="`${assessment.checkpoint}-${assessment.submittedAt}`" class="assessment-item">
         <text class="assessment-item__name block">{{ assessment.title }}</text>
         <text class="assessment-item__meta block">{{ assessment.checkpoint.toUpperCase() }}</text>
-        <text class="assessment-item__result block">
+        <text v-if="assessment.score !== null && assessment.percentage !== null" class="assessment-item__result block">
           {{ `得分 ${assessment.score} · ${assessment.percentage}%` }}
+        </text>
+        <text v-else class="assessment-item__result block">
+          已完成，评分待研究规则。
         </text>
       </view>
     </view>

@@ -2,7 +2,8 @@ import type {
   CheckpointKey,
   SessionScoreDetails,
   StudentProfile,
-  TrainingModality
+  TrainingModality,
+  PsychologyScoringStatus
 } from '../../types/student'
 import type { GrowthCalendarDay } from '../../domain/student/growth'
 import type { PhysicalMetricTrend } from '../../domain/student/types'
@@ -128,6 +129,7 @@ export interface BackendPsychologyRecord {
   id: number
   total_score: number | string | null
   percentage?: number | string | null
+  scoring_status?: PsychologyScoringStatus
   analysis: string
   scheduled_at?: string | null
   delay_days?: number
@@ -553,10 +555,11 @@ export interface VisualSessionSyncResult extends BackendSyncResult {
 }
 
 export interface LongQuestionnaireSyncResult extends BackendSyncResult {
-  score?: number
-  percentage?: number
+  score?: number | null
+  percentage?: number | null
   analysis?: string
   submittedAt?: string
+  scoringStatus?: PsychologyScoringStatus
 }
 
 export interface ShortQuestionnaireSyncInput {
@@ -608,9 +611,10 @@ export interface GrowthVisualScoreTrendModel {
 export interface GrowthAssessmentHistoryItem {
   checkpoint: CheckpointKey
   title: string
-  score: number
-  percentage: number
+  score: number | null
+  percentage: number | null
   submittedAt: string | null
+  scoringStatus?: PsychologyScoringStatus
 }
 
 export interface StudentBackendSyncDependencies {

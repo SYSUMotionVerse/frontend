@@ -3,6 +3,7 @@ import type {
   DailyAdherenceState,
   LongQuestionnaireState,
   PhysicalMetricTrend,
+  PsychologyScoringStatus,
   SessionRecord,
   WeeklyAdherenceState
 } from './types'
@@ -18,9 +19,10 @@ export interface GrowthSummaryCard {
 
 export interface GrowthAssessmentSummary {
   checkpoint: CheckpointKey
-  score: number
-  percentage: number
+  score: number | null
+  percentage: number | null
   submittedAt: string | null
+  scoringStatus?: PsychologyScoringStatus
 }
 
 export interface GrowthCalendarDay {
@@ -151,9 +153,10 @@ export function buildGrowthAchievementsFromHistory(
     assessmentCount > 0
       ? {
           checkpoint: 'baseline',
-          score: 0,
-          percentage: 0,
-          submittedAt: null
+          score: null,
+          percentage: null,
+          submittedAt: null,
+          scoringStatus: 'raw_only'
         }
       : null
   )
@@ -199,9 +202,12 @@ function getLatestAssessment(
     .filter(questionnaire => questionnaire.completed)
     .map(questionnaire => ({
       checkpoint: questionnaire.checkpoint,
-      score: questionnaire.score ?? 0,
-      percentage: questionnaire.percentage ?? 0,
-      submittedAt: questionnaire.submittedAt
+      score: questionnaire.score,
+      percentage: questionnaire.percentage,
+      submittedAt: questionnaire.submittedAt,
+      ...(questionnaire.score !== null || questionnaire.percentage !== null
+        ? { scoringStatus: 'computed' as const }
+        : { scoringStatus: 'raw_only' as const })
     }))
 
   if (completed.length === 0) {
