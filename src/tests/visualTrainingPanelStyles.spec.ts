@@ -222,7 +222,7 @@ describe('VisualTrainingPanel mini-program styles', () => {
       /\.visual-session__comparison-status-detail\s*\{[\s\S]*color:\s*#46556a;[\s\S]*font-size:\s*12px;/
     )
     expect(source).toMatch(
-      /\.visual-session--comparison \.visual-session__media-label\s*\{[\s\S]*font-size:\s*12px;[\s\S]*padding:\s*6px 8px;/
+      /\.visual-session--comparison \.visual-session__media-label\s*\{[^}]*height:\s*24px;[^}]*line-height:\s*24px;[^}]*font-size:\s*12px;[^}]*padding:\s*0 8px;/
     )
   })
 
