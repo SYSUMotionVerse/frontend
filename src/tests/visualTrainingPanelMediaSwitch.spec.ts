@@ -101,6 +101,84 @@ afterEach(() => {
 })
 
 describe('VisualTrainingPanel media switch', () => {
+  it('does not seek again on repeated readiness events or a main/preview swap', async () => {
+    const seek = vi.fn()
+    const play = vi.fn()
+    vi.stubGlobal('uni', { createVideoContext: () => ({ seek, play, pause: vi.fn() }) })
+    const wrapper = mountPanel(true, false, true)
+    await wrapper.setProps({ phaseKind: 'active', videoProgressSeconds: 5 })
+    await nextTick()
+    seek.mockClear()
+    for (const event of ['canplay', 'canplay', 'loadedmetadata']) {
+      await wrapper.get('#follow-along-video').trigger(event)
+    }
+    await wrapper.get('[aria-label="将我的画面切换到主画面"]').trigger('tap')
+    await nextTick()
+    expect(seek).not.toHaveBeenCalled()
+    expect(play).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('remeasures the native camera without remounting it when swapping portrait slots', async () => {
+    vi.useFakeTimers()
+    let size = { width: 170, height: 210 }
+    const camera = defineComponent({ props: ['mediaSize'], setup: () => () => h('div') })
+    const query: any = {
+      in: () => query, select: () => query,
+      boundingClientRect: (callback: (rect: typeof size) => void) => { callback(size); return query },
+      exec: vi.fn()
+    }
+    vi.stubGlobal('uni', { createSelectorQuery: () => query })
+    const wrapper = mountPanel(true, false, false, camera)
+    await vi.advanceTimersByTimeAsync(650)
+    const detector = wrapper.findComponent(camera)
+    const originalInstance = detector.vm
+    expect(detector.props('mediaSize')).toEqual(size)
+    size = { width: 360, height: 480 }
+    await wrapper.get('[aria-label="将我的画面切换到主画面"]').trigger('tap')
+    await vi.advanceTimersByTimeAsync(150)
+    expect(wrapper.findComponent(camera).vm).toBe(originalInstance)
+    expect(detector.props('mediaSize')).toEqual(size)
+    wrapper.unmount()
+  })
+
+  it('recovers silent stalls with bounded retries and stops monitoring when playback is disabled', async () => {
+    vi.useFakeTimers()
+    const play = vi.fn()
+    vi.stubGlobal('uni', { createVideoContext: () => ({ seek: vi.fn(), play, pause: vi.fn() }) })
+    const wrapper = mountPanel(false, false, true)
+    await wrapper.setProps({ phaseKind: 'active', videoEventToken: 'phase-stall' })
+    await nextTick()
+    play.mockClear()
+    await vi.advanceTimersByTimeAsync(8_000)
+    expect(play).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(16_000)
+    expect(play).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('videoError')?.at(-1)?.[0]).toMatchObject({ token: 'phase-stall' })
+    await wrapper.setProps({ videoAutoplay: false })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(play).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('treats advancing and looping media time as healthy but not duplicate timestamps', async () => {
+    vi.useFakeTimers()
+    const play = vi.fn()
+    vi.stubGlobal('uni', { createVideoContext: () => ({ seek: vi.fn(), play, pause: vi.fn() }) })
+    const wrapper = mountPanel(false, false, true)
+    await wrapper.setProps({ phaseKind: 'active' })
+    await nextTick()
+    play.mockClear()
+    for (const time of [2, 4, 0, 2]) {
+      await wrapper.get('#follow-along-video').trigger('timeupdate', { detail: { currentTime: time } })
+      await vi.advanceTimersByTimeAsync(4_000)
+    }
+    expect(play).not.toHaveBeenCalled()
+    await wrapper.get('#follow-along-video').trigger('timeupdate', { detail: { currentTime: 2 } })
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(play).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
   it('loads an asynchronously resolved first video into the visible native slot', async () => {
     const play = vi.fn()
     vi.stubGlobal('uni', {

@@ -92,6 +92,28 @@ const cameraViewRequested = shallowRef(false)
 const cameraStartRequested = shallowRef(false)
 const automaticTrainingStartRequested = shallowRef(false)
 const componentInstance = getCurrentInstance()
+const portraitPoseMediaSize = shallowRef<{ width: number; height: number }>()
+let layoutGeneration = 0
+let layoutTimer: ReturnType<typeof setTimeout> | undefined
+let panelDisposed = false
+
+async function measureCameraViewport() {
+  const generation = ++layoutGeneration
+  await nextTick()
+  if (panelDisposed || typeof uni === 'undefined' || !uni.createSelectorQuery) return
+  const query = uni.createSelectorQuery().in(componentInstance?.proxy as never)
+  query.select('.visual-session__camera-viewport').boundingClientRect((rect: any) => {
+    if (panelDisposed || generation !== layoutGeneration || !rect?.width || !rect?.height) return
+    portraitPoseMediaSize.value = { width: rect.width, height: rect.height }
+  }).exec()
+}
+
+function refreshCameraViewport() {
+  void measureCameraViewport()
+  if (layoutTimer) clearTimeout(layoutTimer)
+  // The native layout may settle a frame after Vue's update on device.
+  layoutTimer = setTimeout(() => void measureCameraViewport(), 120)
+}
 type TrainingVideoSlot = 'primary' | 'buffer'
 const activeTrainingVideoSlot = shallowRef<TrainingVideoSlot>('primary')
 const primaryTrainingVideoUrl = shallowRef(props.videoUrl)
@@ -244,7 +266,7 @@ const comparisonMediaStyle = computed(() => {
   }
 })
 const comparisonPoseMediaSize = computed(() => {
-  if (!props.comparisonMode || !props.comparisonMediaSize) return undefined
+  if (!props.comparisonMode || !props.comparisonMediaSize) return portraitPoseMediaSize.value
   return {
     width: props.comparisonMediaSize.mediaWidth,
     height: props.comparisonMediaSize.mediaHeight
@@ -318,8 +340,13 @@ watch(
 )
 
 onMounted(requestCameraStart)
+onMounted(refreshCameraViewport)
+watch(() => [showingCamera.value, props.comparisonMode, props.comparisonMediaSize, poseMountReady.value], refreshCameraViewport)
 
 onUnmounted(() => {
+  panelDisposed = true
+  if (layoutTimer) clearTimeout(layoutTimer)
+  stopPlaybackWatchdog()
   if (poseMountTimer) clearTimeout(poseMountTimer)
 })
 
@@ -362,7 +389,8 @@ function getTrainingVideoContext(slot = activeTrainingVideoSlot.value) {
 
 function syncVideoPlayback(
   resetToStart = false,
-  slot = activeTrainingVideoSlot.value
+  slot = activeTrainingVideoSlot.value,
+  restorePosition = true
 ) {
   if (typeof uni === 'undefined' || typeof uni.createVideoContext !== 'function') return
   const context = getTrainingVideoContext(slot)
@@ -370,7 +398,7 @@ function syncVideoPlayback(
   if (resetToStart) {
     context.seek(0)
   } else if (
-    (props.phaseKind === 'active' || props.phaseKind === 'demonstration')
+    restorePosition && (props.phaseKind === 'active' || props.phaseKind === 'demonstration')
     && props.videoProgressSeconds > 0
   ) {
     // Preserve the current media position when a cached source is evicted and
@@ -412,7 +440,7 @@ function promoteTrainingVideo(slot: TrainingVideoSlot) {
 }
 
 function handleTrainingVideoLoadedMetadata(slot: TrainingVideoSlot) {
-  if (slot === activeTrainingVideoSlot.value) syncVideoPlayback()
+  if (slot === activeTrainingVideoSlot.value) syncVideoPlayback(false, slot, false)
 }
 
 function handleTrainingVideoCanPlay(slot: TrainingVideoSlot) {
@@ -426,8 +454,56 @@ function handleTrainingVideoCanPlay(slot: TrainingVideoSlot) {
   // Native autoplay can be ignored when the source element has only just been
   // recreated. Re-issuing play after canplay is harmless and fixes that race
   // on iOS WeChat.
-  syncVideoPlayback()
+  // canplay may fire again after seeking/buffering. Seeking here can create
+  // a seek -> canplay -> seek loop on native decoders.
+  syncVideoPlayback(false, slot, false)
 }
+
+let playbackWatchdog: ReturnType<typeof setInterval> | undefined
+let lastVideoAdvanceAt = 0
+let lastNativeVideoTime: number | undefined
+let stalledPlaybackAttempts = 0
+function stopPlaybackWatchdog() {
+  if (playbackWatchdog) clearInterval(playbackWatchdog)
+  playbackWatchdog = undefined
+}
+function handleTrainingVideoProgress(slot: TrainingVideoSlot, event: unknown) {
+  if (slot !== activeTrainingVideoSlot.value) return
+  const wrapped = wrapVideoEvent(event, slot)
+  const time = (wrapped.detail as { currentTime?: number } | undefined)?.currentTime
+  if (typeof time === 'number' && Number.isFinite(time) && time !== lastNativeVideoTime) {
+    lastNativeVideoTime = time
+    lastVideoAdvanceAt = Date.now()
+    stalledPlaybackAttempts = 0
+  }
+  emit('videoTimeUpdate', wrapped)
+}
+watch(() => [props.videoAutoplay, props.videoUrl, props.videoEventToken, props.tutorialMode] as const, () => {
+  stopPlaybackWatchdog()
+  lastNativeVideoTime = undefined
+  lastVideoAdvanceAt = Date.now()
+  stalledPlaybackAttempts = 0
+  if (!props.videoAutoplay || !props.videoUrl || props.tutorialMode) return
+  playbackWatchdog = setInterval(() => {
+    if (Date.now() - lastVideoAdvanceAt < 8_000) return
+    lastVideoAdvanceAt = Date.now()
+    if (stalledPlaybackAttempts++ < 2) {
+      console.warn('[VisualTrainingPanel] video progress stalled; retrying playback', {
+        token: props.videoEventToken, slot: activeTrainingVideoSlot.value,
+        attempt: stalledPlaybackAttempts, currentTime: lastNativeVideoTime
+      })
+      syncVideoPlayback(false, activeTrainingVideoSlot.value, false)
+    } else {
+      stopPlaybackWatchdog()
+      emit('videoError', wrapVideoEvent({ detail: { errMsg: 'video progress stalled after playback retries' } }, activeTrainingVideoSlot.value))
+    }
+  }, 1_000)
+}, { immediate: true })
+
+watch(showingCamera, async () => {
+  await nextTick()
+  if (!panelDisposed && !props.tutorialMode) syncVideoPlayback(false, activeTrainingVideoSlot.value, false)
+})
 
 function handleTrainingVideoError(slot: TrainingVideoSlot, event: unknown) {
   setTrainingVideoReady(slot, false)
@@ -806,7 +882,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
           object-fit="cover"
-          @timeupdate="activeTrainingVideoSlot === 'primary' && emit('videoTimeUpdate', wrapVideoEvent($event, 'primary'))"
+          @timeupdate="handleTrainingVideoProgress('primary', $event)"
           @play="activeTrainingVideoSlot === 'primary' && emit('videoPlay', wrapVideoEvent($event, 'primary'))"
           @pause="activeTrainingVideoSlot === 'primary' && emit('videoPause', wrapVideoEvent($event, 'primary'))"
           @waiting="activeTrainingVideoSlot === 'primary' && emit('videoWaiting', wrapVideoEvent($event, 'primary'))"
@@ -834,7 +910,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
           object-fit="cover"
-          @timeupdate="activeTrainingVideoSlot === 'buffer' && emit('videoTimeUpdate', wrapVideoEvent($event, 'buffer'))"
+          @timeupdate="handleTrainingVideoProgress('buffer', $event)"
           @play="activeTrainingVideoSlot === 'buffer' && emit('videoPlay', wrapVideoEvent($event, 'buffer'))"
           @pause="activeTrainingVideoSlot === 'buffer' && emit('videoPause', wrapVideoEvent($event, 'buffer'))"
           @waiting="activeTrainingVideoSlot === 'buffer' && emit('videoWaiting', wrapVideoEvent($event, 'buffer'))"
@@ -862,6 +938,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
         <cover-view v-if="comparisonMode || !showingCamera" class="visual-session__media-label">
           我的画面
         </cover-view>
+        <view class="visual-session__camera-viewport">
         <PoseDetectionView
           v-if="recognitionEnabled && poseMountReady"
           :key="`pose-${recognitionFps}`"
@@ -877,6 +954,7 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
         <view v-else class="visual-session__camera-placeholder">
           <uni-icons type="camera-filled" size="28" color="#fffaf4" />
           <text>{{ cameraPlaceholderLabel }}</text>
+        </view>
         </view>
         <cover-view v-if="comparisonMode && recognitionEnabled && poseMountReady" class="visual-session__pose-badge">
           {{ poseStatusLabel }}
@@ -1598,15 +1676,24 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   top: 12rpx;
   left: 12rpx;
   z-index: 8;
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
+  display: block;
+  height: 34rpx;
+  line-height: 34rpx;
+  text-align: center;
   border-radius: 10rpx;
   background: rgba(15, 27, 43, 0.78);
   color: #fffaf4;
   font-size: 18rpx;
   font-weight: 800;
-  padding: 8rpx 12rpx;
+  padding: 0 12rpx;
+}
+
+.visual-session__camera-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .visual-session__secondary-switch {
@@ -1841,12 +1928,13 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
   top: 905.333rpx;
   bottom: auto;
   transform: translateY(-100%);
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
+  display: block;
+  height: 36rpx;
+  line-height: 36rpx;
+  text-align: center;
   max-width: calc(100% - 40rpx);
   overflow: hidden;
-  padding: 7rpx 12rpx;
+  padding: 0 12rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2147,10 +2235,11 @@ defineExpose({ startRecord, stopRecord, startDetect, stopDetect })
 .visual-session--comparison .visual-session__media-label {
   top: 8px;
   left: 8px;
-  gap: 5px;
+  height: 24px;
+  line-height: 24px;
   border-radius: 8px;
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 0 8px;
 }
 
 .visual-session--comparison .visual-session__comparison-status {

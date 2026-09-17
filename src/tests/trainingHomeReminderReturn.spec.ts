@@ -10,6 +10,7 @@ const authorizeReminders = vi.fn()
 const loadReminderStatus = vi.fn()
 const reminderStatus = { value: 'not_requested' }
 const reminderSyncState = { value: 'idle' }
+const bootstrapAccess = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn((callback: typeof loadPage) => { loadPage = callback }),
@@ -20,6 +21,7 @@ vi.mock('@dcloudio/uni-app', () => ({
 
 vi.mock('../uni-app/api/studentBackend', () => ({
   studentBackendSync: {
+    bootstrapAccess,
     resolveReminderReturn,
     retryPendingTrainingSubmissions: vi.fn(async () => ({ attempted: 0, succeeded: 0 })),
     loadTrainingProgress: vi.fn(async () => {
@@ -73,6 +75,31 @@ describe('training home reminder return orchestration', () => {
     reminderSyncState.value = 'idle'
     loadPage = undefined
     showPage = undefined
+    bootstrapAccess.mockReset().mockResolvedValue({ targetPage: 'home', targetPageUrl: '/pages/training/home' })
+  })
+
+  it('keeps the baseline-incomplete home browsable after foreground discovery', async () => {
+    const reLaunch = vi.fn()
+    vi.stubGlobal('uni', { reLaunch })
+    bootstrapAccess.mockResolvedValue({
+      targetPage: 'questionnaire', targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline',
+      checkpoint: 'baseline'
+    })
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    const wrapper = mount(HomePage, { global: { stubs: {
+      UniTrainingPageShell: { template: '<div><slot /></div>' },
+      TrainingHomeHeader: true, TrainingHomeCoachCard: true
+    } } })
+    await showPage?.()
+    await flushPromises()
+    expect(bootstrapAccess).toHaveBeenCalled()
+    expect(reLaunch).not.toHaveBeenCalled()
+    expect(wrapper.findComponent({ name: 'QuestionnaireUnlockBanner' }).exists()).toBe(true)
+    const { ensureProtectedStudentAccess } = await import('../uni-app/composables/useNavigationGuard')
+    expect(await ensureProtectedStudentAccess('execute')).toBe(false)
+    expect(reLaunch).toHaveBeenCalledWith({ url: '/pages/access/questionnaire?checkpoint=baseline' })
+    wrapper.unmount()
+    vi.unstubAllGlobals()
   })
 
   it('resolves the untrusted route before loading fresh training progress', async () => {

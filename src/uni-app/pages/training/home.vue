@@ -94,7 +94,8 @@ async function refreshAccessDiscovery(force = false) {
 
   const refresh = (async () => {
     const result = await refreshProtectedStudentAccess()
-    if (result && result.targetPage !== 'home') {
+    // A pending baseline limits execution, but the home remains browsable.
+    if (result && result.targetPage !== 'home' && result.targetPage !== 'questionnaire') {
       await Promise.resolve(uni.reLaunch({ url: result.targetPageUrl }))
     }
   })().catch(() => undefined)
