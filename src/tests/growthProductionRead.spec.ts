@@ -209,8 +209,15 @@ describe('production growth reads', () => {
     expect(wrapper.text()).toContain('实验前')
     expect(wrapper.text()).toContain('实验后')
     expect(wrapper.text()).toContain('+150（+5.77%）')
+    expect(wrapper.text()).toContain('单位：ml')
     expect(wrapper.text()).toContain('91')
     expect(wrapper.text()).toContain('稳定性')
+
+    expect(wrapper.find('.metrics').exists()).toBe(true)
+    expect(wrapper.get('.detail-page__toggle').text()).toBe('收起')
+    await wrapper.get('.detail-page__toggle').trigger('click')
+    expect(wrapper.find('.metrics').exists()).toBe(false)
+    expect(wrapper.get('.detail-page__toggle').text()).toBe('展开')
   })
 
   it('loads only durable history on the training and assessment detail page', async () => {

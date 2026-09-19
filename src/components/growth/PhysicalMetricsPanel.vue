@@ -28,6 +28,11 @@ function formatValue(value: number | null) {
   return value === null ? '—' : String(value)
 }
 
+function formatUnit(unit: string) {
+  const normalizedUnit = unit.trim()
+  return normalizedUnit ? `单位：${normalizedUnit}` : ''
+}
+
 function formatChange(metric: PhysicalMetricTrend) {
   const before = metricValue(metric, 'before')
   const after = metricValue(metric, 'after')
@@ -57,7 +62,7 @@ function formatChange(metric: PhysicalMetricTrend) {
     <view v-for="metric in metrics" :key="metric.label" class="metric-card">
       <view class="metric-card__header">
         <text class="metric-card__label">{{ metric.label }}</text>
-        <text class="metric-card__unit">{{ metric.unit }}</text>
+        <text v-if="formatUnit(metric.unit)" class="metric-card__unit">{{ formatUnit(metric.unit) }}</text>
       </view>
 
       <view class="metric-card__comparison" aria-label="实验前后成绩对比">
@@ -147,7 +152,12 @@ function formatChange(metric: PhysicalMetricTrend) {
 }
 
 .metric-card__column--change {
+  flex: 1.5 1 0;
   background: rgba(255, 211, 132, 0.2);
+}
+
+.metric-card__column--change .metric-card__value {
+  white-space: nowrap;
 }
 
 .metric-card__caption {
