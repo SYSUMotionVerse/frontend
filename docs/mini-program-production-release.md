@@ -112,14 +112,18 @@ bootstrap 流程优先读取后端字段，仅在后端缺少时回退到本地�
 
 `pnpm-workspace.yaml` 精确记录了当前允许的 high 级 GHSA。它们由固定版本的
 DCloud/uni-app 工具链传递引入，直接 override `jpeg-js`、`@intlify/*`、
-`picomatch`、`ws` 或 `adm-zip` 可能破坏编译器内部兼容性，因此当前不跨版本
+`picomatch` 或 `ws` 可能破坏编译器内部兼容性，因此当前不跨版本
 强制替换。`pnpm audit:production` 仍会让任何新增、未列入清单的 high 或
 critical 漏洞失败。
 
-同一文件还包含两项已验证的安全 override：统一使用修复后的 `postcss@8.5.18`，
+同一文件还包含已验证的安全 override：统一使用修复后的 `postcss@8.5.18`，
 并从 `@tensorflow-models/pose-detection` 的生产依赖图移除仅供其源码构建脚本
 使用的 `rimraf`。后者不会被已发布的姿态推理运行时代码导入。调整这些 override
 后必须重新运行 frozen install、完整测试、依赖审计和生产构建。
+
+2026-09-19 将 `adm-zip` 固定到修复版本 `0.6.1`，处理
+[GHSA-7q85-xj36-vmfc](https://github.com/advisories/GHSA-7q85-xj36-vmfc)，
+同时移除已不再命中的 `GHSA-xcpc-8h2w-3j85` 豁免。
 
 **复查截止日：2026-10-18。** 无论是否升级了 `@dcloudio/*`，到该日期必须重新运行不带例外的 `pnpm audit --prod`，删除已修复的 GHSA，并复审剩余项。升级 `@dcloudio/*` 时也必须执行同样的复审。若这些依赖开始处理不可信的构建输入、开放开发服务器到公网，或进入小程序运行时代码，则现有例外立即失效，必须在发布前解决。
 
@@ -131,7 +135,6 @@ critical 漏洞失败。
 | GHSA-p2ph-7g93-hw3m | @intlify/core-base, @intlify/message-resolver | 原型污染 | @dcloudio/uni-app → uni-cli-shared → @intlify/* |
 | GHSA-c2c7-rcm5-vvqj | picomatch | ReDoS | @dcloudio/uni-app → uni-cli-shared → @rollup/pluginutils / anymatch |
 | GHSA-96hv-2xvq-fx4p | ws | 内存耗尽 DoS | @dcloudio/uni-mp-weixin → ws |
-| GHSA-xcpc-8h2w-3j85 | adm-zip | 4GB 内存分配 | @dcloudio/uni-app → uni-cli-shared → adm-zip |
 
 以上漏洞仅影响构建时依赖。通过对 `dist/build/mp-weixin/` 生成包的搜索确认，`jpeg-js`、`jimp`、`@intlify/*`、`picomatch`、`adm-zip` 以及 `ws` npm 包均未出现在运行时代码中（`vendor.js` 中的 `WebSocket` 引用来自微信小程序原生 API，不是 `ws` 包）。升级 `@dcloudio/*` 后如果某个 GHSA 不再被报告，应立即从 `pnpm-workspace.yaml` 中删除。
 
