@@ -576,14 +576,10 @@ function isAllScalesCompletedMessage(message: string) {
 }
 
 function resolveDueCheckpoint(
-  nextScale: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>,
-  completedCheckpoints: Set<CheckpointKey>
+  nextScale: Awaited<ReturnType<StudentBackendSyncDependencies['getNextPsychologyScale']>>
 ): QuestionnaireAccessResolution {
   if (hasQuestions(nextScale)) {
     const checkpoint = mapBackendScaleToQuestionnaire(nextScale).checkpoint
-    if (completedCheckpoints.has(checkpoint)) {
-      throw new Error('Backend checkpoint state is inconsistent. Please contact the study administrator.')
-    }
     return {
       checkpoint,
       available: true
@@ -914,9 +910,14 @@ export function createStudentBackendSync(
       }
       const registeredProfileHasNoPsychologyRecords = completedCheckpoints.size === 0 && psychologyRecords.length === 0
       const questionnaireAccess = resolveDueCheckpoint(
-        await dependencies.getNextPsychologyScale(),
-        completedCheckpoints
+        await dependencies.getNextPsychologyScale()
       )
+      // A record proves completion of one scale, not every scale in its
+      // checkpoint. next_scale is authoritative about outstanding work,
+      // including plans changed since the history/plan requests completed.
+      if (questionnaireAccess.checkpoint) {
+        completedCheckpoints.delete(questionnaireAccess.checkpoint)
+      }
       if (
         registeredProfileHasNoPsychologyRecords
         && questionnaireAccess.checkpoint !== 'baseline'

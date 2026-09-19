@@ -95,6 +95,62 @@ function createCompletedBaselineScaleRecord(order: number) {
 }
 
 describe('startup access bootstrap', () => {
+  it.each([
+    [1, 'baseline'], [2, 'week4'], [3, 'week8'], [4, 'week12']
+  ] as const)('resumes a partially completed checkpoint %s instead of treating one scale as the whole stage', async (order, checkpoint) => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const records = Array.from({ length: order }, (_, index) =>
+      createCompletedScaleRecord((index + 1) as 1 | 2 | 3 | 4)
+    )
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession: vi.fn().mockResolvedValue(undefined),
+      getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+      listPsychologyRecords: vi.fn().mockResolvedValue(records),
+      getNextPsychologyScale: vi.fn().mockResolvedValue({
+        ...createScale(order), id: 500 + order, checkpoint
+      })
+    }, {
+      hydrateAccessState,
+      resolveLocalProfile: () => createCompleteSeedProfile()
+    })
+
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPage: checkpoint === 'baseline' ? 'questionnaire' : 'home',
+      questionnaireCheckpoint: checkpoint,
+      questionnaireAvailable: true
+    })
+    const expectedCompleted = ['baseline', 'week4', 'week8', 'week12'].slice(0, order - 1)
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      completedQuestionnaireCheckpoints: expectedCompleted,
+      activeCheckpoint: expectedCompleted.at(-1) ?? 'baseline'
+    }))
+  })
+
+  it('honors outstanding baseline work even when an earlier plan response says complete', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync({
+      isEnabled: () => true,
+      ensureSession: vi.fn().mockResolvedValue(undefined),
+      getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+      listPsychologyRecords: vi.fn().mockResolvedValue([createCompletedBaselineScaleRecord(1)]),
+      getPsychologyQuestionnairePlan: vi.fn().mockResolvedValue({
+        checkpoint: 'baseline', questionnaire_count: 1, completed_questionnaire_count: 1,
+        estimated_total_minutes: 2, current_questionnaire_id: null, questionnaires: []
+      }),
+      getNextPsychologyScale: vi.fn().mockResolvedValue(createBaselineScale(2))
+    }, {
+      hydrateAccessState,
+      resolveLocalProfile: () => createCompleteSeedProfile()
+    })
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({ targetPage: 'questionnaire' })
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      completedQuestionnaireCheckpoints: [], activeCheckpoint: 'baseline'
+    }))
+  })
+
   it('maps backend user fields into a local student profile', async () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
 
