@@ -630,6 +630,29 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('资料提交失败')
   })
 
+  it('routes a saved Stroop task through baseline completion without ordinary survey submission', async () => {
+    studentBackendSync.loadLongQuestionnaire.mockResolvedValueOnce({
+      scaleId: 12, title: 'Stroop', description: '', checkpoint: 'baseline', questions: [], taskType: 'STROOP'
+    } as never)
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, { global: { stubs: {
+      UniAccessPageShell: { template: '<div><slot /></div>' },
+      StroopTest: { template: '<button class="finish-stroop" @click="$emit(\'completed\', record)">完成</button>',
+        data: () => ({ record: { id: 12, completed_at: '2026-09-20T12:00:00Z', analysis: '已保存' } }) }
+    } } })
+    await flushPromises()
+    await wrapper.get('.questionnaire-overview__start').trigger('click')
+    expect(wrapper.findComponent({ name: 'LongQuestionnaireForm' }).exists()).toBe(false)
+    await wrapper.get('.finish-stroop').trigger('click')
+    await flushPromises()
+    expect(studentBackendSync.syncLongQuestionnaire).not.toHaveBeenCalled()
+    expect(store.submitLongQuestionnaire).toHaveBeenCalledWith('baseline', null, null)
+    expect(currentUni().redirectTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('/pages/access/questionnaire-result?')
+    }))
+    wrapper.unmount()
+  })
+
   it('syncs the long questionnaire payload and replaces the questionnaire page in the stack', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
     studentBackendSync.syncLongQuestionnaire.mockResolvedValue({

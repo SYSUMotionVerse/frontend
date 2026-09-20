@@ -37,6 +37,7 @@ export function mapBackendScaleToQuestionnaire(
 ): PsychologyQuestionnaireModel {
   return {
     scaleId: scale.id,
+    ...(scale.task_type ? { taskType: scale.task_type } : {}),
     title: scale.title,
     description: scale.description,
     checkpoint: scale.checkpoint ?? resolveCheckpointFromScaleOrder(scale.order),

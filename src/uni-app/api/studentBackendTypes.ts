@@ -70,6 +70,7 @@ export interface BackendScaleQuestion {
 }
 
 export interface BackendPsychologyScale {
+  task_type?: 'QUESTIONNAIRE' | 'STROOP'
   id: number
   code?: string | null
   title: string
@@ -86,6 +87,7 @@ export interface BackendPsychologyScale {
 }
 
 export interface BackendPsychologyScaleSummary {
+  task_type?: 'QUESTIONNAIRE' | 'STROOP'
   id: number
   code?: string | null
   title: string
@@ -110,6 +112,7 @@ export interface BackendQuestionnairePlan {
     code: string | null
     title: string
     short_title: string
+    task_type?: 'QUESTIONNAIRE' | 'STROOP'
     order: number
     estimated_minutes: number
     question_count: number
@@ -126,6 +129,7 @@ export interface BackendPsychologyNextMessage {
 }
 
 export interface BackendPsychologyRecord {
+  task_result?: { accuracy_percent: number; completion_time_ms: number; mean_reaction_time_ms: number }
   id: number
   total_score: number | string | null
   percentage?: number | string | null
@@ -169,6 +173,7 @@ export interface PsychologyQuestionnaireQuestion {
 }
 
 export interface PsychologyQuestionnaireModel {
+  taskType?: 'QUESTIONNAIRE' | 'STROOP'
   scaleId: number
   title: string
   shortTitle?: string
@@ -618,6 +623,8 @@ export interface GrowthAssessmentHistoryItem {
 }
 
 export interface StudentBackendSyncDependencies {
+  startStroop: (scaleId: number, screening: StroopColor[]) => Promise<StroopStartResponse>
+  submitStroop: (scaleId: number, payload: StroopSubmission) => Promise<PsychologyScaleSubmitResponse>
   isEnabled: () => boolean
   ensureSession: () => Promise<void>
   getCurrentUser: () => Promise<BackendCurrentUser>
@@ -803,4 +810,19 @@ export interface StudentAdherenceData {
   complianceRate: number
   calendar: GrowthCalendarDay[]
   trend: StudentAdherenceTrendPoint[]
+}
+
+export type StroopColor = 'RED' | 'GREEN' | 'BLUE' | 'YELLOW'
+export interface StroopStimulus { word: StroopColor; ink_color: StroopColor; congruent: boolean }
+export interface StroopSubmission {
+  session_id: string
+  trials: Array<{ selected_color: StroopColor; reaction_time_ms: number }>
+  completion_time_ms: number
+}
+export interface StroopStartResponse {
+  session_id: string
+  screening_passed: boolean
+  stimuli: StroopStimulus[]
+  already_completed?: boolean
+  record?: BackendPsychologyRecord
 }

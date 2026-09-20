@@ -25,6 +25,7 @@ const questionnaireItems = computed(() => {
     code: null,
     title: props.currentQuestionnaire.title,
     short_title: props.currentQuestionnaire.shortTitle ?? '',
+    task_type: props.currentQuestionnaire.taskType,
     description: props.currentQuestionnaire.description,
     order: 1,
     estimated_minutes: props.currentQuestionnaire.estimatedMinutes ?? 3,
@@ -36,6 +37,7 @@ const questionnaireItems = computed(() => {
 const questionnaireCount = computed(() =>
   props.plan?.questionnaire_count ?? questionnaireItems.value.length
 )
+const includesStroop = computed(() => questionnaireItems.value.some(item => item.task_type === 'STROOP'))
 const estimatedMinutes = computed(() =>
   props.plan?.estimated_total_minutes
     ?? questionnaireItems.value.reduce((total, item) => total + item.estimated_minutes, 0)
@@ -51,6 +53,7 @@ const estimatedMinutes = computed(() =>
         问卷会逐份完成，每次只呈现一道题。
       </text>
       <text>你的答案会自动保存，短暂离开后也可以继续填写。</text>
+      <text v-if="includesStroop">最后的 Stroop 测试需要保持前台连续完成，中途离开需重新开始。</text>
     </view>
 
     <view class="questionnaire-overview__section-heading">
@@ -79,7 +82,7 @@ const estimatedMinutes = computed(() =>
             {{ item.description }}
           </text>
           <view class="questionnaire-overview__item-meta">
-            <text>{{ item.question_count }} 题</text>
+            <text>{{ item.task_type === 'STROOP' ? '10 试次' : `${item.question_count} 题` }}</text>
             <text>约 {{ item.estimated_minutes }} 分钟</text>
           </view>
         </view>

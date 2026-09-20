@@ -19,6 +19,29 @@ function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile 
 }
 
 describe('student backend sync orchestration', () => {
+  it('loads a Stroop task with no survey questions and uses dedicated endpoints', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const ensureSession = vi.fn().mockResolvedValue(undefined)
+    const listPsychologyScales = vi.fn()
+    const startStroop = vi.fn().mockResolvedValue({ session_id: 'session', screening_passed: true, stimuli: [] })
+    const submitStroop = vi.fn().mockResolvedValue({ record: { id: 12 } })
+    const sync = createStudentBackendSync({
+      isEnabled: () => true, ensureSession, listPsychologyScales, startStroop, submitStroop,
+      getNextPsychologyScale: vi.fn().mockResolvedValue({
+        id: 12, title: 'Stroop', task_type: 'STROOP', checkpoint: 'baseline',
+        description: '', order: 12, created_at: '', questions: []
+      })
+    })
+    expect(await sync.loadLongQuestionnaire('baseline')).toMatchObject({ scaleId: 12, taskType: 'STROOP', questions: [] })
+    expect(listPsychologyScales).not.toHaveBeenCalled()
+    await sync.startStroop(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'])
+    const payload = { session_id: 'session', trials: [], completion_time_ms: 1500 }
+    await sync.submitStroop(12, payload)
+    expect(startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'])
+    expect(submitStroop).toHaveBeenCalledWith(12, payload)
+    expect(ensureSession).toHaveBeenCalledTimes(3)
+  })
+
   function createPendingSubmissionStore() {
     const entries = new Map<string, PendingTrainingSubmission>()
     return {

@@ -15,6 +15,7 @@ import {
 } from './growthBackendModels'
 import { DEFAULT_POSE_ANGLE_CONFIDENCE_THRESHOLD, type PoseAngleFrame } from '../components/pose/poseAnalysis'
 import type {
+  StroopColor, StroopSubmission,
   BackendCurrentUser,
   BackendExerciseRecord,
   BackendExerciseType,
@@ -953,7 +954,7 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
 
       const nextScale = await dependencies.getNextPsychologyScale()
-      if (hasQuestions(nextScale) && nextScale.questions.length > 0) {
+      if (hasQuestions(nextScale) && (nextScale.questions.length > 0 || nextScale.task_type === 'STROOP')) {
         return mapBackendScaleToQuestionnaire(nextScale)
       }
       if (
@@ -1040,6 +1041,14 @@ export function createStudentBackendSync(
           return { synced: false, reason: 'network-error' } as const
         }
       })
+    },
+    async startStroop(scaleId: number, screening: StroopColor[]) {
+      await dependencies.ensureSession()
+      return dependencies.startStroop(scaleId, screening)
+    },
+    async submitStroop(scaleId: number, payload: StroopSubmission) {
+      await dependencies.ensureSession()
+      return dependencies.submitStroop(scaleId, payload)
     },
     async syncLongQuestionnaire(input: LongQuestionnaireSyncInput) {
       if (!dependencies.isEnabled()) {

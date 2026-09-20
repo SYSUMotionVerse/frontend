@@ -16,6 +16,16 @@ const currentQuestionnaire = {
 }
 
 describe('questionnaire overview', () => {
+  it('describes Stroop trials and the interruption rule instead of zero questions', () => {
+    const wrapper = mount(QuestionnaireOverview, { props: {
+      plan: null,
+      currentQuestionnaire: { ...currentQuestionnaire, title: 'Stroop', taskType: 'STROOP', questions: [] }
+    } })
+    expect(wrapper.text()).toContain('10 试次')
+    expect(wrapper.text()).toContain('中途离开需重新开始')
+    expect(wrapper.text()).not.toContain('0 题')
+  })
+
   it('lists backend questionnaire metadata before starting', async () => {
     const wrapper = mount(QuestionnaireOverview, {
       props: {

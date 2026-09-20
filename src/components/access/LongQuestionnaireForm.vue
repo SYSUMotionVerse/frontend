@@ -256,8 +256,10 @@ function handleResponseChange(questionId: number, optionId: number) {
   }
   validationMessage.value = ''
   emitDraft()
+  const isSliderQuestion = question?.responseConfig?.input_type === 'slider'
   if (
     question?.questionType !== 'MULTIPLE'
+    && !isSliderQuestion
     && typeof answers[questionId] === 'number'
     && currentQuestion.value?.id === questionId
     && !isLastQuestion.value

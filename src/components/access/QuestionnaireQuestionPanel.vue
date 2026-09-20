@@ -30,9 +30,39 @@ interface CompoundField {
   values?: number[]
 }
 
+interface SliderConfig {
+  min: number
+  max: number
+  step: number
+}
+
 const inputType = computed(() =>
   String(props.question.responseConfig?.input_type ?? '')
 )
+const sliderConfig = computed<SliderConfig | null>(() => {
+  if (inputType.value !== 'slider') return null
+
+  const configuredMin = Number(props.question.responseConfig?.min)
+  const configuredMax = Number(props.question.responseConfig?.max)
+  const configuredStep = Number(props.question.responseConfig?.step)
+  const min = Number.isFinite(configuredMin) ? configuredMin : 0
+  const max = Number.isFinite(configuredMax) && configuredMax > min
+    ? configuredMax
+    : min + 1
+  const step = Number.isFinite(configuredStep) && configuredStep > 0
+    ? configuredStep
+    : 1
+  return { min, max, step }
+})
+const sliderTicks = computed(() => {
+  const config = sliderConfig.value
+  if (!config) return []
+  const values: number[] = []
+  for (let value = config.min; value <= config.max + config.step / 100; value += config.step) {
+    values.push(Number(value.toFixed(6)))
+  }
+  return values
+})
 const usesFivePointLegend = computed(() => {
   const scores = props.question.options.map(option => option.score)
   return scores.length === 5
@@ -69,6 +99,10 @@ const selectedOptionId = computed(() => {
     return props.answer.selectedOptionId
   }
   return 0
+})
+const selectedSliderScore = computed(() => {
+  const selected = props.question.options.find(option => option.id === selectedOptionId.value)
+  return selected?.score ?? sliderConfig.value?.min ?? 0
 })
 const detailSelected = computed(() => props.question.options.some((option, index) => (
   option.id === selectedOptionId.value
@@ -124,6 +158,16 @@ function handleCompoundPicker(field: CompoundField, event: unknown) {
   if (value !== undefined) emit('compoundInput', field.key, value)
 }
 
+function selectSliderScore(score: number) {
+  const option = props.question.options.find(item => item.score === score)
+  if (option) emit('select', props.question.id, option.id)
+}
+
+function handleSliderChange(event: unknown) {
+  const value = Number((event as { detail?: { value?: unknown } }).detail?.value)
+  if (Number.isFinite(value)) selectSliderScore(value)
+}
+
 function optionCode(score: number, index: number) {
   return usesFivePointLegend.value ? String(score) : String.fromCharCode(65 + index)
 }
@@ -141,7 +185,47 @@ function inputEventValue(event: unknown) {
     </text>
     <text class="questionnaire-question__prompt">{{ question.prompt }}</text>
 
-    <view v-if="question.questionType !== 'TEXT'" class="questionnaire-runner__options">
+    <view
+      v-if="question.questionType !== 'TEXT' && inputType === 'slider' && sliderConfig"
+      class="questionnaire-runner__slider-field"
+    >
+      <text>{{ selectedOptionId ? `已选择 ${selectedSliderScore} 分` : '请拖动滑块或点击刻度选择分数' }}</text>
+      <view class="questionnaire-runner__slider-ticks">
+        <view
+          v-for="score in sliderTicks"
+          :key="score"
+          class="questionnaire-runner__slider-tick"
+          :class="{ 'questionnaire-runner__slider-tick--selected': selectedOptionId > 0 && selectedSliderScore === score }"
+          role="button"
+          :aria-label="`选择 ${score} 分`"
+          :aria-pressed="selectedOptionId > 0 && selectedSliderScore === score"
+          @click="selectSliderScore(score)"
+        >
+          <text>{{ score }}</text>
+          <view class="questionnaire-runner__slider-tick-mark" />
+        </view>
+      </view>
+      <slider
+        class="questionnaire-runner__slider"
+        :min="sliderConfig.min"
+        :max="sliderConfig.max"
+        :step="sliderConfig.step"
+        :value="selectedSliderScore"
+        active-color="#ff8b8b"
+        background-color="#e8e0d7"
+        block-color="#203042"
+        :block-size="22"
+        :aria-label="question.prompt"
+        @changing="handleSliderChange"
+        @change="handleSliderChange"
+      />
+      <view class="questionnaire-runner__slider-labels">
+        <text>{{ sliderConfig.min }} 完全没有信心</text>
+        <text>{{ sliderConfig.max }} 完全有信心</text>
+      </view>
+    </view>
+
+    <view v-else-if="question.questionType !== 'TEXT'" class="questionnaire-runner__options">
       <button
         v-for="(option, optionIndex) in question.options"
         :key="option.id"
@@ -271,6 +355,60 @@ function inputEventValue(event: unknown) {
   flex-direction: column;
   gap: 14rpx;
   margin-top: 28rpx;
+}
+
+.questionnaire-runner__slider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 32rpx;
+}
+
+.questionnaire-runner__slider-ticks {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 18rpx;
+}
+
+.questionnaire-runner__slider-tick {
+  display: flex;
+  min-width: 24rpx;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  color: #8a97a8;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.questionnaire-runner__slider-tick--selected {
+  color: #c76b5b;
+  font-weight: 900;
+  transform: translateY(-2rpx);
+}
+
+.questionnaire-runner__slider-tick-mark {
+  width: 3rpx;
+  height: 10rpx;
+  border-radius: 999rpx;
+  background: currentColor;
+}
+
+.questionnaire-runner__slider {
+  width: calc(100% - 56rpx);
+  margin: -6rpx 28rpx 0;
+}
+
+.questionnaire-runner__slider-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #64748b;
+  padding: 0 2rpx;
+  font-size: 23rpx;
+  font-weight: 800;
 }
 
 .questionnaire-runner__option {

@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { onHide, onLoad } from '@dcloudio/uni-app'
 import LongQuestionnaireForm from '../../../components/access/LongQuestionnaireForm.vue'
+import StroopTest from '../../../components/access/StroopTest.vue'
 import QuestionnaireOverview from '../../../components/access/QuestionnaireOverview.vue'
 import {
   CHECKPOINT_LABELS,
@@ -21,6 +22,7 @@ import {
 } from '../../platform/questionnaireDraftStorage'
 import type {
   BackendQuestionnairePlan,
+  BackendPsychologyRecord,
   LongQuestionnaireSyncResult,
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel
@@ -54,6 +56,7 @@ const questionnairePlan = shallowRef<BackendQuestionnairePlan | null>(null)
 const questionnaireRunnerKey = shallowRef(0)
 const hasStartedQuestionnaire = shallowRef(false)
 const pageScrollTop = shallowRef(0)
+const stroopInterruptionKey = ref(0)
 const draftStudentId = computed(() => String(store.state.profile?.studentId ?? '').trim())
 const draftSaveDelayMs = 250
 const navigationTimeoutMs = 5_000
@@ -73,7 +76,9 @@ onLoad((query) => {
 
 const checkpointLabel = computed(() => CHECKPOINT_LABELS[checkpoint.value])
 const title = computed(() => checkpoint.value === 'baseline' ? '基线问卷' : `${checkpointLabel.value}问卷`)
-const subtitle = computed(() => '请根据自己的真实情况作答，没有标准答案。')
+const subtitle = computed(() => questionnaire.value?.taskType === 'STROOP'
+  ? '请忽略单词含义，只判断字体颜色。'
+  : '请根据自己的真实情况作答，没有标准答案。')
 const submitLabel = computed(() => submitErrorMessage.value ? '重新提交答案' : '提交答案')
 const estimatedMinutes = computed(() =>
   questionnairePlan.value?.estimated_total_minutes
@@ -120,6 +125,7 @@ onMounted(() => {
 })
 
 onHide(() => {
+  stroopInterruptionKey.value += 1
   flushDraftSave()
 })
 
@@ -215,6 +221,20 @@ async function handleSubmit(payload: {
     submitErrorMessage.value = '问卷提交失败，请检查网络后重新提交。'
   } finally {
     isSubmitting.value = false
+  }
+}
+
+async function handleStroopCompleted(record: BackendPsychologyRecord) {
+  const result = {
+    synced: true as const, score: null, percentage: null,
+    submittedAt: record.completed_at, analysis: record.analysis,
+  }
+  if (!questionnaire.value) return
+  confirmedSubmission.value = { scaleId: questionnaire.value.scaleId, result }
+  if (hasRemainingQuestionnaire(questionnaire.value.scaleId)) {
+    await loadNextQuestionnaire()
+  } else {
+    await finishCheckpoint(result)
   }
 }
 
@@ -444,7 +464,17 @@ function returnToQuestionnaireList() {
         :class="{ 'questionnaire-page__form-content--held': confirmedSubmission }"
       >
         <view class="questionnaire-page__form-stage">
+          <StroopTest
+            v-if="questionnaire.taskType === 'STROOP'"
+            :key="questionnaireRunnerKey"
+            :scale-id="questionnaire.scaleId"
+            :student-id="draftStudentId"
+            :active="hasStartedQuestionnaire && !confirmedSubmission"
+            :interruption-key="stroopInterruptionKey"
+            @completed="handleStroopCompleted"
+          />
           <LongQuestionnaireForm
+            v-else
             :key="questionnaireRunnerKey"
             :questionnaire="questionnaire"
             :submitting="isSubmitting"
