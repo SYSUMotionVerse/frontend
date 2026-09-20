@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createQuestionnaireDraftStorage } from '../uni-app/platform/questionnaireDraftStorage'
 
 function createPlatform() {
@@ -12,6 +12,27 @@ function createPlatform() {
 }
 
 describe('questionnaireDraftStorage', () => {
+  it('isolates daily drafts by Shanghai date and keeps yesterday separate when clearing today', () => {
+    vi.useFakeTimers()
+    try {
+      const platform = createPlatform()
+      const storage = createQuestionnaireDraftStorage(platform)
+      vi.setSystemTime(new Date('2026-09-20T15:59:00Z'))
+      storage.save({ studentId: 'daily', checkpoint: 'daily', scaleId: 12,
+        answers: { 1: 11 }, currentQuestionIndex: 0, updatedAt: new Date().toISOString() })
+      expect(storage.load('daily', 'daily', 12)?.answers).toEqual({ 1: 11 })
+      vi.setSystemTime(new Date('2026-09-20T16:01:00Z'))
+      expect(storage.load('daily', 'daily', 12)).toBeNull()
+      storage.save({ studentId: 'daily', checkpoint: 'daily', scaleId: 12,
+        answers: { 1: 22 }, currentQuestionIndex: 0, updatedAt: new Date().toISOString() })
+      expect(storage.load('daily', 'daily', 12)?.answers).toEqual({ 1: 22 })
+      storage.clear('daily', 'daily', 12)
+      expect(platform.values.size).toBe(1)
+      vi.setSystemTime(new Date('2026-09-20T15:59:00Z'))
+      expect(storage.load('daily', 'daily', 12)?.answers).toEqual({ 1: 11 })
+    } finally { vi.useRealTimers() }
+  })
+
   it('saves and restores answers with the active question', () => {
     const platform = createPlatform()
     const storage = createQuestionnaireDraftStorage(platform)

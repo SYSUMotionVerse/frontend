@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { onHide, onLoad } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
+import { toShanghaiDate } from '../../../domain/student/shanghaiTime'
 import LongQuestionnaireForm from '../../../components/access/LongQuestionnaireForm.vue'
 import StroopTest from '../../../components/access/StroopTest.vue'
 import QuestionnaireOverview from '../../../components/access/QuestionnaireOverview.vue'
@@ -67,6 +68,16 @@ const { waitForConfirmation } = useSubmissionHandoff({
 let pendingDraft: QuestionnaireDraft | null = null
 let draftSaveTimer: ReturnType<typeof setTimeout> | undefined
 let hasFinalizedCheckpoint = false
+let loadedDate = toShanghaiDate()
+
+onShow(() => {
+  if (checkpoint.value === 'daily' && hasLoaded.value && loadedDate !== toShanghaiDate()) {
+    hasStartedQuestionnaire.value = false
+    confirmedSubmission.value = null
+    hasFinalizedCheckpoint = false
+    void loadQuestionnaire()
+  }
+})
 
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -139,6 +150,7 @@ async function loadQuestionnaire() {
   flushDraftSave()
   hasLoaded.value = true
   isLoading.value = true
+  loadedDate = toShanghaiDate()
   loadErrorMessage.value = ''
 
   try {
@@ -174,6 +186,12 @@ async function handleSubmit(payload: {
   answers: Record<number, PsychologyQuestionnaireAnswer>
   title: string
 }) {
+  if (checkpoint.value === 'daily' && loadedDate !== toShanghaiDate()) {
+    hasStartedQuestionnaire.value = false
+    await loadQuestionnaire()
+    void uni.showToast({ title: '日期已更新，请填写今日问卷', icon: 'none' })
+    return
+  }
   if (isSubmitting.value) {
     return
   }
@@ -338,6 +356,7 @@ function handleDraftChange(payload: {
   answers: Record<number, PsychologyQuestionnaireAnswer>
   currentQuestionIndex: number
 }) {
+  if (checkpoint.value === 'daily' && loadedDate !== toShanghaiDate()) return
   if (!questionnaire.value) return
   if (!draftStudentId.value) return
 

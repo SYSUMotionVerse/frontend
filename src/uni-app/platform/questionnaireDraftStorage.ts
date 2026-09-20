@@ -1,4 +1,5 @@
 import type { PsychologyQuestionnaireAnswer } from '../api/studentBackendTypes'
+import { toShanghaiDate } from '../../domain/student/shanghaiTime'
 
 export interface QuestionnaireDraft {
   studentId: string
@@ -21,8 +22,9 @@ interface QuestionnaireDraftPlatform {
 
 const storagePrefix = 'sport-snack:questionnaire-draft:v2'
 
-function storageKey(studentId: string, checkpoint: string, scaleId: number) {
-  return `${storagePrefix}:${encodeURIComponent(studentId.trim())}:${checkpoint}:${scaleId}`
+function storageKey(studentId: string, checkpoint: string, scaleId: number, date = toShanghaiDate()) {
+  const suffix = checkpoint === 'daily' ? `:${date}` : ''
+  return `${storagePrefix}:${encodeURIComponent(studentId.trim())}:${checkpoint}:${scaleId}${suffix}`
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -80,6 +82,8 @@ export function createQuestionnaireDraftStorage(
           return null
         }
 
+        if (checkpoint === 'daily' && toShanghaiDate(stored.updatedAt) !== toShanghaiDate()) return null
+
         const answers = normalizeAnswers(stored.answers)
         if (!answers) return null
 
@@ -107,7 +111,7 @@ export function createQuestionnaireDraftStorage(
         answers: { ...draft.answers }
       }
       resolvedPlatform.setStorageSync(
-        storageKey(normalizedStudentId, draft.checkpoint, draft.scaleId),
+        storageKey(normalizedStudentId, draft.checkpoint, draft.scaleId, toShanghaiDate(draft.updatedAt)),
         stored
       )
     },

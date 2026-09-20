@@ -630,6 +630,28 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('资料提交失败')
   })
 
+  it('refuses to submit yesterday’s open daily form as today’s answers', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-20T02:00:00Z'))
+    const { onLoad } = await import('@dcloudio/uni-app')
+    vi.mocked(onLoad).mockImplementationOnce(callback => callback({ checkpoint: 'daily' }))
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, { global: { stubs: {
+      UniAccessPageShell: { template: '<div><slot /></div>' },
+      LongQuestionnaireForm: { template: '<button class="submit-daily" @click="$emit(\'submit\', payload)">提交</button>',
+        data: () => ({ payload: { scaleId: 1, answers: { 11: 101 }, title: '每日问卷' } }) }
+    } } })
+    await flushPromises()
+    await wrapper.get('.questionnaire-overview__start').trigger('click')
+    vi.setSystemTime(new Date('2026-09-21T02:00:00Z'))
+    await wrapper.get('.submit-daily').trigger('click')
+    await flushPromises()
+    expect(studentBackendSync.syncLongQuestionnaire).not.toHaveBeenCalled()
+    expect(uni.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '日期已更新，请填写今日问卷' }))
+    expect(studentBackendSync.loadLongQuestionnaire).toHaveBeenLastCalledWith('daily')
+    wrapper.unmount()
+  })
+
   it('routes a saved Stroop task through baseline completion without ordinary survey submission', async () => {
     studentBackendSync.loadLongQuestionnaire.mockResolvedValueOnce({
       scaleId: 12, title: 'Stroop', description: '', checkpoint: 'baseline', questions: [], taskType: 'STROOP'
