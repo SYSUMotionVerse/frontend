@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef } from 'vue'
 import type { StudentProfile } from '../../domain/student/types'
+import { registrationCollegeOptions, registrationGradeOptions } from '../../features/access/registrationOptions'
 
 type RegistrationPayload = Omit<StudentProfile, 'completed'>
 
@@ -30,7 +31,8 @@ const form = reactive<RegistrationPayload>({
 })
 
 const genderOptions = ['女', '男']
-const gradeOptions = ['一年级', '二年级', '三年级', '四年级']
+const gradeOptions = registrationGradeOptions()
+const collegeOptions = registrationCollegeOptions
 const educationOptions = ['本科生', '研究生', '博士生'] as const
 const consentGiven = shallowRef(false)
 
@@ -50,6 +52,7 @@ const selectedEducationIndex = computed(() => {
   const index = educationOptions.indexOf(form.educationLevel || '本科生')
   return index >= 0 ? index : 0
 })
+const selectedCollegeIndex = computed(() => Math.max(0, collegeOptions.indexOf(form.college || '')))
 
 function readInputValue(event: Event | { detail?: { value?: string | number }; target?: { value?: string | number } }) {
   const nextEvent = event as {
@@ -97,8 +100,8 @@ const canSubmit = computed(() => {
     form.name.trim().length > 0 &&
     genderOptions.includes(form.gender) &&
     form.major.trim().length > 0 &&
-    form.grade.trim().length > 0 &&
-    Boolean(form.college?.trim()) &&
+    gradeOptions.includes(form.grade) &&
+    collegeOptions.includes(form.college || '') &&
     educationOptions.includes(form.educationLevel as typeof educationOptions[number]) &&
     form.age > 0 &&
     form.heightCm > 0 &&
@@ -130,6 +133,10 @@ function handleGradeChange(event: { detail?: { value?: string | number } }) {
 function handleEducationChange(event: { detail?: { value?: string | number } }) {
   const nextIndex = Number(event.detail?.value ?? 0)
   form.educationLevel = educationOptions[nextIndex] ?? ''
+}
+
+function handleCollegeChange(event: { detail?: { value?: string | number } }) {
+  form.college = collegeOptions[Number(event.detail?.value ?? 0)] ?? ''
 }
 
 function handleConsentChange(event: { detail?: { value?: string[] } }) {
@@ -227,9 +234,21 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
       <view class="form-row">
         <view class="form-row__field">
           <text class="registration-label">学院</text>
-          <input v-model.trim="form.college" aria-label="学院" autocomplete="organization" class="input-shell registration-input-shell" name="college" placeholder="例如：体育学院" />
+          <picker
+            aria-label="学院"
+            class="registration-picker-shell"
+            mode="selector"
+            :range="collegeOptions"
+            :value="selectedCollegeIndex"
+            @change="handleCollegeChange"
+          >
+            <view class="input-shell registration-input-shell registration-input-shell--picker registration-college-value flex items-center">
+              {{ form.college || '请选择学院' }}
+            </view>
+          </picker>
         </view>
-
+      </view>
+      <view class="form-row">
         <view class="form-row__field">
           <text class="registration-label">在读学历</text>
           <picker
@@ -314,6 +333,12 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
 </template>
 
 <style scoped>
+.registration-college-value {
+  height: auto;
+  min-height: 96rpx;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .registration-form {
   display: flex;
   flex-direction: column;

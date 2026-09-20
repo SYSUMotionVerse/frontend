@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import RegistrationForm from '../components/access/RegistrationForm.vue'
+import { registrationCollegeOptions, registrationGradeOptions } from '../features/access/registrationOptions'
 
 function mountForm() {
   return mount(RegistrationForm, {
@@ -20,7 +21,6 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.get('input[name="studentId"]').setValue('20260001')
   await wrapper.get('input[name="name"]').setValue('Lin')
   await wrapper.get('input[name="major"]').setValue('Sports Science')
-  await wrapper.get('input[name="college"]').setValue('体育学院')
   await wrapper.get('input[name="age"]').setValue('12')
   await wrapper.get('input[name="heightCm"]').setValue('170')
   await wrapper.get('input[name="weightKg"]').setValue('55')
@@ -28,13 +28,34 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
   const pickers = wrapper.findAll('.picker-stub')
   await pickers[0]?.trigger('change', { detail: { value: 0 } })
   await pickers[1]?.trigger('change', { detail: { value: 0 } })
-  await pickers[2]?.trigger('change', { detail: { value: 0 } })
+  await pickers[2]?.trigger('change', { detail: { value: registrationCollegeOptions.indexOf('体育部') } })
+  await pickers[3]?.trigger('change', { detail: { value: 0 } })
   await wrapper.get('checkbox-group').trigger('change', {
     detail: { value: ['profile-upload'] }
   })
 }
 
 describe('registration form', () => {
+  it('offers descending enrollment years through 2020 and rolls forward with the year', () => {
+    expect(registrationGradeOptions(new Date('2026-09-20T00:00:00Z'))).toEqual([
+      '2026级', '2025级', '2024级', '2023级', '2022级', '2021级', '2020级'
+    ])
+    expect(registrationGradeOptions(new Date('2026-12-31T16:00:00Z'))[0]).toBe('2027级')
+  })
+
+  it('offers the 34 supplied colleges as a required picker, including full compound names', async () => {
+    const wrapper = mountForm()
+    expect(wrapper.find('input[name="college"]').exists()).toBe(false)
+    const collegePicker = wrapper.findAllComponents({ name: 'PickerStub' })[2]!
+    expect(collegePicker.props('range')).toHaveLength(34)
+    expect(collegePicker.props('range')).toContain('法学院（知识产权学院、中英国际海事法商学院）')
+    expect(collegePicker.props('range')).toContain('电子与信息工程学院（微电子学院）')
+    expect(collegePicker.props('range')).toContain('未来生物医药学院')
+    await fillValidProfileFields(wrapper)
+    await collegePicker.trigger('change', { detail: { value: 999 } })
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+  })
   it('uses the eight-digit hint and one shared label rhythm', () => {
     const wrapper = mountForm()
 
@@ -74,10 +95,10 @@ describe('registration form', () => {
           studentId: '20260001',
           name: 'Lin',
           major: 'Sports Science',
-          college: '体育学院',
+          college: '体育部',
           educationLevel: '本科生',
           gender: '女',
-          grade: '一年级'
+          grade: registrationGradeOptions()[0]
         })
       ]
     ])
