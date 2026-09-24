@@ -105,6 +105,11 @@ const selectedSliderScore = computed(() => {
   const selected = props.question.options.find(option => option.id === selectedOptionId.value)
   return selected?.score ?? sliderConfig.value?.min ?? 0
 })
+const sliderProgress = computed(() => {
+  const config = sliderConfig.value
+  if (!config) return 0
+  return (selectedSliderScore.value - config.min) / (config.max - config.min) * 100
+})
 const detailSelected = computed(() => props.question.options.some((option, index) => (
   option.id === selectedOptionId.value
   && (option.order ?? index + 1) === detailOptionOrder.value
@@ -212,20 +217,30 @@ function inputEventValue(event: unknown) {
         class="questionnaire-runner__slider-track"
         :style="{ paddingLeft: `${50 / sliderTicks.length}%`, paddingRight: `${50 / sliderTicks.length}%` }"
       >
-        <slider
-          class="questionnaire-runner__slider"
-          :min="sliderConfig.min"
-          :max="sliderConfig.max"
-          :step="sliderConfig.step"
-          :value="selectedSliderScore"
-          active-color="#ff8b8b"
-          background-color="#e8e0d7"
-          block-color="#203042"
-          :block-size="22"
-          :aria-label="question.prompt"
-          @changing="handleSliderChange"
-          @change="handleSliderChange"
-        />
+        <view class="questionnaire-runner__slider-control">
+          <view class="questionnaire-runner__slider-rail" aria-hidden="true">
+            <view class="questionnaire-runner__slider-fill" :style="{ width: `${sliderProgress}%` }" />
+          </view>
+          <view
+            class="questionnaire-runner__slider-thumb"
+            :style="{ left: `${sliderProgress}%` }"
+            aria-hidden="true"
+          />
+          <slider
+            class="questionnaire-runner__slider"
+            :min="sliderConfig.min"
+            :max="sliderConfig.max"
+            :step="sliderConfig.step"
+            :value="selectedSliderScore"
+            active-color="#ff8b8b"
+            background-color="#e8e0d7"
+            block-color="#203042"
+            :block-size="22"
+            :aria-label="question.prompt"
+            @changing="handleSliderChange"
+            @change="handleSliderChange"
+          />
+        </view>
       </view>
       <view class="questionnaire-runner__slider-labels">
         <text>{{ sliderConfig.min }} 完全没有信心</text>
@@ -440,10 +455,50 @@ function inputEventValue(event: unknown) {
   margin: 0;
 }
 
+.questionnaire-runner__slider-control {
+  position: relative;
+  height: 44px;
+}
+
+.questionnaire-runner__slider-rail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  background: #e8e0d7;
+  pointer-events: none;
+}
+
+.questionnaire-runner__slider-fill {
+  height: 100%;
+  background: #ff8b8b;
+}
+
+.questionnaire-runner__slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #203042;
+  box-shadow: 0 1px 3px rgba(32, 48, 66, 0.25);
+  pointer-events: none;
+}
+
+/* Keep native touch/keyboard behavior, but draw the visible thumb on the same
+   coordinate system as the ticks instead of platform-specific slider internals. */
 .questionnaire-runner__slider {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
+  height: 44px;
   margin: 0;
   padding: 0;
+  opacity: 0;
 }
 
 .questionnaire-runner__slider-labels {

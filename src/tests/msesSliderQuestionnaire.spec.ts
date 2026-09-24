@@ -68,3 +68,17 @@ describe('MSES-9 slider questionnaire', () => {
     expect(wrapper.get('.questionnaire-question__progress').text()).toBe('1 / 2')
   })
 })
+
+
+it('draws every selected score on the same track coordinates when tapped or dragged', async () => {
+  const wrapper = mount(LongQuestionnaireForm, { props: { questionnaire: createMsesQuestionnaire() } })
+  for (const score of [0, 1, 4, 5, 9, 10]) {
+    await wrapper.get(`[aria-label="选择 ${score} 分"]`).trigger('click')
+    expect(wrapper.get('.questionnaire-runner__slider-thumb').attributes('style')).toContain(`left: ${score * 10}%`)
+    expect(wrapper.get('.questionnaire-runner__slider-fill').attributes('style')).toContain(`width: ${score * 10}%`)
+    expect(wrapper.get('slider').attributes('value')).toBe(String(score))
+  }
+  await wrapper.get('slider').trigger('changing', { detail: { value: 3 } })
+  expect(wrapper.get('.questionnaire-runner__slider-thumb').attributes('style')).toContain('left: 30%')
+  expect(wrapper.get('.questionnaire-runner__slider-tick--selected').attributes('aria-label')).toBe('选择 3 分')
+})
