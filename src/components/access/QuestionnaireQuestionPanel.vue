@@ -198,6 +198,7 @@ function inputEventValue(event: unknown) {
           v-for="score in sliderTicks"
           :key="score"
           class="questionnaire-runner__slider-tick"
+          :style="{ left: `${(score - sliderConfig.min) / (sliderConfig.max - sliderConfig.min) * 100}%` }"
           :class="{ 'questionnaire-runner__slider-tick--selected': selectedOptionId > 0 && selectedSliderScore === score }"
           hover-class="questionnaire-runner__slider-tick--pressed"
           :aria-label="`选择 ${score} 分`"
@@ -377,15 +378,19 @@ function inputEventValue(event: unknown) {
 }
 
 .questionnaire-runner__slider-ticks {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 0 18rpx;
+  position: relative;
+  height: 72rpx;
+  width: calc(100% - 56rpx);
+  margin: 0 28rpx;
 }
 
 .questionnaire-runner__slider-tick {
   display: flex;
-  flex: 1;
+  position: absolute;
+  top: 0;
+  width: 10%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
   min-width: 0;
   min-height: 72rpx;
   margin: 0;
@@ -415,7 +420,7 @@ function inputEventValue(event: unknown) {
 .questionnaire-runner__slider-tick--selected {
   color: #c76b5b;
   font-weight: 900;
-  transform: translateY(-2rpx);
+  transform: translate(-50%, -2rpx);
 }
 
 .questionnaire-runner__slider-tick-mark {
