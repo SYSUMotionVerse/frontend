@@ -3,7 +3,13 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import { studentBackendSync } from '../../uni-app/api/studentBackend'
 import type { BackendPsychologyRecord, StroopColor, StroopStimulus, StroopSubmission } from '../../uni-app/api/studentBackendTypes'
 
-const props = defineProps<{ scaleId: number; studentId: string; active: boolean; interruptionKey: number }>()
+const props = defineProps<{
+  scaleId: number
+  studentId: string
+  active: boolean
+  interruptionKey: number
+  instructions?: string
+}>()
 const emit = defineEmits<{ completed: [record: BackendPsychologyRecord] }>()
 const colors: Array<{ value: StroopColor; label: string; hex: string }> = [
   { value: 'RED', label: '红', hex: '#cf2737' },
@@ -31,6 +37,9 @@ const stimulus = computed(() => stimuli.value[trialIndex.value])
 const ink = computed(() => colors.find(color => color.value === stimulus.value?.ink_color)?.hex)
 const screenColor = computed(() => colors[screenAnswers.value.length])
 const metrics = computed(() => record.value?.task_result)
+const instructionsCopy = computed(() => props.instructions?.trim() || (
+  '接下来是一项简短的认知任务。屏幕上将依次出现不同颜色的文字。请忽略文字本身的含义，只判断文字实际显示的颜色，并尽快点击对应的颜色按钮。请在安静、注意力集中的情况下连续完成测试。测试开始后，请尽量不要中途退出。'
+))
 
 function now() {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now()
@@ -155,7 +164,16 @@ onBeforeUnmount(() => { generation++; clearTimeout(renderTimer) })
 
 <template>
   <view class="stroop">
-    <view class="stroop__header"><text class="stroop__title">Stroop 色词测试</text><text>选择字体颜色，忽略单词含义</text></view>
+    <view class="stroop__header">
+      <text class="stroop__title">颜色判断任务</text>
+      <text>选择字体颜色，忽略单词含义</text>
+      <text
+        v-if="phase === 'screen' || phase === 'ready'"
+        class="stroop__instructions"
+      >
+        {{ instructionsCopy }}
+      </text>
+    </view>
     <view v-if="phase === 'screen'" class="stroop__card">
       <text class="stroop__title">先做辨色检查</text>
       <text>请选择色块对应的颜色（{{ Math.min(screenAnswers.length + 1, 4) }} / 4）</text>
@@ -197,6 +215,7 @@ onBeforeUnmount(() => { generation++; clearTimeout(renderTimer) })
 .stroop { display:flex; flex-direction:column; gap:28rpx; color:#203042; }
 .stroop__header,.stroop__card { display:flex; flex-direction:column; gap:24rpx; }
 .stroop__header { padding:12rpx; font-size:26rpx; }
+.stroop__instructions { color:#536176; line-height:1.6; }
 .stroop__title { font-size:36rpx; font-weight:900; }
 .stroop__card { background:#fffcf8; border:3rpx solid #f4e7d3; border-radius:32rpx; padding:32rpx; box-shadow:0 8rpx 0 #0000000a; font-size:28rpx; line-height:1.6; }
 .stroop__swatch { width:180rpx; height:180rpx; border-radius:24rpx; margin:32rpx auto; }

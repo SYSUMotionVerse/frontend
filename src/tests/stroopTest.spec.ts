@@ -40,6 +40,20 @@ async function finish(wrapper: ReturnType<typeof mount>) {
 }
 
 describe('Stroop test', () => {
+  it('shows the neutral task name and the configured full instruction', () => {
+    const wrapper = mount(StroopTest, {
+      props: {
+        ...props,
+        instructions: '接下来是一项简短的认知任务。请忽略文字本身的含义，只判断文字实际显示的颜色。'
+      }
+    })
+
+    expect(wrapper.get('.stroop__title').text()).toBe('颜色判断任务')
+    expect(wrapper.text()).toContain('请忽略文字本身的含义，只判断文字实际显示的颜色')
+    expect(wrapper.text()).not.toContain('Stroop 色词测试')
+    wrapper.unmount()
+  })
+
   it('screens four colors, records ten timed answers, and completes only after a saved result', async () => {
     const wrapper = mount(StroopTest, { props })
     await ready(wrapper)

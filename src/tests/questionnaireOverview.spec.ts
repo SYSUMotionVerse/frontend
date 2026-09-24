@@ -23,6 +23,9 @@ describe('questionnaire overview', () => {
     } })
     expect(wrapper.text()).toContain('10 试次')
     expect(wrapper.text()).toContain('中途离开需重新开始')
+    expect(wrapper.text()).toContain('颜色判断任务')
+    expect(wrapper.text()).toContain('本次问卷预计需要10–15分钟完成')
+    expect(wrapper.text()).not.toContain('Stroop 色词测试')
     expect(wrapper.text()).not.toContain('0 题')
   })
 
@@ -67,9 +70,11 @@ describe('questionnaire overview', () => {
 
     expect(wrapper.text()).toContain('开始前，请了解这些')
     expect(wrapper.findAll('.questionnaire-overview__item')).toHaveLength(2)
+    expect(wrapper.findAll('.questionnaire-overview__item-title').map(item => item.text()))
+      .toEqual(['问卷一', '问卷二'])
     expect(wrapper.text()).toContain('记录睡眠和身体恢复情况。')
     expect(wrapper.text()).toContain('12 题')
-    expect(wrapper.text()).toContain('约 4 分钟')
+    expect(wrapper.text()).not.toContain('约 4 分钟')
 
     await wrapper.get('.questionnaire-overview__start').trigger('click')
     expect(wrapper.emitted('start')).toHaveLength(1)

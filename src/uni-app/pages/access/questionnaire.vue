@@ -9,6 +9,10 @@ import {
   CHECKPOINT_LABELS,
   normalizeCheckpoint
 } from '../../../features/access/questionnaire'
+import {
+  STUDY_ESTIMATED_TIME_LABEL,
+  STUDY_TITLE
+} from '../../../features/access/questionnaireDisplay'
 import type { CheckpointKey } from '../../../domain/student/types'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
@@ -86,7 +90,7 @@ onLoad((query) => {
 })
 
 const checkpointLabel = computed(() => CHECKPOINT_LABELS[checkpoint.value])
-const title = computed(() => checkpoint.value === 'baseline' ? '基线问卷' : `${checkpointLabel.value}问卷`)
+const title = computed(() => checkpoint.value === 'baseline' ? STUDY_TITLE : `${checkpointLabel.value}问卷`)
 const subtitle = computed(() => questionnaire.value?.taskType === 'STROOP'
   ? '请忽略单词含义，只判断字体颜色。'
   : '请根据自己的真实情况作答，没有标准答案。')
@@ -95,6 +99,10 @@ const estimatedMinutes = computed(() =>
   questionnairePlan.value?.estimated_total_minutes
     ?? questionnaire.value?.estimatedMinutes
     ?? Math.max(3, Math.ceil(((questionnaire.value?.questions?.length ?? 0) * 8) / 60))
+)
+const estimatedMinutesLabel = computed(() => checkpoint.value === 'baseline'
+  ? STUDY_ESTIMATED_TIME_LABEL
+  : String(estimatedMinutes.value)
 )
 const questionnaireCount = computed(() =>
   questionnairePlan.value?.questionnaire_count ?? 1
@@ -490,6 +498,7 @@ function returnToQuestionnaireList() {
             :student-id="draftStudentId"
             :active="hasStartedQuestionnaire && !confirmedSubmission"
             :interruption-key="stroopInterruptionKey"
+            :instructions="questionnaire.instructions"
             @completed="handleStroopCompleted"
           />
           <LongQuestionnaireForm
@@ -505,6 +514,7 @@ function returnToQuestionnaireList() {
             :completed-question-count-before="completedQuestionCountBefore"
             :total-question-count="totalQuestionCount"
             :estimated-minutes="estimatedMinutes"
+            :estimated-minutes-label="estimatedMinutesLabel"
             :instructions-collapsible="checkpoint === 'daily'"
             :instructions-default-expanded="instructionsDefaultExpanded"
             @draft-change="handleDraftChange"

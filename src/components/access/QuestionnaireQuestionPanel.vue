@@ -4,6 +4,7 @@ import type {
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireQuestion
 } from '../../uni-app/api/studentBackendTypes'
+import { questionUsesConfiguredOptionNumbering } from '../../features/access/questionnaireDisplay'
 
 const props = defineProps<{
   question: PsychologyQuestionnaireQuestion
@@ -168,7 +169,9 @@ function handleSliderChange(event: unknown) {
   if (Number.isFinite(value)) selectSliderScore(value)
 }
 
-function optionCode(score: number, index: number) {
+function optionCode(question: PsychologyQuestionnaireQuestion, score: number, index: number) {
+  const configuredStart = questionUsesConfiguredOptionNumbering(question)
+  if (configuredStart !== null) return String(configuredStart + index)
   return usesFivePointLegend.value ? String(score) : String.fromCharCode(65 + index)
 }
 
@@ -231,13 +234,13 @@ function inputEventValue(event: unknown) {
         :key="option.id"
         class="questionnaire-runner__option"
         :class="{ 'questionnaire-runner__option--selected': isOptionSelected(option.id) }"
-        :aria-label="`${optionCode(option.score, optionIndex)}：${option.label}`"
+        :aria-label="`${optionCode(question, option.score, optionIndex)}：${option.label}`"
         :aria-pressed="isOptionSelected(option.id)"
         type="button"
         @click="emit('select', question.id, option.id)"
       >
         <text class="questionnaire-runner__option-code">
-          {{ optionCode(option.score, optionIndex) }}
+          {{ optionCode(question, option.score, optionIndex) }}
         </text>
         <text class="questionnaire-runner__option-label">{{ option.label }}</text>
       </button>

@@ -175,6 +175,7 @@ export interface PsychologyQuestionnaireQuestion {
 export interface PsychologyQuestionnaireModel {
   taskType?: 'QUESTIONNAIRE' | 'STROOP'
   scaleId: number
+  order?: number
   title: string
   shortTitle?: string
   description: string

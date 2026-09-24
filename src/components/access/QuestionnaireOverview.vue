@@ -4,6 +4,10 @@ import type {
   BackendQuestionnairePlan,
   PsychologyQuestionnaireModel
 } from '../../uni-app/api/studentBackendTypes'
+import {
+  STUDY_ESTIMATED_TIME_LABEL,
+  questionnaireDisplayName
+} from '../../features/access/questionnaireDisplay'
 
 const props = defineProps<{
   plan: BackendQuestionnairePlan | null
@@ -38,28 +42,54 @@ const questionnaireCount = computed(() =>
   props.plan?.questionnaire_count ?? questionnaireItems.value.length
 )
 const includesStroop = computed(() => questionnaireItems.value.some(item => item.task_type === 'STROOP'))
+const isBaseline = computed(() => (
+  props.currentQuestionnaire.checkpoint === 'baseline'
+    || props.plan?.checkpoint === 'baseline'
+))
 const estimatedMinutes = computed(() =>
   props.plan?.estimated_total_minutes
     ?? questionnaireItems.value.reduce((total, item) => total + item.estimated_minutes, 0)
 )
+const estimatedTimeLabel = computed(() =>
+  isBaseline.value ? STUDY_ESTIMATED_TIME_LABEL : String(estimatedMinutes.value)
+)
+
+function displayName(item: (typeof questionnaireItems.value)[number], index: number) {
+  return isBaseline.value
+    ? questionnaireDisplayName(item, index + 1)
+    : item.title
+}
 </script>
 
 <template>
   <view class="questionnaire-overview">
     <view class="questionnaire-overview__intro">
       <text class="questionnaire-overview__intro-title">开始前，请了解这些</text>
-      <text>
-        本阶段共有 {{ questionnaireCount }} 份问卷，预计约 {{ estimatedMinutes }} 分钟。
-        问卷会逐份完成，每次只呈现一道题。
-      </text>
-      <text>你的答案会自动保存，短暂离开后也可以继续填写。</text>
-      <text v-if="includesStroop">最后的 Stroop 测试需要保持前台连续完成，中途离开需重新开始。</text>
+      <template v-if="isBaseline">
+        <text>您好！欢迎参加本次调查。</text>
+        <text>本次问卷预计需要10–15分钟完成。请根据您的实际情况、真实想法和感受，认真、独立作答。</text>
+        <text>1. 所有题目均没有对错之分，请按照您的真实情况作答。</text>
+        <text>2. 请勿参考他人的答案，也无需反复斟酌。</text>
+        <text>3. 不同题目的作答时间范围可能有所不同，请以题目中的具体说明为准；如无特别说明，请根据您的实际情况作答。</text>
+        <text>4. 您的作答信息将按照研究要求严格保密，仅用于研究分析。</text>
+        <text>5. 请认真完成每一道题目，避免漏答。</text>
+        <text>感谢您的参与与配合！</text>
+      </template>
+      <template v-else>
+        <text>
+          本阶段共有 {{ questionnaireCount }} 份问卷，预计约 {{ estimatedMinutes }} 分钟。
+          问卷会逐份完成，每次只呈现一道题。
+        </text>
+        <text>你的答案会自动保存，短暂离开后也可以继续填写。</text>
+      </template>
+      <text v-if="includesStroop">最后的颜色判断任务需要保持前台连续完成，中途离开需重新开始。</text>
     </view>
 
     <view class="questionnaire-overview__section-heading">
       <text class="questionnaire-overview__section-title">本次问卷</text>
       <text class="questionnaire-overview__section-meta">
-        {{ questionnaireCount }} 份 · 约 {{ estimatedMinutes }} 分钟
+        <template v-if="isBaseline">共 {{ questionnaireCount }} 个部分 · 预计 {{ estimatedTimeLabel }} 分钟</template>
+        <template v-else>{{ questionnaireCount }} 份 · 约 {{ estimatedTimeLabel }} 分钟</template>
       </text>
     </view>
 
@@ -75,7 +105,7 @@ const estimatedMinutes = computed(() =>
         </view>
         <view class="questionnaire-overview__item-copy">
           <view class="questionnaire-overview__item-heading">
-            <text class="questionnaire-overview__item-title">{{ item.title }}</text>
+            <text class="questionnaire-overview__item-title">{{ displayName(item, itemIndex) }}</text>
             <text v-if="item.completed" class="questionnaire-overview__item-status">已完成</text>
           </view>
           <text v-if="item.description" class="questionnaire-overview__item-description">
@@ -83,7 +113,7 @@ const estimatedMinutes = computed(() =>
           </text>
           <view class="questionnaire-overview__item-meta">
             <text>{{ item.task_type === 'STROOP' ? '10 试次' : `${item.question_count} 题` }}</text>
-            <text>约 {{ item.estimated_minutes }} 分钟</text>
+            <text v-if="!isBaseline">约 {{ item.estimated_minutes }} 分钟</text>
           </view>
         </view>
       </view>

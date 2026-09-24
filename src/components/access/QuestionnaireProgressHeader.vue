@@ -6,6 +6,7 @@ defineProps<{
   completedQuestionCount: number
   totalQuestionCount: number
   estimatedMinutes: number
+  estimatedMinutesLabel?: string
   progressPercent: number
 }>()
 </script>
@@ -19,7 +20,7 @@ defineProps<{
         </text>
       </view>
       <text class="questionnaire-progress__time">
-        全程约 {{ estimatedMinutes }} 分钟
+        全程约 {{ estimatedMinutesLabel || estimatedMinutes }} 分钟
       </text>
     </view>
     <text class="questionnaire-progress__title">{{ questionnaireTitle }}</text>

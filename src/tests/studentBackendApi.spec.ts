@@ -64,6 +64,7 @@ describe('student backend API payload mapping', () => {
       })
     ).toEqual({
       scaleId: 1,
+      order: 1,
       title: '运动心理健康量表（第1次）',
       description: '评估运动对心理健康的影响',
       checkpoint: 'baseline',

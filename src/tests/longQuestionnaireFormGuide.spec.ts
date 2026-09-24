@@ -90,6 +90,34 @@ describe('LongQuestionnaireForm progressive runner', () => {
     }])
   })
 
+  it('uses the neutral questionnaire title and configured zero-based option numbers', () => {
+    const wrapper = mount(LongQuestionnaireForm, {
+      props: {
+        questionnaire: {
+          ...createQuestionnaire(1),
+          title: '问卷五',
+          shortTitle: '问卷五',
+          questions: [{
+            id: 1,
+            prompt: '请按实际情况选择',
+            responseConfig: { option_number_start: 0 },
+            options: [
+              { id: 11, label: '从不', score: 3 },
+              { id: 12, label: '偶尔', score: 2 },
+              { id: 13, label: '经常', score: 1 },
+              { id: 14, label: '总是', score: 0 }
+            ]
+          }]
+        }
+      }
+    })
+
+    expect(wrapper.get('.questionnaire-progress__title').text()).toBe('问卷五')
+    expect(wrapper.find('.questionnaire-instructions__legend').exists()).toBe(false)
+    expect(wrapper.findAll('.questionnaire-runner__option-code').map(option => option.text()))
+      .toEqual(['0', '1', '2', '3'])
+  })
+
   it('restores a draft and submits the original backend option identifiers', async () => {
     const wrapper = mount(LongQuestionnaireForm, {
       props: {

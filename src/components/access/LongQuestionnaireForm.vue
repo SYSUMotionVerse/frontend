@@ -8,6 +8,11 @@ import QuestionnaireBottomNavigation from './QuestionnaireBottomNavigation.vue'
 import QuestionnaireInstructionsCard from './QuestionnaireInstructionsCard.vue'
 import QuestionnaireProgressHeader from './QuestionnaireProgressHeader.vue'
 import QuestionnaireQuestionPanel from './QuestionnaireQuestionPanel.vue'
+import {
+  isGenericQuestionnaireTitle,
+  questionnaireRunnerDisplayName,
+  questionUsesConfiguredOptionNumbering
+} from '../../features/access/questionnaireDisplay'
 
 interface SubmissionPayload {
   scaleId: number
@@ -31,6 +36,7 @@ const props = withDefaults(defineProps<{
   completedQuestionCountBefore?: number
   totalQuestionCount?: number
   estimatedMinutes?: number
+  estimatedMinutesLabel?: string
   instructionsCollapsible?: boolean
   instructionsDefaultExpanded?: boolean
 }>(), {
@@ -41,6 +47,7 @@ const props = withDefaults(defineProps<{
   questionnaireCount: 1,
   questionnaireNumber: 1,
   completedQuestionCountBefore: 0,
+  estimatedMinutesLabel: '',
   instructionsCollapsible: false,
   instructionsDefaultExpanded: true
 })
@@ -137,6 +144,10 @@ const currentQuestionNumber = computed(() => currentQuestionIndex.value + 1)
 const resolvedEstimatedMinutes = computed(() =>
   props.estimatedMinutes ?? Math.max(3, Math.ceil((questionCount.value * 8) / 60))
 )
+const displayTitle = computed(() => questionnaireRunnerDisplayName(
+  props.questionnaire,
+  props.questionnaireNumber
+))
 const totalQuestionCount = computed(() =>
   props.totalQuestionCount ?? questionCount.value
 )
@@ -155,6 +166,16 @@ const isLastQuestion = computed(() =>
   currentQuestionIndex.value === questionCount.value - 1
 )
 const legendItems = computed(() => {
+  // The updated definitions put the meaning directly on each option. Their
+  // neutral public title identifies them as the new definitions, so showing
+  // the same values again in a legend only repeats the guidance.
+  if (
+    isGenericQuestionnaireTitle(props.questionnaire.title)
+      || isGenericQuestionnaireTitle(props.questionnaire.shortTitle ?? '')
+  ) {
+    return []
+  }
+
   if (props.questionnaire.responseLegend?.length) {
     return props.questionnaire.responseLegend.map(item => ({
       key: String(item.value),
@@ -173,9 +194,12 @@ const legendItems = computed(() => {
     && [...scores].sort((left, right) => left - right).every(
       (score, index) => score === index + 1
     )
+  const configuredStart = questionUsesConfiguredOptionNumbering(question)
 
   return question.options.map((option, index) => ({
-    key: usesNumericLegend ? String(option.score) : String.fromCharCode(65 + index),
+    key: configuredStart !== null
+      ? String(configuredStart + index)
+      : usesNumericLegend ? String(option.score) : String.fromCharCode(65 + index),
     label: option.label
   }))
 })
@@ -374,12 +398,13 @@ function handleSubmit() {
   <view class="questionnaire-runner">
     <view class="questionnaire-runner__block">
       <QuestionnaireProgressHeader
-        :questionnaire-title="questionnaire.shortTitle || questionnaire.title"
+        :questionnaire-title="displayTitle"
         :questionnaire-count="questionnaireCount"
         :questionnaire-number="questionnaireNumber"
         :completed-question-count="completedQuestionCount"
         :total-question-count="totalQuestionCount"
         :estimated-minutes="resolvedEstimatedMinutes"
+        :estimated-minutes-label="estimatedMinutesLabel"
         :progress-percent="overallProgressPercent"
       />
     </view>
