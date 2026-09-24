@@ -25,11 +25,12 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.get('input[name="heightCm"]').setValue('170')
   await wrapper.get('input[name="weightKg"]').setValue('55')
 
-  const pickers = wrapper.findAll('.picker-stub')
-  await pickers[0]?.trigger('change', { detail: { value: 0 } })
-  await pickers[1]?.trigger('change', { detail: { value: 0 } })
-  await pickers[2]?.trigger('change', { detail: { value: registrationCollegeOptions.indexOf('体育部') } })
-  await pickers[3]?.trigger('change', { detail: { value: 0 } })
+  for (const label of ['性别', '年级', '在读学历']) {
+    await wrapper.get(`.picker-stub[aria-label="${label}"]`).trigger('change', { detail: { value: 0 } })
+  }
+  await wrapper.get('.picker-stub[aria-label="学院"]').trigger('change', {
+    detail: { value: registrationCollegeOptions.indexOf('体育部') }
+  })
   await wrapper.get('checkbox-group').trigger('change', {
     detail: { value: ['profile-upload'] }
   })
@@ -46,7 +47,8 @@ describe('registration form', () => {
   it('offers the 34 supplied colleges as a required picker, including full compound names', async () => {
     const wrapper = mountForm()
     expect(wrapper.find('input[name="college"]').exists()).toBe(false)
-    const collegePicker = wrapper.findAllComponents({ name: 'PickerStub' })[2]!
+    const collegePicker = wrapper.findAllComponents({ name: 'PickerStub' })
+      .find(picker => picker.attributes('aria-label') === '学院')!
     expect(collegePicker.props('range')).toHaveLength(34)
     expect(collegePicker.props('range')).toContain('法学院（知识产权学院、中英国际海事法商学院）')
     expect(collegePicker.props('range')).toContain('电子与信息工程学院（微电子学院）')

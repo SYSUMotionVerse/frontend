@@ -210,8 +210,19 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
       
       <view class="form-row">
         <view class="form-row__field">
-          <text class="registration-label">专业</text>
-          <input v-model.trim="form.major" aria-label="专业" autocomplete="organization-title" class="input-shell registration-input-shell" name="major" placeholder="理科..." />
+          <text class="registration-label">在读学历</text>
+          <picker
+            aria-label="在读学历"
+            class="registration-picker-shell"
+            mode="selector"
+            :range="educationOptions"
+            :value="selectedEducationIndex"
+            @change="handleEducationChange"
+          >
+            <view class="input-shell registration-input-shell registration-input-shell--picker flex items-center">
+              {{ form.educationLevel || '请选择' }}
+            </view>
+          </picker>
         </view>
         
         <view class="form-row__field">
@@ -250,19 +261,8 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
       </view>
       <view class="form-row">
         <view class="form-row__field">
-          <text class="registration-label">在读学历</text>
-          <picker
-            aria-label="在读学历"
-            class="registration-picker-shell"
-            mode="selector"
-            :range="educationOptions"
-            :value="selectedEducationIndex"
-            @change="handleEducationChange"
-          >
-            <view class="input-shell registration-input-shell registration-input-shell--picker flex items-center">
-              {{ form.educationLevel || '请选择' }}
-            </view>
-          </picker>
+          <text class="registration-label">专业</text>
+          <input v-model.trim="form.major" aria-label="专业" autocomplete="organization-title" class="input-shell registration-input-shell" name="major" placeholder="理科..." />
         </view>
       </view>
     </view>

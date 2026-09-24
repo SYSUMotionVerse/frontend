@@ -233,6 +233,9 @@ function inputEventValue(event: unknown) {
         v-for="(option, optionIndex) in question.options"
         :key="option.id"
         class="questionnaire-runner__option"
+        hover-class="questionnaire-runner__option--pressed"
+        :hover-start-time="0"
+        :hover-stay-time="80"
         :class="{ 'questionnaire-runner__option--selected': isOptionSelected(option.id) }"
         :aria-label="`${optionCode(question, option.score, optionIndex)}：${option.label}`"
         :aria-pressed="isOptionSelected(option.id)"
@@ -428,6 +431,7 @@ function inputEventValue(event: unknown) {
   color: #1A202C;
   padding: 18rpx 22rpx;
   text-align: left;
+  transition: transform 80ms ease, background-color 80ms ease, border-color 80ms ease;
 }
 
 .questionnaire-runner__option::after {
@@ -435,6 +439,13 @@ function inputEventValue(event: unknown) {
 }
 
 .questionnaire-runner__option--selected {
+  border-color: #FF8B8B;
+}
+
+.questionnaire-runner__option--pressed,
+.questionnaire-runner__option:active {
+  transform: scale(0.98);
+  background: #FFE5E2;
   border-color: #FF8B8B;
 }
 
