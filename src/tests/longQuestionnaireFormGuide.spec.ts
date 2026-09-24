@@ -1,7 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import QuestionnaireQuestionPanel from '../components/access/QuestionnaireQuestionPanel.vue'
 import LongQuestionnaireForm from '../components/access/LongQuestionnaireForm.vue'
 import type { PsychologyQuestionnaireModel } from '../uni-app/api/studentBackendTypes'
+
+afterEach(() => vi.useRealTimers())
 
 const ratingLabels = ['从不', '很少', '有时', '经常', '总是']
 
@@ -268,7 +271,8 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(later.find('.questionnaire-runner__introduction').exists()).toBe(false)
   })
 
-  it('automatically advances after a single-choice answer is selected', async () => {
+  it('automatically advances 100ms after a single-choice answer is selected', async () => {
+    vi.useFakeTimers()
     const wrapper = mount(LongQuestionnaireForm, {
       props: { questionnaire: createQuestionnaire() }
     })
@@ -278,6 +282,9 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(wrapper.get('.questionnaire-runner__primary').classes())
       .toContain('questionnaire-runner__navigation-button--disabled')
     await wrapper.find('.questionnaire-runner__option').trigger('click')
+    await vi.advanceTimersByTimeAsync(99)
+    expect(wrapper.text()).toContain('第 1 个问题')
+    await vi.advanceTimersByTimeAsync(1)
     expect(wrapper.text()).toContain('第 2 个问题')
     expect(wrapper.get('.questionnaire-runner__footer').text()).toContain('下一题')
     expect(wrapper.get('.questionnaire-runner__primary').attributes('disabled')).toBeDefined()
@@ -371,5 +378,51 @@ describe('LongQuestionnaireForm progressive runner', () => {
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
       answers: { 1: 12, 4: 41 }
     })
+  })
+})
+
+
+describe('questionnaire rapid input safety', () => {
+  it('rejects mismatched and stale options without losing valid answers or skipping questions', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(LongQuestionnaireForm, { props: { questionnaire: createQuestionnaire(3) } })
+    const panel = () => wrapper.getComponent(QuestionnaireQuestionPanel)
+    panel().vm.$emit('select', 1, 11)
+    panel().vm.$emit('select', 1, 12)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(panel().props('question').id).toBe(2)
+    panel().vm.$emit('select', 2, 12)
+    panel().vm.$emit('select', 1, 13)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(panel().props('question').id).toBe(2)
+    expect(panel().props('answer')).toBe(0)
+    panel().vm.$emit('select', 2, 21)
+    await vi.advanceTimersByTimeAsync(100)
+    panel().vm.$emit('select', 3, 31)
+    await wrapper.vm.$nextTick()
+    await wrapper.get('.questionnaire-runner__primary').trigger('click')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ answers: { 1: 12, 2: 21, 3: 31 } })
+    wrapper.unmount()
+  })
+
+  it('cancels delayed advancement on manual navigation, questionnaire replacement and unmount', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(LongQuestionnaireForm, { props: { questionnaire: createQuestionnaire(3) } })
+    await wrapper.find('.questionnaire-runner__option').trigger('click')
+    await wrapper.get('.questionnaire-runner__primary').trigger('click')
+    await vi.advanceTimersByTimeAsync(100)
+    expect(wrapper.getComponent(QuestionnaireQuestionPanel).props('question').id).toBe(2)
+    await wrapper.find('.questionnaire-runner__option').trigger('click')
+    await wrapper.findAll('.questionnaire-runner__navigation-button')[0].trigger('click')
+    await vi.advanceTimersByTimeAsync(100)
+    expect(wrapper.getComponent(QuestionnaireQuestionPanel).props('question').id).toBe(1)
+    await wrapper.find('.questionnaire-runner__option').trigger('click')
+    await wrapper.setProps({ questionnaire: { ...createQuestionnaire(3), scaleId: 99 } })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(wrapper.getComponent(QuestionnaireQuestionPanel).props('question').id).toBe(1)
+    expect(wrapper.getComponent(QuestionnaireQuestionPanel).props('answer')).toBe(0)
+    await wrapper.find('.questionnaire-runner__option').trigger('click')
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

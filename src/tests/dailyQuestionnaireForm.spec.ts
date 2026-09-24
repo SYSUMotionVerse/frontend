@@ -98,6 +98,7 @@ describe('daily questionnaire runner', () => {
 
     wrapper.getComponent(QuestionnaireQuestionPanel).vm.$emit('select', 3, 30)
     await wrapper.vm.$nextTick()
+    await wrapper.get('.questionnaire-runner__primary').trigger('click')
     expect(wrapper.text()).toContain('实际睡眠')
     for (const picker of wrapper.findAll('picker')) {
       await picker.trigger('change', { detail: { value: 1 } })

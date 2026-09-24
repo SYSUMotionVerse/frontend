@@ -16,7 +16,7 @@ export function formatBackendErrorMessage(error: unknown, fallback: string) {
   return message
 }
 
-export function reportBackendSyncError(actionLabel: string, error: unknown) {
+export function reportBackendSyncError(actionLabel: string, error: unknown, options: { modal?: boolean } = {}) {
   if (error instanceof BackendRequestError) {
     console.error(`[student-backend] ${actionLabel} failed`, {
       message: error.message,
@@ -28,6 +28,16 @@ export function reportBackendSyncError(actionLabel: string, error: unknown) {
     })
   } else {
     console.warn(`[student-backend] ${actionLabel} failed`, error)
+  }
+
+  if (typeof uni !== 'undefined' && options.modal && typeof uni.showModal === 'function') {
+    void uni.showModal({
+      title: `${actionLabel}失败`,
+      content: formatBackendErrorMessage(error, '提交失败，已保留本地进度'),
+      showCancel: false,
+      confirmText: '知道了'
+    })
+    return
   }
 
   if (typeof uni === 'undefined' || typeof uni.showToast !== 'function') {

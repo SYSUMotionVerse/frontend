@@ -243,7 +243,7 @@ async function handleSubmit(payload: {
 
     await finishCheckpoint(result)
   } catch (error) {
-    reportBackendSyncError('问卷同步', error)
+    reportBackendSyncError('问卷同步', error, { modal: true })
     submitErrorMessage.value = '问卷提交失败，请检查网络后重新提交。'
   } finally {
     isSubmitting.value = false

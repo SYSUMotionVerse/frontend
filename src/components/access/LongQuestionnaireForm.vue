@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, shallowRef, watch } from 'vue'
 import type {
   PsychologyQuestionnaireAnswer,
   PsychologyQuestionnaireModel
@@ -60,6 +60,12 @@ const emit = defineEmits<{
 
 const answers = reactive<Record<number, PsychologyQuestionnaireAnswer>>({})
 const validationMessage = shallowRef('')
+let advanceTimer: ReturnType<typeof setTimeout> | undefined
+function cancelAutoAdvance() {
+  if (advanceTimer !== undefined) clearTimeout(advanceTimer)
+  advanceTimer = undefined
+}
+onBeforeUnmount(cancelAutoAdvance)
 
 function initializeAnswers(
   questionnaire: PsychologyQuestionnaireModel,
@@ -210,6 +216,7 @@ const instructionsCopy = computed(() =>
 )
 
 watch(() => props.questionnaire, (nextQuestionnaire) => {
+  cancelAutoAdvance()
   // uni-app may reuse the Vue child instance even when the surrounding view's
   // key changes. Reset the runner explicitly so every new questionnaire owns
   // its own local question index and answers.
@@ -223,10 +230,11 @@ function hasAnswer(
   answer: PsychologyQuestionnaireAnswer | undefined,
   question?: PsychologyQuestionnaireModel['questions'][number]
 ) {
-  if (Array.isArray(answer)) return answer.length > 0
-  if (typeof answer === 'number') return answer > 0
+  const ownsOption = (id: number) => !question || question.options.some(option => option.id === id)
+  if (Array.isArray(answer)) return answer.length > 0 && answer.every(ownsOption)
+  if (typeof answer === 'number') return answer > 0 && ownsOption(answer)
   if (answer && typeof answer === 'object') {
-    return answer.selectedOptionId > 0 && answer.text.trim().length > 0
+    return answer.selectedOptionId > 0 && ownsOption(answer.selectedOptionId) && answer.text.trim().length > 0
   }
   if (typeof answer !== 'string' || !answer.trim()) return false
   if (question?.responseConfig?.input_type !== 'compound') return true
@@ -260,7 +268,11 @@ watch(questionCount, () => {
 
 function handleResponseChange(questionId: number, optionId: number) {
   const question = props.questionnaire.questions.find(item => item.id === questionId)
-  if (question?.questionType === 'MULTIPLE') {
+  // Native events can arrive after the rendered question has already changed.
+  if (props.submitting || currentQuestion.value?.id !== questionId
+    || !question || !question.options.some(option => option.id === optionId)) return
+  cancelAutoAdvance()
+  if (question.questionType === 'MULTIPLE') {
     const selected = Array.isArray(answers[questionId]) ? [...answers[questionId]] : []
     const optionIndex = selected.indexOf(optionId)
     if (optionIndex >= 0) {
@@ -288,8 +300,14 @@ function handleResponseChange(questionId: number, optionId: number) {
     && currentQuestion.value?.id === questionId
     && !isLastQuestion.value
   ) {
-    currentQuestionIndex.value += 1
-    emitDraft()
+    const scaleId = props.questionnaire.scaleId
+    advanceTimer = setTimeout(() => {
+      advanceTimer = undefined
+      if (props.submitting || props.questionnaire.scaleId !== scaleId
+        || currentQuestion.value?.id !== questionId || isLastQuestion.value) return
+      currentQuestionIndex.value += 1
+      emitDraft()
+    }, 100)
   }
 }
 
@@ -354,6 +372,7 @@ function handleDurationInput(field: 'hours' | 'minutes', value: string) {
 }
 
 function showPreviousQuestion() {
+  cancelAutoAdvance()
   if (isFirstQuestion.value) return
   currentQuestionIndex.value -= 1
   validationMessage.value = ''
@@ -361,6 +380,7 @@ function showPreviousQuestion() {
 }
 
 function showNextQuestion() {
+  cancelAutoAdvance()
   if (!hasAnswer(currentAnswer.value, currentQuestion.value ?? undefined)) {
     validationMessage.value = '请先完成本题。'
     return
@@ -372,6 +392,7 @@ function showNextQuestion() {
 }
 
 function handleSubmit() {
+  cancelAutoAdvance()
   if (props.submitting) return
 
   const firstUnansweredIndex = visibleQuestions.value.findIndex(

@@ -192,21 +192,21 @@ function inputEventValue(event: unknown) {
       v-if="question.questionType !== 'TEXT' && inputType === 'slider' && sliderConfig"
       class="questionnaire-runner__slider-field"
     >
-      <text>{{ selectedOptionId ? `已选择 ${selectedSliderScore} 分` : '请拖动滑块或点击刻度选择分数' }}</text>
+      <text class="questionnaire-runner__slider-status">{{ selectedOptionId ? `已选择 ${selectedSliderScore} 分` : '请拖动滑块或点击刻度选择分数' }}</text>
       <view class="questionnaire-runner__slider-ticks">
-        <view
+        <button
           v-for="score in sliderTicks"
           :key="score"
           class="questionnaire-runner__slider-tick"
           :class="{ 'questionnaire-runner__slider-tick--selected': selectedOptionId > 0 && selectedSliderScore === score }"
-          role="button"
+          hover-class="questionnaire-runner__slider-tick--pressed"
           :aria-label="`选择 ${score} 分`"
           :aria-pressed="selectedOptionId > 0 && selectedSliderScore === score"
           @click="selectSliderScore(score)"
         >
           <text>{{ score }}</text>
           <view class="questionnaire-runner__slider-tick-mark" />
-        </view>
+        </button>
       </view>
       <slider
         class="questionnaire-runner__slider"
@@ -370,6 +370,12 @@ function inputEventValue(event: unknown) {
   margin-top: 32rpx;
 }
 
+.questionnaire-runner__slider-status {
+  color: #8a97a8;
+  font-size: 24rpx;
+  font-weight: 400;
+}
+
 .questionnaire-runner__slider-ticks {
   display: flex;
   align-items: flex-end;
@@ -379,7 +385,15 @@ function inputEventValue(event: unknown) {
 
 .questionnaire-runner__slider-tick {
   display: flex;
-  min-width: 24rpx;
+  flex: 1;
+  min-width: 0;
+  min-height: 72rpx;
+  margin: 0;
+  padding: 12rpx 0;
+  border: none;
+  border-radius: 8rpx;
+  background: transparent;
+  justify-content: center;
   flex-direction: column;
   align-items: center;
   gap: 8rpx;
@@ -388,6 +402,14 @@ function inputEventValue(event: unknown) {
   font-weight: 700;
   line-height: 1;
   transition: color 160ms ease, transform 160ms ease;
+}
+
+.questionnaire-runner__slider-tick::after {
+  border: none;
+}
+
+.questionnaire-runner__slider-tick--pressed {
+  background: #FFE5E2;
 }
 
 .questionnaire-runner__slider-tick--selected {
@@ -405,7 +427,7 @@ function inputEventValue(event: unknown) {
 
 .questionnaire-runner__slider {
   width: calc(100% - 56rpx);
-  margin: -6rpx 28rpx 0;
+  margin: 0 28rpx;
 }
 
 .questionnaire-runner__slider-labels {
