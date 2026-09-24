@@ -411,11 +411,11 @@ function inputEventValue(event: unknown) {
   min-width: 0;
   min-height: 72rpx;
   margin: 0;
-  padding: 12rpx 0;
+  padding: 12rpx 0 0;
   border: none;
   border-radius: 8rpx;
   background: transparent;
-  justify-content: center;
+  justify-content: flex-end;
   flex-direction: column;
   align-items: center;
   gap: 8rpx;
@@ -452,12 +452,12 @@ function inputEventValue(event: unknown) {
 .questionnaire-runner__slider-track {
   width: 100%;
   box-sizing: border-box;
-  margin: -30rpx 0 0;
+  margin: -18rpx 0 0;
 }
 
 .questionnaire-runner__slider-control {
   position: relative;
-  height: 32px;
+  height: 22px;
 }
 
 .questionnaire-runner__slider-rail {
@@ -495,7 +495,7 @@ function inputEventValue(event: unknown) {
   top: 0;
   left: 0;
   width: 100%;
-  height: 32px;
+  height: 22px;
   margin: 0;
   padding: 0;
   opacity: 0;
