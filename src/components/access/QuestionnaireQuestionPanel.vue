@@ -198,7 +198,6 @@ function inputEventValue(event: unknown) {
           v-for="score in sliderTicks"
           :key="score"
           class="questionnaire-runner__slider-tick"
-          :style="{ left: `${(score - sliderConfig.min) / (sliderConfig.max - sliderConfig.min) * 100}%` }"
           :class="{ 'questionnaire-runner__slider-tick--selected': selectedOptionId > 0 && selectedSliderScore === score }"
           hover-class="questionnaire-runner__slider-tick--pressed"
           :aria-label="`选择 ${score} 分`"
@@ -209,20 +208,25 @@ function inputEventValue(event: unknown) {
           <view class="questionnaire-runner__slider-tick-mark" />
         </button>
       </view>
-      <slider
-        class="questionnaire-runner__slider"
-        :min="sliderConfig.min"
-        :max="sliderConfig.max"
-        :step="sliderConfig.step"
-        :value="selectedSliderScore"
-        active-color="#ff8b8b"
-        background-color="#e8e0d7"
-        block-color="#203042"
-        :block-size="22"
-        :aria-label="question.prompt"
-        @changing="handleSliderChange"
-        @change="handleSliderChange"
-      />
+      <view
+        class="questionnaire-runner__slider-track"
+        :style="{ paddingLeft: `${50 / sliderTicks.length}%`, paddingRight: `${50 / sliderTicks.length}%` }"
+      >
+        <slider
+          class="questionnaire-runner__slider"
+          :min="sliderConfig.min"
+          :max="sliderConfig.max"
+          :step="sliderConfig.step"
+          :value="selectedSliderScore"
+          active-color="#ff8b8b"
+          background-color="#e8e0d7"
+          block-color="#203042"
+          :block-size="22"
+          :aria-label="question.prompt"
+          @changing="handleSliderChange"
+          @change="handleSliderChange"
+        />
+      </view>
       <view class="questionnaire-runner__slider-labels">
         <text>{{ sliderConfig.min }} 完全没有信心</text>
         <text>{{ sliderConfig.max }} 完全有信心</text>
@@ -378,18 +382,16 @@ function inputEventValue(event: unknown) {
 }
 
 .questionnaire-runner__slider-ticks {
-  position: relative;
-  height: 72rpx;
-  width: calc(100% - 56rpx);
-  margin: 0 28rpx;
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .questionnaire-runner__slider-tick {
   display: flex;
-  position: absolute;
-  top: 0;
-  width: 10%;
-  transform: translateX(-50%);
+  flex: 1;
+  width: 0;
   box-sizing: border-box;
   min-width: 0;
   min-height: 72rpx;
@@ -420,7 +422,7 @@ function inputEventValue(event: unknown) {
 .questionnaire-runner__slider-tick--selected {
   color: #c76b5b;
   font-weight: 900;
-  transform: translate(-50%, -2rpx);
+  transform: translateY(-2rpx);
 }
 
 .questionnaire-runner__slider-tick-mark {
@@ -430,9 +432,18 @@ function inputEventValue(event: unknown) {
   background: currentColor;
 }
 
+/* Each tick is centered in one equal-width cell. Inset the native track by
+   half a cell so its endpoints share the first and last tick centers. */
+.questionnaire-runner__slider-track {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
 .questionnaire-runner__slider {
-  width: calc(100% - 56rpx);
-  margin: 0 28rpx;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .questionnaire-runner__slider-labels {
