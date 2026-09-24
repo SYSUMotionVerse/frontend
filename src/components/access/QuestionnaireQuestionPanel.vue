@@ -452,12 +452,12 @@ function inputEventValue(event: unknown) {
 .questionnaire-runner__slider-track {
   width: 100%;
   box-sizing: border-box;
-  margin: 0;
+  margin: -18rpx 0 0;
 }
 
 .questionnaire-runner__slider-control {
   position: relative;
-  height: 44px;
+  height: 32px;
 }
 
 .questionnaire-runner__slider-rail {
@@ -495,7 +495,7 @@ function inputEventValue(event: unknown) {
   top: 0;
   left: 0;
   width: 100%;
-  height: 44px;
+  height: 32px;
   margin: 0;
   padding: 0;
   opacity: 0;
