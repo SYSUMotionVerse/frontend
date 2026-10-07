@@ -1,0 +1,3 @@
+# pnpm locks patch bytes by SHA-256; keep them identical on Windows and CI.
+# Unified diff context lines contain a required single space on empty lines.
+patches/*.patch text eol=lf -whitespace

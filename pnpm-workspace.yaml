@@ -19,6 +19,11 @@ overrides:
   nanoid: 3.3.18
   # Patched ZIP size validation (GHSA-7q85-xj36-vmfc).
   adm-zip: 0.6.1
+  # GHSA-68fv-2mgg-jv7q: validate indexed source-map section offsets.
+  source-map-js: 1.2.2
+  # GHSA-g2v6-rqmx-r4w6: keep every renderer on the fixed release, including
+  # the older exact version pulled in by DCloud's build tooling.
+  '@vue/server-renderer': 3.5.43
 
 # Audit ignore list — see "依赖审计例外" in docs/mini-program-production-release.md
 # for full justification, expiry conditions, and invalidation triggers.
@@ -29,13 +34,15 @@ overrides:
 # GHSA list, remove fixed advisories, and re-evaluate remaining ones.
 #
 # Each GHSA below is a high-severity advisory in a DCloud/uni-app build-time
-# dependency (not runtime mini-program code).  They cannot be overridden
-# without breaking compiler internals.  `pnpm audit:production` still fails
+# dependency (not runtime mini-program code). The unpatched exceptions cannot
+# be overridden without breaking compiler internals. The braces exception is
+# conditional on the installed local patch and regression tests below.
+# `pnpm audit:production` still fails
 # CI for any NEW high or critical advisory not listed here.
 #
 # Build-only verification: a generated-bundle search of
 # dist/build/mp-weixin/ confirms none of jpeg-js, jimp, @intlify/*,
-# picomatch, adm-zip, or the ws npm package appear in the runtime code.
+# picomatch, adm-zip, braces, or the ws npm package appear in the runtime code.
 #
 # Review checklist (mandatory on every @dcloudio/* upgrade AND by the review-by date):
 #   1. Run `pnpm audit --prod` without this file and diff the GHSA list.
@@ -57,3 +64,13 @@ auditConfig:
     # GHSA-96hv-2xvq-fx4p — ws memory exhaustion DoS (high)
     # Path: @dcloudio/uni-mp-weixin → ws  (build-time dev server, not in runtime bundle)
     - GHSA-96hv-2xvq-fx4p
+    # GHSA-vfj7-8cjw-p6xm — braces recursive walker stack exhaustion (high).
+    # No fixed npm version exists as of 2026-10-07. patchedDependencies below
+    # enforces a 100-container parse limit and guards direct AST walkers.
+    # pnpm audit cannot recognize local fixes; buildDependencySecurity.spec.ts
+    # exercises the installed transitive package and fails if the patch is lost.
+    # Remove this exception and patch when an upstream fixed release is adopted.
+    - GHSA-vfj7-8cjw-p6xm
+
+patchedDependencies:
+  braces@3.0.3: patches/braces@3.0.3.patch

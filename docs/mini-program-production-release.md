@@ -125,6 +125,25 @@ critical 漏洞失败。
 [GHSA-7q85-xj36-vmfc](https://github.com/advisories/GHSA-7q85-xj36-vmfc)，
 同时移除已不再命中的 `GHSA-xcpc-8h2w-3j85` 豁免。
 
+2026-10-07 将 `source-map-js` 统一固定为 `1.2.2`，将 Vue 升级至 `3.5.43`，
+并把 DCloud 工具链传递引入的 `@vue/server-renderer` 统一覆盖为 `3.5.43`，
+分别修复 [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)
+和 [GHSA-g2v6-rqmx-r4w6](https://github.com/vuejs/core/security/advisories/GHSA-g2v6-rqmx-r4w6)。
+
+同日对 [GHSA-vfj7-8cjw-p6xm](https://github.com/micromatch/braces/issues/70)
+应用 [`patches/braces@3.0.3.patch`](../patches/braces@3.0.3.patch)：解析器最多接受
+100 层花括号/圆括号容器，编译、展开和字符串化遍历也有深度保护，防止直接传入
+AST 绕过解析器的限制。超过限制时抛出明确的 `SyntaxError`，正常 glob、范围、
+引用及转义保持可用。pnpm 的 `patchedDependencies` 和锁文件补丁哈希确保 CI
+安装同一份补丁，禁止直接修改 `node_modules`。
+
+截至该日 `braces` 尚无上游修复发布版，pnpm 审计按包版本识别漏洞，无法识别本地
+补丁，因此仅对这一 GHSA 添加条件例外。CI 在审计前运行
+[`buildDependencySecurity.spec.ts`](../src/tests/buildDependencySecurity.spec.ts)，
+它从 DCloud 的实际依赖路径加载安装后的包，验证 3500 层恶意模式、直接 AST、
+100 层边界及常规模式；补丁丢失会导致测试失败。同时验证渲染器过滤带回车的属性名、
+source-map 拒绝过大或非法偏移。采用上游修复版后须删除此补丁及对应例外。
+
 **复查截止日：2026-10-18。** 无论是否升级了 `@dcloudio/*`，到该日期必须重新运行不带例外的 `pnpm audit --prod`，删除已修复的 GHSA，并复审剩余项。升级 `@dcloudio/*` 时也必须执行同样的复审。若这些依赖开始处理不可信的构建输入、开放开发服务器到公网，或进入小程序运行时代码，则现有例外立即失效，必须在发布前解决。
 
 当前受控的 high 级 GHSA 清单：
@@ -135,8 +154,9 @@ critical 漏洞失败。
 | GHSA-p2ph-7g93-hw3m | @intlify/core-base, @intlify/message-resolver | 原型污染 | @dcloudio/uni-app → uni-cli-shared → @intlify/* |
 | GHSA-c2c7-rcm5-vvqj | picomatch | ReDoS | @dcloudio/uni-app → uni-cli-shared → @rollup/pluginutils / anymatch |
 | GHSA-96hv-2xvq-fx4p | ws | 内存耗尽 DoS | @dcloudio/uni-mp-weixin → ws |
+| GHSA-vfj7-8cjw-p6xm | braces（已应用本地补丁） | 递归堆栈耗尽 | @dcloudio/uni-cli-shared → fast-glob → micromatch / chokidar → braces |
 
-以上漏洞仅影响构建时依赖。通过对 `dist/build/mp-weixin/` 生成包的搜索确认，`jpeg-js`、`jimp`、`@intlify/*`、`picomatch`、`adm-zip` 以及 `ws` npm 包均未出现在运行时代码中（`vendor.js` 中的 `WebSocket` 引用来自微信小程序原生 API，不是 `ws` 包）。升级 `@dcloudio/*` 后如果某个 GHSA 不再被报告，应立即从 `pnpm-workspace.yaml` 中删除。
+以上漏洞仅影响构建时依赖。通过对 `dist/build/mp-weixin/` 生成包的搜索确认，`jpeg-js`、`jimp`、`@intlify/*`、`picomatch`、`adm-zip`、`braces` 以及 `ws` npm 包均未出现在运行时代码中（`vendor.js` 中的 `WebSocket` 引用来自微信小程序原生 API，不是 `ws` 包）。升级 `@dcloudio/*` 后如果某个 GHSA 不再被报告，应立即从 `pnpm-workspace.yaml` 中删除。
 
 ## 5. 上线验收
 
