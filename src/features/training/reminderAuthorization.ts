@@ -28,7 +28,7 @@ export const REMINDER_AUTHORIZATION_PRESENTATION = {
   },
   rejected: {
     homeTitle: '未开启微信提醒',
-    homeDetail: '你仍可正常训练，需要时可主动再次授权。',
+    homeDetail: '你仍可正常训练，需要时可主动再次授权。若之前保存过拒绝，需先在微信设置中调整。',
     consentMessage: '',
     canRetryAuthorization: true
   },
