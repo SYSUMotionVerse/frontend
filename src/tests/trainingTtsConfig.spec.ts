@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ExerciseArrangementItem } from '../uni-app/api/studentBackendTypes'
+import { createTrainingTtsPlayer } from '../uni-app/platform/trainingTts'
 import {
   resolveTrainingCountdownAudioUrls,
   resolveTrainingCountdownTtsCues,
@@ -69,6 +70,78 @@ const item: ExerciseArrangementItem = {
 }
 
 describe('trainingTtsConfig', () => {
+  it.each([
+    ['FULL', 'PRETRAINING', 'pretraining'],
+    ['FIRST_FRAME', 'PRETRAINING', 'pretraining'],
+    ['FULL', 'FORMAL', 'formal-training'],
+    ['FIRST_FRAME', 'FORMAL', 'formal-training'],
+    ['NONE', 'FORMAL', 'formal-training']
+  ] as const)('preloads and plays a zero-second cue at %s / %s module entry', async (mode, phase, slot) => {
+    vi.useFakeTimers()
+    const audio = {
+      src: '',
+      autoplay: false,
+      play: vi.fn(),
+      stop: vi.fn(),
+      destroy: vi.fn(),
+      onEnded: vi.fn(),
+      onError: vi.fn()
+    }
+    const player = createTrainingTtsPlayer(() => audio, {
+      downloadFile(options) {
+        options.success?.({ tempFilePath: '/tmp/zero-second.mp3', statusCode: 200 })
+      }
+    })
+    try {
+      const cueUrl = 'https://cdn.example.com/zero-second.mp3'
+      const zeroSecondItem: ExerciseArrangementItem = {
+        ...item,
+        pretraining_mode: mode,
+        formal_countdown_duration: 0,
+        training_tts_cues: [{
+          id: 20,
+          phase,
+          timing: 'AFTER_OFFSET',
+          offset_seconds: 0,
+          text: '模块开始提示',
+          audio_url: cueUrl,
+          order: 0
+        }]
+      }
+      const plan = buildTrainingAudioPlan({
+        id: 1,
+        title: '今日训练',
+        exercise_type: 'HIIT',
+        item_count: 1,
+        total_duration: 60,
+        is_active: true,
+        order: 1,
+        configuration_fingerprint: 'zero-second-test',
+        items: [zeroSecondItem]
+      })
+
+      expect(plan.speechAudioUrls).toContain(cueUrl)
+      expect(resolveArrangementTtsAudioUrls([zeroSecondItem])).toContain(cueUrl)
+      const cues = plan.phases.find(entry => entry.slot === slot)?.cues ?? []
+      expect(cues).toEqual([{ time: 0, text: '模块开始提示', audio_url: cueUrl }])
+
+      await player.preload(plan.speechAudioUrls)
+      player.schedule(cues)
+
+      // The same plan feeds preload and module-entry playback. No one-second
+      // workaround or first timer tick should be needed to start this cue.
+      expect(audio.src).toBe('/tmp/zero-second.mp3')
+      expect(audio.play).toHaveBeenCalledOnce()
+      audio.onEnded.mock.calls[0][0]()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(audio.play).toHaveBeenCalledOnce()
+      await player.waitForIdle()
+    } finally {
+      player.reset()
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps action guidance in the pretraining demonstration timeline', () => {
     const cues = resolveTrainingPhaseTtsCues(item, 'PRETRAINING', {
       phaseDurationSeconds: 30

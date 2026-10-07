@@ -29,6 +29,10 @@ function resolveCueTime(cue: TrainingTtsCue, timing: TrainingTtsPhaseTiming) {
     case 'START':
       return 0
     case 'AFTER_OFFSET':
+      // The backend also permits 0s as an explicit module-start cue. Keep it
+      // in both the preload plan and playback timeline instead of dropping it
+      // when applying the one-based convention to positive action seconds.
+      if (offset === 0) return duration > 0 ? 0 : null
       // Configured action seconds are one-based. A cue configured for second
       // 17 fires at elapsed 16s, exactly when the visible clock becomes 00:17.
       return offset >= 1 && offset <= duration ? offset - 1 : null
