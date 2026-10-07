@@ -10,7 +10,9 @@ const controls = vi.hoisted(() => ({
   navigateTo: vi.fn(),
   progressState: { value: { status: 'loading' } as Record<string, unknown> },
   refreshNotifications: vi.fn(),
-  refreshProgress: vi.fn()
+  refreshProgress: vi.fn(),
+  topUpQuota: vi.fn(),
+  openNotifications: vi.fn()
 }))
 
 vi.mock('@dcloudio/uni-app', () => ({
@@ -38,7 +40,7 @@ vi.mock('../uni-app/composables/useStationNotifications', () => ({
   useStationNotifications: () => ({
     unreadCount: { value: 0 },
     refresh: controls.refreshNotifications,
-    openList: vi.fn()
+    openList: controls.openNotifications
   })
 }))
 
@@ -49,7 +51,7 @@ vi.mock('../uni-app/composables/useReminderConsent', () => ({
     isWorking: { value: false },
     loadStatus: vi.fn(),
     authorize: vi.fn(),
-    topUpQuota: vi.fn()
+    topUpQuota: controls.topUpQuota
   })
 }))
 
@@ -119,6 +121,8 @@ describe('training home next action', () => {
     controls.navigateTo.mockReset()
     controls.refreshNotifications.mockReset()
     controls.refreshProgress.mockReset()
+    controls.topUpQuota.mockReset().mockResolvedValue(undefined)
+    controls.openNotifications.mockReset()
     vi.stubGlobal('uni', { navigateTo: controls.navigateTo })
   })
 
@@ -176,6 +180,88 @@ describe('training home next action', () => {
 
     expect(wrapper.find('.home-next-action__button').exists()).toBe(false)
     expect(wrapper.text()).toContain('今日训练已完成')
+  })
+
+  it('tops up on every training-mode click without waiting for quota sync', async () => {
+    setProgress({ wushu: false, hiit: false, stair: false })
+    controls.topUpQuota.mockImplementation(() => new Promise<void>(() => {}))
+    const SelectPage = (await import('../uni-app/pages/training/select.vue')).default
+    const wrapper = mount(SelectPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+
+    const actions = wrapper.findAll('.select-page__launch-action')
+    for (const action of actions) {
+      await action.trigger('click')
+      await flushPromises()
+    }
+    await actions[0].trigger('click')
+    await flushPromises()
+
+    expect(controls.topUpQuota).toHaveBeenCalledTimes(4)
+    expect(controls.navigateTo).toHaveBeenCalledTimes(4)
+    expect(controls.navigateTo).toHaveBeenCalledWith({
+      url: '/pages/training/exercise-sets?modality=wushu'
+    })
+    expect(controls.navigateTo).toHaveBeenCalledWith({
+      url: '/pages/training/exercise-sets?modality=hiit'
+    })
+    expect(controls.navigateTo).toHaveBeenCalledWith({
+      url: expect.stringContaining('/pages/training/short-questionnaire?sessionId=stairs-')
+    })
+  })
+
+  it.each(['home', 'select'])('tops up when opening notifications from %s', async page => {
+    setProgress({ wushu: false, hiit: false, stair: false })
+    controls.topUpQuota.mockImplementation(() => new Promise<void>(() => {}))
+    const Page = page === 'home'
+      ? (await import('../uni-app/pages/training/home.vue')).default
+      : (await import('../uni-app/pages/training/select.vue')).default
+    const wrapper = mount(Page, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: {
+            template: '<button class="open-notifications" @click="$emit(\'openNotifications\')">通知</button>'
+          },
+          TrainingHomeProgressOverview: true,
+          TrainingHomeCoachCard: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+
+    await wrapper.get('.open-notifications').trigger('click')
+
+    expect(controls.topUpQuota).toHaveBeenCalledTimes(1)
+    expect(controls.openNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not top up when training access is denied', async () => {
+    setProgress({ wushu: false, hiit: false, stair: false })
+    controls.ensureProtectedStudentAccess.mockResolvedValue(false)
+    const SelectPage = (await import('../uni-app/pages/training/select.vue')).default
+    const wrapper = mount(SelectPage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+
+    await wrapper.get('.select-page__launch-action').trigger('click')
+    await flushPromises()
+
+    expect(controls.topUpQuota).not.toHaveBeenCalled()
+    expect(controls.navigateTo).not.toHaveBeenCalled()
   })
 
   it('uses the coach quote milk-white surface for every home card', () => {

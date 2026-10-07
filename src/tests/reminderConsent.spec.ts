@@ -272,6 +272,71 @@ describe('reminder consent composable', () => {
     expect(consent.syncState.value).not.toBe('failed')
   })
 
+  it('reports a new grant on each completed top-up without waiting for consumption', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const grants = [
+      { template_id: 'noon-tpl', status: 'accept' as const },
+      { template_id: 'evening-tpl', status: 'accept' as const }
+    ]
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'accepted', grants })
+    const reportGrants = vi.fn().mockResolvedValue(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants
+    })
+
+    await consent.topUpQuota()
+    await consent.topUpQuota()
+    await consent.topUpQuota()
+
+    expect(requestAuthorization).toHaveBeenCalledTimes(3)
+    expect(reportGrants).toHaveBeenCalledTimes(3)
+    expect(reportGrants).toHaveBeenLastCalledWith(grants)
+  })
+
+  it('coalesces overlapping top-ups and allows the next click after completion', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    let finishRequest!: (result: { status: 'accepted'; grants: [] }) => void
+    const requestAuthorization = vi.fn().mockImplementation(() => new Promise(resolve => {
+      finishRequest = resolve
+    }))
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants: vi.fn()
+    })
+
+    const first = consent.topUpQuota()
+    await consent.topUpQuota()
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
+    finishRequest({ status: 'accepted', grants: [] })
+    await first
+
+    const next = consent.topUpQuota()
+    expect(requestAuthorization).toHaveBeenCalledTimes(2)
+    finishRequest({ status: 'accepted', grants: [] })
+    await next
+  })
+
+  it('contains platform exceptions and lets a subsequent button try again', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const requestAuthorization = vi.fn()
+      .mockRejectedValueOnce(new Error('platform failure'))
+      .mockResolvedValueOnce({ status: 'accepted', grants: [] })
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants: vi.fn()
+    })
+
+    await expect(consent.topUpQuota()).resolves.toBeUndefined()
+    await consent.topUpQuota()
+
+    expect(requestAuthorization).toHaveBeenCalledTimes(2)
+    expect(consent.status.value).toBe('accepted')
+  })
+
   it('does not attempt a silent top-up when WeChat reported a persistent rejection', async () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const requestAuthorization = vi.fn()

@@ -7,6 +7,7 @@ const navigateTo = vi.fn()
 const switchTab = vi.fn()
 const reLaunch = vi.fn()
 const reportBackendSyncError = vi.fn()
+const topUpQuota = vi.fn()
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
@@ -48,7 +49,8 @@ vi.mock('../uni-app/composables/useReminderConsent', () => ({
     syncState: { value: 'idle' },
     isWorking: { value: false },
     loadStatus: vi.fn(),
-    authorize: vi.fn()
+    authorize: vi.fn(),
+    topUpQuota
   })
 }))
 
@@ -74,6 +76,7 @@ describe('station notifications', () => {
     switchTab.mockReset()
     reLaunch.mockReset()
     reportBackendSyncError.mockReset()
+    topUpQuota.mockReset().mockResolvedValue(undefined)
     ;(globalThis as { uni?: unknown }).uni = { navigateTo, reLaunch, switchTab }
   })
 
@@ -292,5 +295,6 @@ describe('station notifications', () => {
     expect(wrapper.get('.home-header__bell-badge').text()).toBe('1')
     await wrapper.get('.home-header__bell-shell').trigger('click')
     expect(navigateTo).toHaveBeenCalledWith({ url: '/pages/notifications/index' })
+    expect(topUpQuota).toHaveBeenCalledTimes(1)
   })
 })

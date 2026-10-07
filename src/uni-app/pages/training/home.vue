@@ -266,6 +266,11 @@ async function startNextTraining() {
   })
 }
 
+function handleOpenNotifications() {
+  void reminderConsent.topUpQuota()
+  stationNotifications.openList()
+}
+
 function authorizeTrainingReminders() {
   void reminderConsent.authorize()
 }
@@ -289,7 +294,7 @@ function authorizeTrainingReminders() {
         mini-tag="新的一天，加油开始吧！"
         mini-tag-tone="muted"
         variant="home"
-        @open-notifications="stationNotifications.openList"
+        @open-notifications="handleOpenNotifications"
       />
 
       <QuestionnaireUnlockBanner

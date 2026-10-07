@@ -90,7 +90,7 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
    * The function never throws and never blocks the calling interaction.
    */
   async function topUpQuota() {
-    if (topUpInFlight.value) return
+    if (topUpInFlight.value || isWorking.value) return
     if (status.value === 'banned' || status.value === 'unconfigured' || status.value === 'unsupported') {
       return
     }
@@ -109,6 +109,8 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
         status.value = result.status
       }
       await syncGrants(result.grants)
+    } catch {
+      // A platform failure must not reject a detached button action.
     } finally {
       topUpInFlight.value = false
     }

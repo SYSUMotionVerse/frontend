@@ -8,6 +8,7 @@ import type { TrainingModality } from '../../../domain/student/types'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useStationNotifications } from '../../composables/useStationNotifications'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
 import { createTrainingSessionId } from '../../platform/trainingSessionId'
@@ -84,6 +85,7 @@ const trainingModes: TrainingModeSummary[] = [
 const store = useStudentStore()
 const trainingProgress = useTrainingProgress()
 const stationNotifications = useStationNotifications()
+const reminderConsent = useReminderConsent()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
 const isRefreshing = ref(false)
@@ -177,6 +179,10 @@ async function chooseMode(modality: TrainingModality) {
   const canExecute = await ensureProtectedStudentAccess('execute')
   if (!canExecute) return
 
+  // Request another credit per accepted template without awaiting the result
+  // before opening the selected training.
+  void reminderConsent.topUpQuota()
+
   if (modality === 'stair') {
     const sessionId = createTrainingSessionId('stairs')
     const trainingUrl = `/pages/training/stair-session?sessionId=${encodeURIComponent(sessionId)}`
@@ -189,6 +195,11 @@ async function chooseMode(modality: TrainingModality) {
   void uni.navigateTo({
     url: `/pages/training/exercise-sets?modality=${modality}`
   })
+}
+
+function handleOpenNotifications() {
+  void reminderConsent.topUpQuota()
+  stationNotifications.openList()
 }
 </script>
 
@@ -210,7 +221,7 @@ async function chooseMode(modality: TrainingModality) {
         mini-tag="选择今天要完成的训练"
         mini-tag-tone="muted"
         variant="home"
-        @open-notifications="stationNotifications.openList"
+        @open-notifications="handleOpenNotifications"
       />
 
       <QuestionnaireUnlockBanner
