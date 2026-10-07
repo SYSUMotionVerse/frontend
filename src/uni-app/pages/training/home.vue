@@ -207,10 +207,9 @@ onShow(async () => {
       sections: ['history', 'adherence', 'physicalMetrics', 'awards']
     })
   }
-  if (!hasLoadedReminderStatus.value) {
-    await reminderConsent.loadStatus()
-    hasLoadedReminderStatus.value = true
-  }
+  // A warm tab may still hold template IDs from before a server config change.
+  await reminderConsent.loadStatus()
+  hasLoadedReminderStatus.value = true
 })
 
 onHide(() => {

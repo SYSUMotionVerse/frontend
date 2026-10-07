@@ -165,6 +165,28 @@ describe('training home reminder return orchestration', () => {
     expect(setReminderSource).not.toHaveBeenCalled()
   })
 
+  it('reloads reminder templates on every foreground entry without opening authorization', async () => {
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    const wrapper = mount(HomePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          TrainingHomeProgressOverview: true,
+          TrainingHomeCoachCard: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+
+    await showPage?.()
+    await showPage?.()
+
+    expect(loadReminderStatus).toHaveBeenCalledTimes(2)
+    expect(authorizeReminders).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('keeps the reminder card hidden after authorization is detected', async () => {
     reminderStatus.value = 'accepted'
     const HomePage = (await import('../uni-app/pages/training/home.vue')).default
