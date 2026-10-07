@@ -1,17 +1,24 @@
 <script setup lang="ts">
+import { onShow } from '@dcloudio/uni-app'
 import ReminderConsentCard from '../../../components/access/ReminderConsentCard.vue'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useReminderConsent } from '../../composables/useReminderConsent'
 
 const consent = useReminderConsent()
 
+onShow(() => { void consent.loadStatus() })
+
 function enterTraining() {
   void uni.reLaunch({ url: '/pages/training/home' })
 }
 
 async function handleAuthorize() {
+  if (consent.needsSettings.value) {
+    await consent.openSettings()
+    return
+  }
   await consent.authorize()
-  if (consent.syncState.value !== 'failed') {
+  if (!consent.lastError.value && consent.syncState.value !== 'failed') {
     enterTraining()
   }
 }
@@ -43,6 +50,8 @@ async function handleRetryFailure() {
       :sync-state="consent.syncState.value"
       :failed-operation="consent.failedOperation.value"
       :is-working="consent.isWorking.value"
+      :needs-settings="consent.needsSettings?.value"
+      :error-message="consent.lastError?.value"
       @authorize="handleAuthorize"
       @skip="handleSkip"
       @retry-failure="handleRetryFailure"

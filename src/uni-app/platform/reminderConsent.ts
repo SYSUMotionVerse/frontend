@@ -31,6 +31,8 @@ export type ReminderGrant = {
 export type ReminderAuthorizationResult = {
   status: ReminderAuthorizationStatus
   grants: ReminderGrant[]
+  errorMessage?: string
+  settingsRequired?: boolean
 }
 
 type SubscribeMessageResult = Record<string, string>
@@ -38,7 +40,7 @@ type SubscribeMessageResult = Record<string, string>
 type RequestSubscribeMessage = (options: {
   tmplIds: string[]
   success: (result: SubscribeMessageResult) => void
-  fail: () => void
+  fail: (error: { errMsg?: string; errCode?: number }) => void
 }) => void
 
 type RequestReminderAuthorizationOptions = {
@@ -53,6 +55,37 @@ function resolveDefaultRequester(): RequestSubscribeMessage | undefined {
   }
 
   return options => wx.requestSubscribeMessage(options)
+}
+
+export function reminderSettingsRequireChange(templateIds: string[]): Promise<boolean> {
+  if (typeof wx === 'undefined' || typeof wx.getSetting !== 'function') {
+    return Promise.resolve(false)
+  }
+  return new Promise(resolve => {
+    wx.getSetting!({
+      withSubscriptions: true,
+      success(result) {
+        const subscriptions = result.subscriptionsSetting
+        resolve(subscriptions?.mainSwitch === false || templateIds.some(
+          id => subscriptions?.itemSettings?.[id] === 'reject'
+        ))
+      },
+      fail() { resolve(false) }
+    })
+  })
+}
+
+export function openReminderSettings(): Promise<void> {
+  if (typeof wx === 'undefined' || typeof wx.openSetting !== 'function') {
+    return Promise.reject(new Error('请在微信小程序右上角设置中管理订阅消息'))
+  }
+  return new Promise((resolve, reject) => {
+    wx.openSetting!({
+      withSubscriptions: true,
+      success() { resolve() },
+      fail() { reject(new Error('无法打开微信设置，请从小程序右上角进入设置')) }
+    })
+  })
 }
 
 function normalizeTemplateOutcome(value: unknown): ReminderTemplateOutcome {
@@ -101,8 +134,15 @@ export async function requestReminderAuthorization(
             : 'rejected'
         resolve({ status, grants })
       },
-      fail() {
-        resolve({ status: 'unsupported', grants: [] })
+      fail(error) {
+        resolve({
+          status: 'not_requested',
+          grants: [],
+          errorMessage: error.errCode === 20004
+            ? '微信订阅消息已关闭，请在微信设置中开启后再授权'
+            : error.errMsg || '微信未能打开订阅授权，请稍后重试',
+          settingsRequired: error.errCode === 20004
+        })
       }
     })
   })

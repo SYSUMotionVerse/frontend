@@ -137,7 +137,7 @@ describe('training home next action', () => {
     await wrapper.get('.home-next-action__button').trigger('click')
     await flushPromises()
 
-    expect(controls.ensureProtectedStudentAccess).toHaveBeenCalledWith('execute')
+    expect(controls.ensureProtectedStudentAccess).not.toHaveBeenCalled()
     expect(controls.navigateTo).toHaveBeenCalledWith({
       url: '/pages/training/exercise-sets?modality=hiit'
     })
@@ -245,6 +245,7 @@ describe('training home next action', () => {
 
   it('does not top up when training access is denied', async () => {
     setProgress({ wushu: false, hiit: false, stair: false })
+    controls.accessState.value.level = 'unknown'
     controls.ensureProtectedStudentAccess.mockResolvedValue(false)
     const SelectPage = (await import('../uni-app/pages/training/select.vue')).default
     const wrapper = mount(SelectPage, {

@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 
+vi.mock('@dcloudio/uni-app', () => ({ onShow: vi.fn() }))
+
 describe('WeChat reminder authorization adapter', () => {
   it.each([
     ['accept', 'accepted'],
@@ -132,7 +134,7 @@ describe('reminder consent composable', () => {
     expect(requestAuthorization).not.toHaveBeenCalled()
   })
 
-  it('loads fresh backend template configuration at authorization time', async () => {
+  it('prepares configuration before invoking WeChat directly on the tap', async () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const requestAuthorization = vi.fn().mockResolvedValue({ status: 'test_accepted', grants: [] })
     const loadAuthorizationConfig = vi.fn().mockResolvedValue({
@@ -146,7 +148,10 @@ describe('reminder consent composable', () => {
       loadAuthorizationConfig
     })
 
-    await consent.authorize()
+    await consent.prepare()
+    const authorization = consent.authorize()
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
+    await authorization
 
     expect(loadAuthorizationConfig).toHaveBeenCalledTimes(1)
     expect(requestAuthorization).toHaveBeenCalledWith({
@@ -194,6 +199,9 @@ describe('reminder consent composable', () => {
 
     await consent.authorize()
     await consent.retryFailedOperation()
+    expect(requestAuthorization).not.toHaveBeenCalled()
+    expect(consent.lastError.value).toContain('再次点击')
+    await consent.authorize()
 
     expect(loadAuthorizationConfig).toHaveBeenCalledTimes(2)
     expect(requestAuthorization).toHaveBeenCalledTimes(1)
@@ -218,6 +226,7 @@ describe('reminder consent composable', () => {
       loadAuthorizationConfig
     })
 
+    await consent.prepare()
     await consent.authorize()
     await consent.retryFailedOperation()
 
@@ -244,6 +253,7 @@ describe('reminder consent composable', () => {
       }),
     })
 
+    await consent.prepare()
     await consent.authorize()
 
     expect(reportGrants).toHaveBeenCalledWith(grants)
@@ -264,6 +274,7 @@ describe('reminder consent composable', () => {
       }),
     })
 
+    await consent.prepare()
     await consent.topUpQuota()
 
     expect(requestAuthorization).toHaveBeenCalledTimes(1)
@@ -424,7 +435,10 @@ describe('reminder consent page', () => {
         failedOperation: { value: null },
         isWorking: { value: false },
         authorize,
-        decline
+        decline,
+        loadStatus: vi.fn(),
+        needsSettings: { value: false },
+        lastError: { value: '' }
       })
     }))
 
@@ -482,7 +496,10 @@ describe('reminder consent page', () => {
         failedOperation,
         authorize,
         decline: vi.fn(),
-        retryFailedOperation
+        retryFailedOperation,
+        loadStatus: vi.fn(),
+        needsSettings: { value: false },
+        lastError: { value: '' }
       })
     }))
 
@@ -547,7 +564,10 @@ describe('reminder consent page', () => {
         isWorking: shallowRef(false),
         authorize,
         decline: vi.fn(),
-        retryFailedOperation
+        retryFailedOperation,
+        loadStatus: vi.fn(),
+        needsSettings: { value: false },
+        lastError: { value: '' }
       })
     }))
 

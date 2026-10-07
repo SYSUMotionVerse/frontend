@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 
-const props = defineProps<{ working: boolean }>()
+const props = defineProps<{ working: boolean; needsSettings?: boolean; errorMessage?: string }>()
 const emit = defineEmits<{ authorize: [] }>()
 </script>
 
@@ -12,7 +12,9 @@ const emit = defineEmits<{ authorize: [] }>()
     </view>
     <view class="reminder-card__copy">
       <text class="reminder-card__title">开启训练提醒</text>
-      <text class="reminder-card__detail">授权后可在训练时间收到微信提醒，不影响正常训练。</text>
+      <text class="reminder-card__detail">{{ props.needsSettings
+        ? '微信已记住拒绝或关闭了订阅消息，请先在设置中调整。'
+        : props.errorMessage || '授权后可在训练时间收到微信提醒，不影响正常训练。' }}</text>
     </view>
     <button
       class="reminder-card__action"
@@ -21,7 +23,7 @@ const emit = defineEmits<{ authorize: [] }>()
       :disabled="props.working"
       @click="emit('authorize')"
     >
-      {{ props.working ? '授权中' : '前往授权' }}
+      {{ props.working ? '授权中' : props.needsSettings ? '去微信设置' : '前往授权' }}
     </button>
   </view>
 </template>

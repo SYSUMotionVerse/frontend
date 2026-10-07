@@ -176,9 +176,9 @@ const nextActionAriaLabel = computed(() => {
 const showReminderAuthorizationCard = computed(() => (
   hasLoadedReminderStatus.value
   && reminderConsent.syncState.value !== 'failed'
-  && ['not_requested', 'rejected', 'banned', 'unsupported'].includes(
+  && (reminderConsent.needsSettings?.value || ['not_requested', 'rejected', 'banned', 'unsupported'].includes(
     reminderConsent.status.value
-  )
+  ))
 ))
 onLoad((query) => {
   const nextQuery = query ?? {}
@@ -242,8 +242,10 @@ async function startNextTraining() {
     return
   }
 
-  const canExecute = await ensureProtectedStudentAccess('execute')
-  if (!canExecute) return
+  if (accessState.value.level !== 'execute') {
+    const canExecute = await ensureProtectedStudentAccess('execute')
+    if (!canExecute) return
+  }
 
   // High-frequency entry point: silently top up one-time subscription
   // credits so the daily 12:00/18:00 reminders can be delivered once the
@@ -272,6 +274,10 @@ function handleOpenNotifications() {
 }
 
 function authorizeTrainingReminders() {
+  if (reminderConsent.needsSettings.value) {
+    void reminderConsent.openSettings()
+    return
+  }
   void reminderConsent.authorize()
 }
 </script>
@@ -345,6 +351,8 @@ function authorizeTrainingReminders() {
       <TrainingReminderAuthorizationCard
         v-if="showReminderAuthorizationCard"
         :working="reminderConsent.isWorking.value"
+        :needs-settings="reminderConsent.needsSettings?.value"
+        :error-message="reminderConsent.lastError?.value"
         @authorize="authorizeTrainingReminders"
       />
 

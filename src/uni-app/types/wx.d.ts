@@ -12,7 +12,17 @@ declare namespace WechatMiniprogram {
     requestSubscribeMessage(options: {
       tmplIds: string[];
       success?: (result: Record<string, string>) => void;
-      fail?: (error: unknown) => void;
+      fail?: (error: { errMsg?: string; errCode?: number }) => void;
+    }): void;
+    getSetting?(options: {
+      withSubscriptions: boolean;
+      success: (result: { subscriptionsSetting?: { mainSwitch?: boolean; itemSettings?: Record<string, string> } }) => void;
+      fail: () => void;
+    }): void;
+    openSetting?(options: {
+      withSubscriptions: boolean;
+      success: () => void;
+      fail: () => void;
     }): void;
     request(options: any): any;
     createCameraContext(component?: any): CameraContext;

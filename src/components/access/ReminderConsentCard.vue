@@ -12,6 +12,8 @@ const props = defineProps<{
   syncState: ReminderSyncState
   failedOperation: ReminderFailedOperation
   isWorking: boolean
+  needsSettings?: boolean
+  errorMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +25,8 @@ const emit = defineEmits<{
 
 const isSyncFailed = computed(() => props.syncState === 'failed')
 const statusMessage = computed(() => {
+  if (props.needsSettings) return '微信已保存拒绝或关闭了订阅消息，请在设置中调整后再授权。'
+  if (props.errorMessage) return props.errorMessage
   if (isSyncFailed.value) {
     return props.failedOperation === 'load_config'
       ? '暂时无法获取提醒配置，尚未调用微信授权；当前状态保持不变。'
@@ -64,7 +68,7 @@ const statusMessage = computed(() => {
         :disabled="props.isWorking"
         @click="emit('authorize')"
       >
-        {{ props.isWorking ? '正在请求...' : '开启微信训练提醒' }}
+        {{ props.isWorking ? '正在请求...' : props.needsSettings ? '去微信设置' : '开启微信训练提醒' }}
       </button>
       <button class="reminder-consent__secondary" @click="emit('skip')">
         暂不开启，进入训练

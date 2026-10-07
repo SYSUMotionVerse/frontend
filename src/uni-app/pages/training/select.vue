@@ -102,7 +102,8 @@ const {
 onShow(() => {
   void Promise.all([
     trainingProgress.refresh(),
-    stationNotifications.refresh()
+    stationNotifications.refresh(),
+    reminderConsent.loadStatus()
   ])
 })
 
@@ -176,8 +177,10 @@ async function chooseMode(modality: TrainingModality) {
     return
   }
 
-  const canExecute = await ensureProtectedStudentAccess('execute')
-  if (!canExecute) return
+  if (accessState.value.level !== 'execute') {
+    const canExecute = await ensureProtectedStudentAccess('execute')
+    if (!canExecute) return
+  }
 
   // Request another credit per accepted template without awaiting the result
   // before opening the selected training.

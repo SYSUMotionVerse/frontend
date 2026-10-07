@@ -8,6 +8,8 @@ const setReminderSource = vi.fn()
 const resolveReminderReturn = vi.fn(async () => { calls.push('resolve') })
 const authorizeReminders = vi.fn()
 const loadReminderStatus = vi.fn()
+const openReminderSettings = vi.fn()
+const needsReminderSettings = { value: false }
 const reminderStatus = { value: 'not_requested' }
 const reminderSyncState = { value: 'idle' }
 const bootstrapAccess = vi.fn()
@@ -59,7 +61,10 @@ vi.mock('../uni-app/composables/useReminderConsent', () => ({
     syncState: reminderSyncState,
     isWorking: { value: false },
     loadStatus: loadReminderStatus,
-    authorize: authorizeReminders
+    authorize: authorizeReminders,
+    needsSettings: needsReminderSettings,
+    lastError: { value: '' },
+    openSettings: openReminderSettings
   })
 }))
 
@@ -71,6 +76,8 @@ describe('training home reminder return orchestration', () => {
     resolveReminderReturn.mockReset().mockImplementation(async () => { calls.push('resolve') })
     authorizeReminders.mockReset()
     loadReminderStatus.mockReset()
+    openReminderSettings.mockReset()
+    needsReminderSettings.value = false
     reminderStatus.value = 'not_requested'
     reminderSyncState.value = 'idle'
     loadPage = undefined
@@ -178,6 +185,30 @@ describe('training home reminder return orchestration', () => {
     await flushPromises()
 
     expect(wrapper.find('.reminder-card').exists()).toBe(false)
+  })
+
+  it('shows settings recovery even if the backend still remembers acceptance', async () => {
+    reminderStatus.value = 'accepted'
+    needsReminderSettings.value = true
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    const wrapper = mount(HomePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          TrainingHomeProgressOverview: true,
+          TrainingHomeCoachCard: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+    await showPage?.()
+    await flushPromises()
+
+    expect(wrapper.get('.reminder-card__action').text()).toBe('去微信设置')
+    await wrapper.get('.reminder-card__action').trigger('click')
+    expect(openReminderSettings).toHaveBeenCalledTimes(1)
+    expect(authorizeReminders).not.toHaveBeenCalled()
   })
 
   it('waits for a shared return resolution and coalesces concurrent progress refreshes', async () => {
