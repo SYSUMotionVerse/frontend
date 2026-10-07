@@ -245,6 +245,13 @@ async function startNextTraining() {
   const canExecute = await ensureProtectedStudentAccess('execute')
   if (!canExecute) return
 
+  // High-frequency entry point: silently top up one-time subscription
+  // credits so the daily 12:00/18:00 reminders can be delivered once the
+  // configured templates have been accepted once. When the participant
+  // ticked “always keep my choice” in WeChat this call resolves without
+  // showing the dialog again.
+  void reminderConsent.topUpQuota()
+
   if (next.id === 'stair') {
     const sessionId = createTrainingSessionId('stairs')
     const trainingUrl = `/pages/training/stair-session?sessionId=${encodeURIComponent(sessionId)}`

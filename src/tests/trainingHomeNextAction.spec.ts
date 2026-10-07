@@ -48,7 +48,8 @@ vi.mock('../uni-app/composables/useReminderConsent', () => ({
     syncState: { value: 'idle' },
     isWorking: { value: false },
     loadStatus: vi.fn(),
-    authorize: vi.fn()
+    authorize: vi.fn(),
+    topUpQuota: vi.fn()
   })
 }))
 

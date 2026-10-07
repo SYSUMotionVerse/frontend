@@ -70,7 +70,8 @@
 - Represent 12:00 and 18:00 as explicit reminder slots. Persist one reminder delivery record per participant, local date, and slot, protected by a database unique constraint.
 - Create the station notification as part of the persisted reminder workflow. Track station creation and WeChat delivery as separate statuses.
 - Use a WeChat delivery interface with production and fake implementations. The production implementation owns access-token retrieval and caching, template payload validation, API calls, and provider error classification.
-- Use one configurable long-term subscription template for both slots. Keep the template ID and credentials in server-side environment configuration, never in frontend business code.
+- Use one configurable subscription template per reminder slot. Keep the template IDs and credentials in server-side environment configuration, never in frontend business code.
+- Use WeChat one-time subscription messages as the initial deliverable path: each accepted `wx.requestSubscribeMessage` call grants one send credit per template, credits accumulate across calls, and ticking “always keep my choice” makes subsequent calls resolve silently. The server is the authoritative credit ledger; it consumes one credit per successful send, refunds non-consumed credits, and treats provider code 43101 as the final exhaustion signal. The long-term subscription path remains a parallel upgrade if the education category is ever approved.
 - Treat absent template configuration, missing authorization, and exhausted subscription availability as explicit non-success outcomes.
 - Retry only transient provider or network failures, at most three times within a short configurable delivery window. Reuse the same delivery record and idempotency key for every attempt. Do not deliver after the slot window closes.
 - Trigger the reminder use case with a Django management command scheduled by Linux cron at 12:00 and 18:00. Do not introduce Celery, Redis, or Celery Beat in the first version.
@@ -81,7 +82,7 @@
 - Record reminder-driven return once the authenticated app resolves a valid tracking identifier. Return tracking does not itself mark a station message read unless the user views that message.
 - Extend the existing Django Admin for participant activation, subscription state, reminder decisions, delivery attempts, and return status. A separate administrator application is not part of this version.
 - Retain reminder audit data for the duration of the study. Do not add automated deletion until the study's retention policy is formally specified; exports and later deletion must follow the approved research data policy.
-- Document long-term subscription eligibility, template approval, configuration, and real-device acceptance as release blockers. Until they are complete, the feature may be described only as station reminders plus a tested WeChat integration seam.
+- Document subscription-message approval, template configuration, credit top-up entry points, and real-device acceptance as release blockers. Until they are complete, the feature may be described only as station reminders plus a tested WeChat integration seam. Silent top-up calls attach to high-frequency actions (e.g. starting a training session); participants who never open the app cannot accumulate credits and will receive station notifications only.
 - The frontend repository remains the issue-tracking home for this cross-repository initiative. Issues that require the separate backend repository must say so explicitly and remain end-to-end vertical slices rather than frontend-only placeholders.
 
 ## Testing Decisions
@@ -114,7 +115,6 @@
 
 ## Further Notes
 
-- The current AppID has not yet been granted long-term subscription message access. The project owner intends to enable it later; this must remain visible in project documentation and release checks.
-- Long-term subscription access is generally restricted to eligible public-service categories. The project must confirm the approved education category and available template fields in the WeChat public platform rather than assuming eligibility from the app's research purpose.
+- The current AppID serves a 体育 → 在线健身 category that does not qualify for long-term subscription messages. The delivery path therefore uses one-time subscription messages with server-side credit accounting. Long-term subscription remains a documented upgrade path should a qualifying category ever be approved.
 - The existing backend deployment documentation refers to a reminder-sending function that is absent from the code. Replace that example with the implemented management command during delivery.
 - The current frontend contains three untracked multipart RAR files unrelated to this initiative. They are not part of this PRD and must not be modified or committed as reminder work.

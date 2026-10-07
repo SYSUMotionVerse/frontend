@@ -35,12 +35,23 @@ import type {
 } from './studentBackendTypes'
 import type {
   ReminderAuthorizationConfig,
-  ReminderAuthorizationStatus
+  ReminderAuthorizationStatus,
+  ReminderGrant
 } from '../platform/reminderConsent'
 
-type BackendReminderAuthorization = ReminderAuthorizationConfig & {
+type BackendReminderAuthorization = Omit<ReminderAuthorizationConfig, 'template_ids'> & {
   status: ReminderAuthorizationStatus
   updated_at: string | null
+  /** Per-slot private template ids configured server-side. */
+  template_ids: string[]
+  /** Backwards-compat single template id returned by older backends. */
+  template_id: string
+}
+
+type BackendReminderSubscriptionReport = {
+  recorded: ReminderGrant[]
+  accepted_template_ids: string[]
+  status: ReminderAuthorizationStatus
 }
 
 type RequestMethod = NonNullable<UniApp.RequestOptions['method']> | 'PATCH'
@@ -232,6 +243,22 @@ function resolveResponseHeader(header: unknown, name: string) {
     ([key]) => key.toLowerCase() === name.toLowerCase()
   )?.[1]
   return typeof matched === 'string' ? matched.trim() : ''
+}
+
+function normalizeReminderAuthorization(
+  payload: BackendReminderAuthorization
+): BackendReminderAuthorization {
+  const templateIds = Array.isArray(payload.template_ids)
+    ? payload.template_ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    : []
+  if (templateIds.length === 0 && typeof payload.template_id === 'string' && payload.template_id.trim()) {
+    templateIds.push(payload.template_id.trim())
+  }
+  return {
+    ...payload,
+    template_ids: templateIds,
+    template_id: payload.template_id ?? templateIds[0] ?? '',
+  }
 }
 
 function unwrapCollectionResponse<T>(payload: unknown): T[] {
@@ -499,7 +526,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getReminderAuthorization() {
       return request<BackendReminderAuthorization>(
         '/notifications/reminders/authorization/'
-      )
+      ).then(normalizeReminderAuthorization)
     },
     updateReminderAuthorization(status: ReminderAuthorizationStatus) {
       return request<BackendReminderAuthorization>(
@@ -507,6 +534,15 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         {
           method: 'PATCH',
           data: { status }
+        }
+      ).then(normalizeReminderAuthorization)
+    },
+    reportReminderSubscriptions(grants: ReminderGrant[]) {
+      return request<BackendReminderSubscriptionReport>(
+        '/notifications/reminders/subscriptions/',
+        {
+          method: 'POST',
+          data: { grants }
         }
       )
     },

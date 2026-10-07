@@ -11,14 +11,42 @@ describe('WeChat reminder authorization adapter', () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
 
     const outcome = await requestReminderAuthorization({
-      templateId: 'template-1',
+      templateIds: ['template-1'],
       mode: 'production',
       requestSubscribeMessage: vi.fn(({ success }) => {
         success({ 'template-1': wechatValue })
       })
     })
 
-    expect(outcome).toBe(expected)
+    expect(outcome.status).toBe(expected)
+    expect(outcome.grants).toEqual([
+      { template_id: 'template-1', status: wechatValue === 'ban' ? 'ban' : wechatValue }
+    ])
+  })
+
+  it('requests every configured template and returns per-template grants', async () => {
+    const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
+    const requestSubscribeMessage = vi.fn(({ success }) => {
+      success({
+        'noon-tpl': 'accept',
+        'evening-tpl': 'reject',
+      })
+    })
+
+    const outcome = await requestReminderAuthorization({
+      templateIds: ['noon-tpl', 'evening-tpl'],
+      mode: 'production',
+      requestSubscribeMessage,
+    })
+
+    expect(requestSubscribeMessage).toHaveBeenCalledWith(expect.objectContaining({
+      tmplIds: ['noon-tpl', 'evening-tpl'],
+    }))
+    expect(outcome.status).toBe('accepted')
+    expect(outcome.grants).toEqual([
+      { template_id: 'noon-tpl', status: 'accept' },
+      { template_id: 'evening-tpl', status: 'reject' },
+    ])
   })
 
   it('returns unconfigured without calling WeChat when no template is configured', async () => {
@@ -26,34 +54,35 @@ describe('WeChat reminder authorization adapter', () => {
     const requestSubscribeMessage = vi.fn()
 
     const outcome = await requestReminderAuthorization({
-      templateId: '',
+      templateIds: [],
       mode: 'production',
       requestSubscribeMessage
     })
 
-    expect(outcome).toBe('unconfigured')
+    expect(outcome.status).toBe('unconfigured')
+    expect(outcome.grants).toEqual([])
     expect(requestSubscribeMessage).not.toHaveBeenCalled()
   })
 
   it('returns unsupported outside a platform that implements subscription messages', async () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
 
-    await expect(requestReminderAuthorization({ templateId: 'template-1', mode: 'production' }))
-      .resolves.toBe('unsupported')
+    await expect(requestReminderAuthorization({ templateIds: ['template-1'], mode: 'production' }))
+      .resolves.toEqual({ status: 'unsupported', grants: [] })
   })
 
   it('persists a truthful non-production outcome when a test build receives acceptance', async () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
 
     const outcome = await requestReminderAuthorization({
-      templateId: 'template-1',
+      templateIds: ['template-1'],
       mode: 'test',
       requestSubscribeMessage: vi.fn(({ success }) => {
         success({ 'template-1': 'accept' })
       })
     })
 
-    expect(outcome).toBe('test_accepted')
+    expect(outcome.status).toBe('test_accepted')
   })
 
 })
@@ -66,8 +95,9 @@ describe('reminder consent composable', () => {
       .mockResolvedValueOnce({ status: 'accepted', updated_at: '2026-07-16T12:00:00Z' })
 
     const consent = createReminderConsent({
-      requestAuthorization: vi.fn().mockResolvedValue('accepted'),
-      syncAuthorization
+      requestAuthorization: vi.fn().mockResolvedValue({ status: 'accepted', grants: [] }),
+      syncAuthorization,
+      reportGrants: vi.fn()
     })
 
     await consent.authorize()
@@ -91,6 +121,7 @@ describe('reminder consent composable', () => {
     const requestAuthorization = vi.fn()
     const consent = createReminderConsent({
       requestAuthorization,
+      reportGrants: vi.fn(),
       syncAuthorization: vi.fn(),
       loadAuthorization: vi.fn().mockResolvedValue({ status: 'rejected' })
     })
@@ -103,13 +134,14 @@ describe('reminder consent composable', () => {
 
   it('loads fresh backend template configuration at authorization time', async () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
-    const requestAuthorization = vi.fn().mockResolvedValue('test_accepted')
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'test_accepted', grants: [] })
     const loadAuthorizationConfig = vi.fn().mockResolvedValue({
-      template_id: 'server-template-id',
+      template_ids: ['server-template-id'],
       mode: 'test'
     })
     const consent = createReminderConsent({
       requestAuthorization,
+      reportGrants: vi.fn(),
       syncAuthorization: vi.fn(),
       loadAuthorizationConfig
     })
@@ -118,7 +150,7 @@ describe('reminder consent composable', () => {
 
     expect(loadAuthorizationConfig).toHaveBeenCalledTimes(1)
     expect(requestAuthorization).toHaveBeenCalledWith({
-      template_id: 'server-template-id',
+      template_ids: ['server-template-id'],
       mode: 'test'
     })
     expect(consent.status.value).toBe('test_accepted')
@@ -130,6 +162,7 @@ describe('reminder consent composable', () => {
     const requestAuthorization = vi.fn()
     const consent = createReminderConsent({
       requestAuthorization,
+      reportGrants: vi.fn(),
       syncAuthorization,
       loadAuthorization: vi.fn().mockResolvedValue({ status: 'accepted' }),
       loadAuthorizationConfig: vi.fn().mockRejectedValue(new Error('offline'))
@@ -149,11 +182,12 @@ describe('reminder consent composable', () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const loadAuthorizationConfig = vi.fn()
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ template_id: 'server-template-id', mode: 'test' })
-    const requestAuthorization = vi.fn().mockResolvedValue('test_accepted')
+      .mockResolvedValueOnce({ template_ids: ['server-template-id'], mode: 'test' })
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'test_accepted', grants: [] })
     const syncAuthorization = vi.fn().mockResolvedValue(undefined)
     const consent = createReminderConsent({
       requestAuthorization,
+      reportGrants: vi.fn(),
       syncAuthorization,
       loadAuthorizationConfig
     })
@@ -169,9 +203,9 @@ describe('reminder consent composable', () => {
 
   it('retries PATCH with the exact pending platform result without reopening WeChat', async () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
-    const requestAuthorization = vi.fn().mockResolvedValue('accepted')
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'accepted', grants: [] })
     const loadAuthorizationConfig = vi.fn().mockResolvedValue({
-      template_id: 'server-template-id',
+      template_ids: ['server-template-id'],
       mode: 'production'
     })
     const syncAuthorization = vi.fn()
@@ -179,6 +213,7 @@ describe('reminder consent composable', () => {
       .mockResolvedValueOnce(undefined)
     const consent = createReminderConsent({
       requestAuthorization,
+      reportGrants: vi.fn(),
       syncAuthorization,
       loadAuthorizationConfig
     })
@@ -190,6 +225,71 @@ describe('reminder consent composable', () => {
     expect(requestAuthorization).toHaveBeenCalledTimes(1)
     expect(syncAuthorization).toHaveBeenNthCalledWith(1, 'accepted')
     expect(syncAuthorization).toHaveBeenNthCalledWith(2, 'accepted')
+  })
+
+  it('reports per-template grants so the server can account send credits', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const grants = [
+      { template_id: 'noon-tpl', status: 'accept' as const },
+      { template_id: 'evening-tpl', status: 'reject' as const },
+    ]
+    const reportGrants = vi.fn().mockResolvedValue(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization: vi.fn().mockResolvedValue({ status: 'accepted', grants }),
+      syncAuthorization: vi.fn(),
+      reportGrants,
+      loadAuthorizationConfig: vi.fn().mockResolvedValue({
+        template_ids: ['noon-tpl', 'evening-tpl'],
+        mode: 'production',
+      }),
+    })
+
+    await consent.authorize()
+
+    expect(reportGrants).toHaveBeenCalledWith(grants)
+  })
+
+  it('silently tops up quota on a high-frequency action without blocking it', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const grants = [{ template_id: 'noon-tpl', status: 'accept' as const }]
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'accepted', grants })
+    const reportGrants = vi.fn().mockResolvedValue(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants,
+      loadAuthorizationConfig: vi.fn().mockResolvedValue({
+        template_ids: ['noon-tpl'],
+        mode: 'production',
+      }),
+    })
+
+    await consent.topUpQuota()
+
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
+    expect(reportGrants).toHaveBeenCalledWith(grants)
+    // topUpQuota does not push the result through the PATCH status channel.
+    expect(consent.syncState.value).not.toBe('failed')
+  })
+
+  it('does not attempt a silent top-up when WeChat reported a persistent rejection', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const requestAuthorization = vi.fn()
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants: vi.fn(),
+      loadAuthorization: vi.fn().mockResolvedValue({ status: 'banned' }),
+      loadAuthorizationConfig: vi.fn().mockResolvedValue({
+        template_ids: ['tpl'],
+        mode: 'production',
+      }),
+    })
+    await consent.loadStatus()
+
+    await consent.topUpQuota()
+
+    expect(requestAuthorization).not.toHaveBeenCalled()
   })
 })
 
@@ -224,7 +324,7 @@ describe('training-home reminder status', () => {
     })
 
     expect(wrapper.text()).toContain('测试授权已记录')
-    expect(wrapper.text()).toContain('不代表长期订阅消息已经获批或可正式送达')
+    expect(wrapper.text()).toContain('不代表订阅消息已经获批或可正式送达')
     expect(wrapper.find('.reminder-authorization-status__action').exists()).toBe(false)
   })
 

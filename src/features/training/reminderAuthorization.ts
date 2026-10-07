@@ -22,8 +22,8 @@ export const REMINDER_AUTHORIZATION_PRESENTATION = {
   },
   test_accepted: {
     homeTitle: '测试授权已记录',
-    homeDetail: '当前是测试或非生产配置，不代表长期订阅消息已经获批或可正式送达。',
-    consentMessage: '已记录测试授权，但长期订阅模板尚未完成生产验收。',
+    homeDetail: '当前是测试或非生产配置，不代表订阅消息已经获批或可正式送达。',
+    consentMessage: '已记录测试授权，但订阅消息尚未完成生产验收。',
     canRetryAuthorization: false
   },
   rejected: {
