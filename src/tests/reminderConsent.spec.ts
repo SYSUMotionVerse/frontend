@@ -51,6 +51,22 @@ describe('WeChat reminder authorization adapter', () => {
     ])
   })
 
+  it('requests a shared slot template once and returns only one grant', async () => {
+    const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
+    const requestSubscribeMessage = vi.fn(({ success }) => {
+      success({ 'shared-template': 'accept' })
+    })
+    const result = await requestReminderAuthorization({
+      templateIds: ['shared-template', ' shared-template ', ''],
+      mode: 'production',
+      requestSubscribeMessage
+    })
+    expect(requestSubscribeMessage).toHaveBeenCalledWith(expect.objectContaining({
+      tmplIds: ['shared-template']
+    }))
+    expect(result.grants).toEqual([{ template_id: 'shared-template', status: 'accept' }])
+  })
+
   it('returns unconfigured without calling WeChat when no template is configured', async () => {
     const { requestReminderAuthorization } = await import('../uni-app/platform/reminderConsent')
     const requestSubscribeMessage = vi.fn()

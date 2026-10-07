@@ -43,9 +43,10 @@ const statusMessage = computed(() => {
     </view>
     <text class="reminder-consent__title">训练提醒由你确认</text>
     <text class="reminder-consent__copy">
-      在每天 12:00 和 18:00，我们会根据今日训练进度发送提醒。消息只包含完成进度和待完成项目，不包含评分或健康数据。
+      我们会在 12:00 和 18:00 根据训练进度提醒你，每天最多两次；是否送达取决于授权额度。消息只包含完成进度和待完成项目，不包含评分或健康数据。
     </text>
     <view class="reminder-consent__facts">
+      <text class="reminder-consent__fact">微信中只有一项“打卡提醒”，每次允许可增加一次发送额度</text>
       <text class="reminder-consent__fact">授权由微信管理，你可以拒绝</text>
       <text class="reminder-consent__fact">无论是否授权，都能进入训练</text>
     </view>

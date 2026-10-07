@@ -14,7 +14,7 @@ const emit = defineEmits<{ authorize: [] }>()
       <text class="reminder-card__title">开启训练提醒</text>
       <text class="reminder-card__detail">{{ props.needsSettings
         ? '微信已记住拒绝或关闭了订阅消息，请先在设置中调整。'
-        : props.errorMessage || '授权后可在训练时间收到微信提醒，不影响正常训练。' }}</text>
+        : props.errorMessage || '微信中显示为“打卡提醒”，每次允许可增加一次提醒额度。' }}</text>
     </view>
     <button
       class="reminder-card__action"

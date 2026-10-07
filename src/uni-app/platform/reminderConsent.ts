@@ -16,8 +16,9 @@ export type ReminderTemplateOutcome = 'accept' | 'reject' | 'ban' | 'filter'
 export type ReminderAuthorizationConfig = {
   /**
    * Private template ids configured server-side, ordered by slot. A
-   * one-time subscription grants one send credit per accepted template, so
-   * requesting both configured slots' templates at once yields two credits.
+   * one-time subscription grants one send credit per accepted template.
+   * Both reminder slots normally share one template and one credit pool;
+   * one accepted request must not be counted twice because there are two slots.
    */
   template_ids: string[]
   mode: ReminderAuthorizationMode
@@ -107,7 +108,7 @@ function normalizeTemplateOutcome(value: unknown): ReminderTemplateOutcome {
 export async function requestReminderAuthorization(
   options: RequestReminderAuthorizationOptions
 ): Promise<ReminderAuthorizationResult> {
-  const templateIds = options.templateIds.filter(id => id.trim().length > 0)
+  const templateIds = [...new Set(options.templateIds.map(id => id.trim()).filter(Boolean))]
   if (templateIds.length === 0) {
     return { status: 'unconfigured', grants: [] }
   }
