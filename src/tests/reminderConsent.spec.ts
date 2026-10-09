@@ -177,6 +177,30 @@ describe('reminder consent composable', () => {
     expect(consent.status.value).toBe('test_accepted')
   })
 
+  it('downgrades a saved rejection when WeChat settings show the participant re-enabled it', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const loadAuthorization = vi.fn().mockResolvedValue({
+      status: 'rejected',
+      template_ids: ['tpl'],
+      mode: 'production'
+    })
+    const settingsRequireChange = vi.fn().mockResolvedValue(false)
+    const syncAuthorization = vi.fn().mockResolvedValue(undefined)
+    const consent = createReminderConsent({
+      requestAuthorization: vi.fn(),
+      syncAuthorization,
+      reportGrants: vi.fn(),
+      loadAuthorization,
+      loadAuthorizationConfig: vi.fn().mockResolvedValue({ template_ids: ['tpl'], mode: 'production' }),
+      settingsRequireChange
+    })
+
+    await consent.loadStatus()
+
+    expect(consent.status.value).toBe('not_requested')
+    expect(syncAuthorization).toHaveBeenCalledWith('not_requested')
+  })
+
   it('preserves an accepted status and does not PATCH when config GET fails', async () => {
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const syncAuthorization = vi.fn()
@@ -288,6 +312,7 @@ describe('reminder consent composable', () => {
         template_ids: ['noon-tpl'],
         mode: 'production',
       }),
+      confirmAuthorizationPrompt: () => Promise.resolve(true),
     })
 
     await consent.prepare()
@@ -310,7 +335,8 @@ describe('reminder consent composable', () => {
     const consent = createReminderConsent({
       requestAuthorization,
       syncAuthorization: vi.fn(),
-      reportGrants
+      reportGrants,
+      confirmAuthorizationPrompt: () => Promise.resolve(true),
     })
 
     await consent.topUpQuota()
@@ -331,7 +357,8 @@ describe('reminder consent composable', () => {
     const consent = createReminderConsent({
       requestAuthorization,
       syncAuthorization: vi.fn(),
-      reportGrants: vi.fn()
+      reportGrants: vi.fn(),
+      confirmAuthorizationPrompt: () => Promise.resolve(true),
     })
 
     const first = consent.topUpQuota()
@@ -354,7 +381,8 @@ describe('reminder consent composable', () => {
     const consent = createReminderConsent({
       requestAuthorization,
       syncAuthorization: vi.fn(),
-      reportGrants: vi.fn()
+      reportGrants: vi.fn(),
+      confirmAuthorizationPrompt: () => Promise.resolve(true),
     })
 
     await expect(consent.topUpQuota()).resolves.toBeUndefined()

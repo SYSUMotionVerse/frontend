@@ -22,6 +22,9 @@ type ReminderConsentDependencies = {
   loadAuthorizationConfig?: () => Promise<ReminderAuthorizationConfig>
   settingsRequireChange?: (templateIds: string[]) => Promise<boolean>
   openSettings?: () => Promise<void>
+  confirmAuthorizationPrompt?: () => Promise<boolean>
+  markAuthorizationPromptDismissed?: () => Promise<void>
+  wasAuthorizationPromptDismissed?: () => boolean
 }
 
 export function createReminderConsent(dependencies: ReminderConsentDependencies) {
@@ -33,7 +36,41 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
   const topUpInFlight = shallowRef(false)
   const lastError = shallowRef('')
   const needsSettings = shallowRef(false)
+  const promptDismissed = shallowRef(false)
   let authorizationConfig: ReminderAuthorizationConfig | undefined
+
+  function showAuthorizationConfirm(): Promise<boolean> {
+    if (dependencies.confirmAuthorizationPrompt) {
+      return dependencies.confirmAuthorizationPrompt()
+    }
+    return Promise.resolve(true)
+  }
+
+  async function maybePromptThenAuthorize(): Promise<boolean> {
+    // Returns true when the caller should proceed with the original action.
+    if (promptDismissed.value) return true
+    const confirmed = await showAuthorizationConfirm()
+    if (!confirmed) {
+      promptDismissed.value = true
+      if (dependencies.markAuthorizationPromptDismissed) {
+        void dependencies.markAuthorizationPromptDismissed()
+      }
+      return true
+    }
+    // Call requestAuthorization directly so topUpInFlight doesn't block.
+    const result = await dependencies.requestAuthorization(authorizationConfig)
+    if (result.errorMessage) {
+      lastError.value = result.errorMessage
+      needsSettings.value = result.settingsRequired ?? false
+      return false
+    }
+    status.value = result.status
+    pendingResult.value = result.status
+    await syncGrants(result.grants)
+    await syncPendingResult(result.status)
+    await refreshSettings()
+    return status.value !== 'not_requested'
+  }
 
   async function prepare() {
     if (!dependencies.loadAuthorizationConfig) return
@@ -149,6 +186,14 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
         await prepare()
         return
       }
+
+      // First-time users get a soft confirmation before the WeChat dialog.
+      if (status.value === 'not_requested') {
+        const proceed = await maybePromptThenAuthorize()
+        if (!proceed) return
+        return
+      }
+
       const result = await dependencies.requestAuthorization(authorizationConfig)
       if (result.errorMessage) {
         needsSettings.value = result.settingsRequired ?? false
@@ -197,6 +242,19 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
       status.value = persisted.status
       syncState.value = 'synced'
       await refreshSettings()
+
+      // When the participant re-enabled the template in WeChat settings the
+      // saved rejection is gone; downgrade a stale server-side reject so the
+      // authorization card reappears on the next foreground.
+      if (
+        (status.value === 'rejected' || status.value === 'banned')
+        && !needsSettings.value
+        && authorizationConfig
+      ) {
+        status.value = 'not_requested'
+        pendingResult.value = 'not_requested'
+        await syncPendingResult('not_requested')
+      }
     } catch {
       syncState.value = 'failed'
     }
@@ -211,6 +269,8 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
     canRetrySync,
     lastError: readonly(lastError),
     needsSettings: readonly(needsSettings),
+    promptDismissed: readonly(promptDismissed),
+    maybePromptThenAuthorize,
     openSettings,
     prepare,
     authorize,
@@ -231,6 +291,16 @@ export function useReminderConsent() {
     }),
     settingsRequireChange: reminderSettingsRequireChange,
     openSettings: openReminderSettings,
+    confirmAuthorizationPrompt: () => new Promise(resolve => {
+      uni.showModal({
+        title: '开启训练提醒',
+        content: '授权后可在训练时间收到微信提醒，不影响正常训练。',
+        confirmText: '去授权',
+        cancelText: '暂不',
+        success: ({ confirm }) => resolve(confirm),
+        fail: () => resolve(false)
+      })
+    }),
     async syncAuthorization(status) {
       await backend.ensureSession()
       await backend.updateReminderAuthorization(status)

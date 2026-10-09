@@ -182,9 +182,14 @@ async function chooseMode(modality: TrainingModality) {
     if (!canExecute) return
   }
 
-  // Request another credit per accepted template without awaiting the result
-  // before opening the selected training.
-  void reminderConsent.topUpQuota()
+  // Same soft-confirm gate as the home start button: first-time users see
+  // a dialog before WeChat asks for permission, accepted users top up silently.
+  if (reminderConsent.status.value === 'not_requested' && !reminderConsent.promptDismissed?.value) {
+    const proceed = await reminderConsent.maybePromptThenAuthorize()
+    if (!proceed) return
+  } else {
+    void reminderConsent.topUpQuota()
+  }
 
   if (modality === 'stair') {
     const sessionId = createTrainingSessionId('stairs')
@@ -200,8 +205,13 @@ async function chooseMode(modality: TrainingModality) {
   })
 }
 
-function handleOpenNotifications() {
-  void reminderConsent.topUpQuota()
+async function handleOpenNotifications() {
+  if (reminderConsent.status.value === 'not_requested' && !reminderConsent.promptDismissed?.value) {
+    const proceed = await reminderConsent.maybePromptThenAuthorize()
+    if (!proceed) return
+  } else {
+    void reminderConsent.topUpQuota()
+  }
   stationNotifications.openList()
 }
 </script>

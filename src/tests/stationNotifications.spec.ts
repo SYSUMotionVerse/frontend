@@ -8,6 +8,8 @@ const switchTab = vi.fn()
 const reLaunch = vi.fn()
 const reportBackendSyncError = vi.fn()
 const topUpQuota = vi.fn()
+const maybePromptThenAuthorize = vi.fn().mockResolvedValue(true)
+const promptDismissed = { value: false }
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: vi.fn(),
@@ -45,11 +47,13 @@ vi.mock('../uni-app/composables/useTrainingProgress', () => ({
 
 vi.mock('../uni-app/composables/useReminderConsent', () => ({
   useReminderConsent: () => ({
-    status: { value: 'not_requested' },
+    status: { value: 'accepted' },
     syncState: { value: 'idle' },
     isWorking: { value: false },
     loadStatus: vi.fn(),
     authorize: vi.fn(),
+    maybePromptThenAuthorize,
+    promptDismissed,
     topUpQuota
   })
 }))
@@ -77,6 +81,8 @@ describe('station notifications', () => {
     reLaunch.mockReset()
     reportBackendSyncError.mockReset()
     topUpQuota.mockReset().mockResolvedValue(undefined)
+    maybePromptThenAuthorize.mockReset().mockResolvedValue(true)
+    promptDismissed.value = false
     ;(globalThis as { uni?: unknown }).uni = { navigateTo, reLaunch, switchTab }
   })
 

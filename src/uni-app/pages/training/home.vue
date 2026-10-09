@@ -246,12 +246,15 @@ async function startNextTraining() {
     if (!canExecute) return
   }
 
-  // High-frequency entry point: silently top up one-time subscription
-  // credits so the daily 12:00/18:00 reminders can be delivered once the
-  // configured templates have been accepted once. When the participant
-  // ticked “always keep my choice” in WeChat this call resolves without
-  // showing the dialog again.
-  void reminderConsent.topUpQuota()
+  // High-frequency entry point: when the participant has never authorized,
+  // offer a soft confirmation first so the WeChat dialog isn't a surprise.
+  // Accepted users top up silently; declined users proceed without nagging.
+  if (reminderConsent.status.value === 'not_requested' && !reminderConsent.promptDismissed?.value) {
+    const proceed = await reminderConsent.maybePromptThenAuthorize()
+    if (!proceed) return
+  } else {
+    void reminderConsent.topUpQuota()
+  }
 
   if (next.id === 'stair') {
     const sessionId = createTrainingSessionId('stairs')
@@ -267,8 +270,13 @@ async function startNextTraining() {
   })
 }
 
-function handleOpenNotifications() {
-  void reminderConsent.topUpQuota()
+async function handleOpenNotifications() {
+  if (reminderConsent.status.value === 'not_requested' && !reminderConsent.promptDismissed?.value) {
+    const proceed = await reminderConsent.maybePromptThenAuthorize()
+    if (!proceed) return
+  } else {
+    void reminderConsent.topUpQuota()
+  }
   stationNotifications.openList()
 }
 

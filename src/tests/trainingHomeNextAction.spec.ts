@@ -44,13 +44,20 @@ vi.mock('../uni-app/composables/useStationNotifications', () => ({
   })
 }))
 
+const authorizeReminders = vi.fn()
+const maybePromptThenAuthorize = vi.fn()
+const promptDismissed = { value: false }
+const reminderStatus = { value: 'not_requested' }
+
 vi.mock('../uni-app/composables/useReminderConsent', () => ({
   useReminderConsent: () => ({
-    status: { value: 'not_requested' },
+    status: reminderStatus,
     syncState: { value: 'idle' },
     isWorking: { value: false },
+    promptDismissed,
     loadStatus: vi.fn(),
-    authorize: vi.fn(),
+    authorize: authorizeReminders,
+    maybePromptThenAuthorize,
     topUpQuota: controls.topUpQuota
   })
 }))
@@ -123,6 +130,10 @@ describe('training home next action', () => {
     controls.refreshProgress.mockReset()
     controls.topUpQuota.mockReset().mockResolvedValue(undefined)
     controls.openNotifications.mockReset()
+    authorizeReminders.mockReset().mockResolvedValue(undefined)
+    maybePromptThenAuthorize.mockReset().mockResolvedValue(true)
+    promptDismissed.value = false
+    reminderStatus.value = 'not_requested'
     vi.stubGlobal('uni', { navigateTo: controls.navigateTo })
   })
 
@@ -184,6 +195,7 @@ describe('training home next action', () => {
 
   it('tops up on every training-mode click without waiting for quota sync', async () => {
     setProgress({ wushu: false, hiit: false, stair: false })
+    reminderStatus.value = 'accepted'
     controls.topUpQuota.mockImplementation(() => new Promise<void>(() => {}))
     const SelectPage = (await import('../uni-app/pages/training/select.vue')).default
     const wrapper = mount(SelectPage, {
@@ -219,6 +231,7 @@ describe('training home next action', () => {
 
   it.each(['home', 'select'])('tops up when opening notifications from %s', async page => {
     setProgress({ wushu: false, hiit: false, stair: false })
+    reminderStatus.value = 'accepted'
     controls.topUpQuota.mockImplementation(() => new Promise<void>(() => {}))
     const Page = page === 'home'
       ? (await import('../uni-app/pages/training/home.vue')).default
@@ -263,6 +276,29 @@ describe('training home next action', () => {
 
     expect(controls.topUpQuota).not.toHaveBeenCalled()
     expect(controls.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('asks before opening WeChat authorization on the first training click', async () => {
+    setProgress({ wushu: false, hiit: false, stair: false })
+    reminderStatus.value = 'not_requested'
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    const wrapper = mount(HomePage, {
+      global: {
+        stubs: {
+          UniTrainingPageShell: { template: '<div><slot /></div>' },
+          TrainingHomeHeader: true,
+          TrainingHomeProgressOverview: true,
+          TrainingHomeCoachCard: true,
+          QuestionnaireUnlockBanner: true
+        }
+      }
+    })
+    await wrapper.get('.home-next-action__button').trigger('click')
+    await flushPromises()
+
+    expect(controls.topUpQuota).not.toHaveBeenCalled()
+    expect(maybePromptThenAuthorize).toHaveBeenCalledTimes(1)
+    expect(authorizeReminders).not.toHaveBeenCalled()
   })
 
   it('uses the coach quote milk-white surface for every home card', () => {
