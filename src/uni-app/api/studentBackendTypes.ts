@@ -371,6 +371,14 @@ export interface TrainingCountdownTtsCue {
   audio_url: string
 }
 
+/** Staff-uploaded looping background track; undefined when none is enabled. */
+export interface TrainingBackgroundMusic {
+  id: number
+  title: string
+  audio_url: string
+  volume: number
+}
+
 export interface ExerciseArrangementItem {
   id: number
   video_id: number
@@ -398,6 +406,8 @@ export interface ExerciseArrangementDetail extends ExerciseArrangementSummary {
   configuration_fingerprint: string
   /** Globally configured 3/2/1 audio shared by each module countdown. */
   countdown_tts_cues?: TrainingCountdownTtsCue[]
+  /** Staff-selected looping track; the client ducks it under every TTS cue. */
+  background_music?: TrainingBackgroundMusic | null
 }
 
 export interface ExerciseScoreDimension {

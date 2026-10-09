@@ -742,4 +742,64 @@ describe('trainingTts', () => {
     await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
     expect(runtime.loadArrayBuffer).toHaveBeenCalledTimes(2)
   })
+
+  it('reports speech activity so background music can duck under native cues', () => {
+    const context = createAudioContext()
+    const player = createTrainingTtsPlayer(() => context)
+    const duck = vi.fn()
+    player.setSpeechActivityListener(duck)
+
+    player.playUrl('https://cdn.example.com/cue.mp3')
+    expect(duck).toHaveBeenLastCalledWith(true)
+
+    context.onEnded.mock.calls[0][0]()
+    expect(duck).toHaveBeenLastCalledWith(false)
+  })
+
+  it('reports speech activity for web-audio cues including pause/resume', async () => {
+    const webContext = createWebContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+    const duck = vi.fn()
+    player.setSpeechActivityListener(duck)
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+    expect(duck).toHaveBeenLastCalledWith(true)
+
+    player.suspend()
+    expect(duck).toHaveBeenLastCalledWith(false)
+
+    webContext.currentTime = 104
+    player.resume()
+    await vi.waitFor(() => {
+      expect(webContext.createBufferSource.mock.results.length).toBe(2)
+    })
+    expect(duck).toHaveBeenLastCalledWith(true)
+
+    const source = webContext.createBufferSource.mock.results[1].value
+    source.onended()
+    expect(duck).toHaveBeenLastCalledWith(false)
+  })
+
+  it('restores music volume on reset while a cue is playing', async () => {
+    const webContext = createWebContext()
+    const player = createTrainingTtsPlayer(
+      vi.fn(createAudioContext),
+      null,
+      undefined,
+      createWebRuntime(webContext)
+    )
+    const duck = vi.fn()
+    player.setSpeechActivityListener(duck)
+
+    void player.playUrl('https://cdn.example.com/cue.mp3')
+    await vi.waitFor(() => expect(webContext.createBufferSource).toHaveBeenCalled())
+    player.reset()
+    expect(duck).toHaveBeenLastCalledWith(false)
+  })
 })

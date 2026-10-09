@@ -31,6 +31,7 @@ import {
   configureTrainingAudioOutput,
   createTrainingTtsPlayer
 } from '../../../uni-app/platform/trainingTts'
+import { createTrainingMusicPlayer } from '../../../uni-app/platform/trainingMusic'
 import {
   createDefaultTrainingWebAudioRuntime,
   createTrainingSoundscape,
@@ -355,6 +356,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     // clock's own suspension guard.
     sharedWebAudioRuntime
   )
+  // Looping staff-configured bed. It lives on its own InnerAudioContext so a
+  // multi-minute MP3 never competes with the decoded-cue budget; the TTS
+  // player ducks it while speech is on the output.
+  const trainingMusicPlayer = createTrainingMusicPlayer()
+  ttsPlayer.setSpeechActivityListener(active => trainingMusicPlayer.duck(active))
   // Downloads the two effect assets early; context-bound decoding waits for
   // the start gesture to create the shared context.
   void trainingSoundscape.preload()
@@ -839,6 +845,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     trainingAudioClock.suspend()
     ttsPlayer.suspend()
     trainingSoundscape.suspend()
+    trainingMusicPlayer.suspend()
     capture.value?.stopDetect?.()
   }
 
@@ -867,6 +874,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     capture.value?.startDetect?.()
     ttsPlayer.resume()
     trainingSoundscape.resume()
+    trainingMusicPlayer.resume()
     scheduleAudioClockRecovery()
     if (resumeVideoOnShow && trainingStarted.value && !videoEnded.value) {
       videoAutoplay.value = true
@@ -904,6 +912,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     trainingAudioClock.suspend()
     ttsPlayer.suspend()
     trainingSoundscape.suspend()
+    trainingMusicPlayer.suspend()
   }
 
   function resumeTrainingAudio() {
@@ -916,6 +925,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     trainingAudioClock.resume()
     ttsPlayer.resume()
     trainingSoundscape.resume()
+    trainingMusicPlayer.resume()
     scheduleAudioClockRecovery()
   }
 
@@ -1344,6 +1354,11 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
 
     trainingStarted.value = true
     startCountdown.value = 0
+    const backgroundMusic = requestedArrangement.background_music
+    if (backgroundMusic?.audio_url?.trim()) {
+      trainingMusicPlayer.configure(backgroundMusic.audio_url, backgroundMusic.volume)
+      trainingMusicPlayer.play()
+    }
     beginFirstAction()
   }
 
@@ -1428,6 +1443,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     phaseKind.value = 'preview'
     phaseSlot.value = 'preview'
     trainingSoundscape.stop()
+    trainingMusicPlayer.stop()
     countdownAudioPending.value = false
     phaseRemainingExactSeconds = initialPreviewDurationSeconds
     phaseRemainingSeconds.value = initialPreviewDurationSeconds
@@ -1983,6 +1999,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     clearStartCountdownTimer()
     ttsPlayer.reset()
     trainingSoundscape.stop()
+    trainingMusicPlayer.stop()
     capture.value?.stopDetect?.()
   }
 
@@ -2031,6 +2048,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     scoringWarnings.value = []
     ttsPlayer.reset()
     trainingSoundscape.stop()
+    trainingMusicPlayer.stop()
     clearStartCountdownTimer()
     void loadExerciseArrangement()
   }, { immediate: true })
@@ -2060,6 +2078,7 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
     audioInterruptionApi?.offAudioInterruptionEnd?.(handleAudioInterruptionEnd)
     ttsPlayer.destroy()
     trainingSoundscape.destroy?.()
+    trainingMusicPlayer.destroy()
     trainingAudioClock.close()
     if (recording.value) {
       recording.value = false

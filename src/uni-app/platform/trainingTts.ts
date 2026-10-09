@@ -153,6 +153,23 @@ export function createTrainingTtsPlayer(
   }> = []
   let idleWaiters: Array<() => void> = []
   let playbackGeneration = 0
+  let speechActivityListener: ((active: boolean) => void) | undefined
+  const notifySpeechActive = () => {
+    if (!speechActivityListener) return
+    try {
+      speechActivityListener(true)
+    } catch (error) {
+      console.warn('[TrainingTts] speech activity listener failed:', error)
+    }
+  }
+  const notifySpeechIdle = () => {
+    if (!speechActivityListener) return
+    try {
+      speechActivityListener(false)
+    } catch (error) {
+      console.warn('[TrainingTts] speech activity listener failed:', error)
+    }
+  }
   const preloadedSources = new Map<string, string>()
   const pendingPreloads = new Map<string, Promise<void>>()
   const timeline = createAnchoredTimelineScheduler<ActionTtsCue>(timelineRuntime)
@@ -377,9 +394,8 @@ export function createTrainingTtsPlayer(
   function stopActiveWebCue() {
     const cue = activeWebCue
     if (!cue) return
-    activeWebCue = undefined
-    // An outside stop completes the cue exactly like the native player does:
-    // its promise resolves and the queue moves on.
+    // settle() must run while activeWebCue still points at this cue so the
+    // duck listener restores music; it clears the reference itself.
     cue.settle(true)
   }
 
@@ -405,7 +421,10 @@ export function createTrainingTtsPlayer(
       if (settled) return
       settled = true
       if (playbackTimeout) clearTimeout(playbackTimeout)
-      if (activeWebCue?.source === source) activeWebCue = undefined
+      if (activeWebCue?.source === source) {
+        activeWebCue = undefined
+        notifySpeechIdle()
+      }
       try {
         source.disconnect?.()
       } catch {
@@ -438,6 +457,7 @@ export function createTrainingTtsPlayer(
     try {
       if (offsetSec > 0) source.start(cue.context.currentTime, offsetSec)
       else source.start(cue.context.currentTime)
+      notifySpeechActive()
     } catch (error) {
       console.warn('[TrainingTts] web audio playback failed:', audioUrl, error)
       settle(false)
@@ -472,6 +492,7 @@ export function createTrainingTtsPlayer(
     const cue = activeWebCue
     if (!cue) return
     activeWebCue = undefined
+    notifySpeechIdle()
     const offsetSec = Math.max(0, cue.context.currentTime - cue.startedAtAudioSec)
     pausedWebCue = { url: cue.url, onComplete: cue.onComplete, offsetSec }
     // Settle first so the ended event fired by stop() cannot complete the
@@ -549,6 +570,7 @@ export function createTrainingTtsPlayer(
           // previously been suspended. Leaving this true makes waitForIdle()
           // wait forever and can lock the workout at an action boundary.
           suspended = false
+          notifySpeechIdle()
         }
         if (stopCurrentPlayback === stopPlayback) stopCurrentPlayback = undefined
         if (stopFirst) nextAudioContext.stop?.()
@@ -585,6 +607,9 @@ export function createTrainingTtsPlayer(
           dispose(true)
         }, trainingTtsPlaybackTimeoutMs)
         nextAudioContext.play?.()
+        // Duck the background music while speech owns the output. Called
+        // after play() so a silent route failure never leaves music low.
+        notifySpeechActive()
       } catch (error) {
         console.warn('[TrainingTts] playback setup failed:', error)
         if (!retryWithRemoteSource()) dispose()
@@ -727,6 +752,9 @@ export function createTrainingTtsPlayer(
     },
     enqueue(audioUrls: readonly string[]) {
       return enqueueAudioUrls(audioUrls)
+    },
+    setSpeechActivityListener(listener: ((active: boolean) => void) | undefined) {
+      speechActivityListener = listener
     },
     replace(audioUrls: readonly string[]) {
       playbackGeneration += 1

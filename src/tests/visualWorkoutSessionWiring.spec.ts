@@ -112,6 +112,26 @@ describe('visual workout session wiring', () => {
     expect(sessionSource).toContain('trainingSoundscape.suspend()')
     expect(sessionSource).toContain('trainingSoundscape.stop()')
     expect(sessionSource).toContain('trainingSoundscape.finish(isLastItem)')
+    // Background music wiring: a dedicated looping InnerAudioContext ducks
+    // under every TTS cue and follows every session lifecycle boundary.
+    expect(sessionSource).toContain('createTrainingMusicPlayer')
+    expect(sessionSource).toContain('const trainingMusicPlayer = createTrainingMusicPlayer()')
+    expect(sessionSource).toContain('ttsPlayer.setSpeechActivityListener')
+    expect(sessionSource).toContain('trainingMusicPlayer.duck(active)')
+    expect(sessionSource).toContain('requestedArrangement.background_music')
+    expect(sessionSource).toContain('trainingMusicPlayer.configure(backgroundMusic.audio_url, backgroundMusic.volume)')
+    expect(sessionSource).toContain('trainingMusicPlayer.play()')
+    expect(sessionSource).toContain('trainingMusicPlayer.suspend()')
+    expect(sessionSource).toContain('trainingMusicPlayer.resume()')
+    expect(sessionSource).toContain('trainingMusicPlayer.stop()')
+    expect(sessionSource).toContain('trainingMusicPlayer.destroy()')
+    const musicSource = readFileSync(
+      resolve(process.cwd(), 'src/uni-app/platform/trainingMusic.ts'),
+      'utf8'
+    )
+    expect(musicSource).toContain('context.loop = true')
+    expect(musicSource).toContain('trainingMusicDuckRatio')
+    expect(musicSource).toContain('obeyMuteSwitch = false')
     const soundscapeSource = readFileSync(
       resolve(process.cwd(), 'src/uni-app/platform/trainingSoundscape.ts'),
       'utf8'

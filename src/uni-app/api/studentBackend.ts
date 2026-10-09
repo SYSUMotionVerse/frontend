@@ -206,6 +206,12 @@ function resolveExerciseArrangementUrls(
 ): ExerciseArrangementDetail {
   return {
     ...arrangement,
+    background_music: arrangement.background_music
+      ? {
+          ...arrangement.background_music,
+          audio_url: resolveAbsoluteAssetUrl(arrangement.background_music.audio_url) ?? ''
+        }
+      : arrangement.background_music,
     countdown_tts_cues: arrangement.countdown_tts_cues?.map((cue: TrainingCountdownTtsCue) => ({
       ...cue,
       audio_url: resolveTrainingTtsCueUrl(cue.audio_url)
