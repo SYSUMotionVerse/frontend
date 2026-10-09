@@ -18,6 +18,7 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 import { markProtectedStudentAccessComplete } from '../../composables/useNavigationGuard'
 import { useSubmissionHandoff } from '../../composables/useSubmissionHandoff'
 import { buildMiniProgramQueryString } from '../../platform/queryString'
@@ -44,6 +45,7 @@ interface ConfirmedQuestionnaireSubmission {
 }
 
 const store = useStudentStore()
+const reminderConsent = useReminderConsent()
 const checkpoint = ref<CheckpointKey>('baseline')
 const questionnaire = shallowRef<PsychologyQuestionnaireModel | null>(null)
 const isLoading = shallowRef(true)
@@ -428,6 +430,9 @@ function previewTrainingContent() {
 }
 
 function startQuestionnaire() {
+  // Completing a questionnaire is a training-adjacent gesture; offer the
+  // reminder prompt to first-time users or silently top up for accepted ones.
+  void reminderConsent.topUpQuota()
   hasStartedQuestionnaire.value = true
 }
 

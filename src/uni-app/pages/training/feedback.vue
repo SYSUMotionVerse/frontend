@@ -12,6 +12,7 @@ import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import type { GrowthTrainingHistoryItem, GrowthVisualScoreTrendModel } from '../../api/studentBackendTypes'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 import {
   buildMockTrainingSession,
   buildMockTrainingTrend,
@@ -19,6 +20,7 @@ import {
 } from '../../../features/training/trainingMock'
 
 const store = useStudentStore()
+const reminderConsent = useReminderConsent()
 const mockEnabled = isTrainingMockEnabled()
 const sessionId = shallowRef('latest')
 const remoteSession = shallowRef<SessionRecord | null>(null)
@@ -199,6 +201,9 @@ function actionKey(action: ScoredActionResult) {
 }
 
 function toggleAction(action: ScoredActionResult) {
+  // Viewing detailed feedback is a training-adjacent gesture; silently top
+  // up subscription credits alongside the toggle.
+  void reminderConsent.topUpQuota()
   const key = actionKey(action)
   expandedActionKey.value = expandedActionKey.value === key ? '' : key
 }

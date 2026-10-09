@@ -4,8 +4,10 @@ import { onLoad } from '@dcloudio/uni-app'
 import QuestionnaireResultCard from '../../../components/access/QuestionnaireResultCard.vue'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 
 const store = useStudentStore()
+const reminderConsent = useReminderConsent()
 const questionnaireCount = ref(1)
 
 onLoad((query) => {
@@ -25,6 +27,7 @@ function goHome() {
 }
 
 function startTraining() {
+  void reminderConsent.topUpQuota()
   prepareDestination()
   void uni.reLaunch({
     url: '/pages/training/select'

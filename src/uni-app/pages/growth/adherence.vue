@@ -7,10 +7,12 @@ import TrainingHistoryList from '../../../components/growth/TrainingHistoryList.
 import UniGrowthPageShell from '../../components/growth/UniGrowthPageShell.vue'
 import UniPageHeading from '../../components/layout/UniPageHeading.vue'
 import { useGrowthOverview } from '../../composables/useGrowthOverview'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 
 const { adherenceData, loadState, refresh, sessions } = useGrowthOverview({
   sections: ['adherence', 'history']
 })
+const reminderConsent = useReminderConsent()
 const complianceLoaded = computed(() => adherenceData.value !== null)
 const complianceTodayCount = computed(() => {
   const todayCount = adherenceData.value?.todayCount ?? 0
@@ -70,6 +72,9 @@ const selectedDateTitle = computed(() => {
 function moveMonth(offset: number) {
   if (offset < 0 && !canGoPreviousMonth.value) return
   if (offset > 0 && !canGoNextMonth.value) return
+  // Browsing adherence history is a low-frequency but training-adjacent
+  // gesture; silently top up subscription credits alongside the toggle.
+  void reminderConsent.topUpQuota()
   const [year, month] = monthCursor.value.split('-').map(Number)
   const next = new Date(year, month - 1 + offset, 1)
   const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`

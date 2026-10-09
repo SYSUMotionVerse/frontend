@@ -4,6 +4,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import ShortQuestionnaireForm from '../../../components/training/ShortQuestionnaireForm.vue'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
+import { useReminderConsent } from '../../composables/useReminderConsent'
 import { studentBackendSync } from '../../api/studentBackend'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import { isTrainingMockEnabled } from '../../../features/training/trainingMock'
@@ -16,6 +17,7 @@ type ShortQuestionnaireResponse = {
 }
 
 const store = useStudentStore()
+const reminderConsent = useReminderConsent()
 const mockEnabled = isTrainingMockEnabled()
 const isSubmitting = shallowRef(false)
 const submissionStatus = shallowRef<SubmissionStatus>('idle')
@@ -197,6 +199,7 @@ function redirectToFeedback(sessionId: string) {
 }
 
 function goHome() {
+  void reminderConsent.topUpQuota()
   void uni.switchTab({
     url: '/pages/training/home'
   })
