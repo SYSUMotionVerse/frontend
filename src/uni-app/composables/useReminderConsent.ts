@@ -38,6 +38,8 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
   const needsSettings = shallowRef(false)
   const promptDismissed = shallowRef(false)
   let authorizationConfig: ReminderAuthorizationConfig | undefined
+  let lastTopUpAttemptAt = 0
+  const TOP_UP_THROTTLE_MS = 30_000
 
   function showAuthorizationConfirm(): Promise<boolean> {
     if (dependencies.confirmAuthorizationPrompt) {
@@ -176,10 +178,13 @@ export function createReminderConsent(dependencies: ReminderConsentDependencies)
    * The function never throws and never blocks the calling interaction.
    */
   async function topUpQuota() {
+    const now = Date.now()
+    if (now - lastTopUpAttemptAt < TOP_UP_THROTTLE_MS) return
     if (topUpInFlight.value || isWorking.value || needsSettings.value) return
     if (status.value === 'banned' || status.value === 'unconfigured' || status.value === 'unsupported') {
       return
     }
+    lastTopUpAttemptAt = now
     topUpInFlight.value = true
     try {
       if (dependencies.loadAuthorizationConfig && !authorizationConfig) {

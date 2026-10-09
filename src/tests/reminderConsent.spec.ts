@@ -325,6 +325,7 @@ describe('reminder consent composable', () => {
   })
 
   it('reports a new grant on each completed top-up without waiting for consumption', async () => {
+    vi.useFakeTimers()
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const grants = [
       { template_id: 'noon-tpl', status: 'accept' as const },
@@ -340,8 +341,11 @@ describe('reminder consent composable', () => {
     })
 
     await consent.topUpQuota()
+    vi.advanceTimersByTime(31_000)
     await consent.topUpQuota()
+    vi.advanceTimersByTime(31_000)
     await consent.topUpQuota()
+    vi.useRealTimers()
 
     expect(requestAuthorization).toHaveBeenCalledTimes(3)
     expect(reportGrants).toHaveBeenCalledTimes(3)
@@ -349,6 +353,7 @@ describe('reminder consent composable', () => {
   })
 
   it('coalesces overlapping top-ups and allows the next click after completion', async () => {
+    vi.useFakeTimers()
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     let finishRequest!: (result: { status: 'accepted'; grants: [] }) => void
     const requestAuthorization = vi.fn().mockImplementation(() => new Promise(resolve => {
@@ -367,13 +372,33 @@ describe('reminder consent composable', () => {
     finishRequest({ status: 'accepted', grants: [] })
     await first
 
+    vi.advanceTimersByTime(31_000)
     const next = consent.topUpQuota()
     expect(requestAuthorization).toHaveBeenCalledTimes(2)
     finishRequest({ status: 'accepted', grants: [] })
     await next
+    vi.useRealTimers()
+  })
+
+  it('throttles rapid top-up attempts to avoid WeChat rate limits', async () => {
+    const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
+    const requestAuthorization = vi.fn().mockResolvedValue({ status: 'accepted', grants: [] })
+    const consent = createReminderConsent({
+      requestAuthorization,
+      syncAuthorization: vi.fn(),
+      reportGrants: vi.fn(),
+      confirmAuthorizationPrompt: () => Promise.resolve(true),
+    })
+
+    await consent.topUpQuota()
+    await consent.topUpQuota()
+    await consent.topUpQuota()
+
+    expect(requestAuthorization).toHaveBeenCalledTimes(1)
   })
 
   it('contains platform exceptions and lets a subsequent button try again', async () => {
+    vi.useFakeTimers()
     const { createReminderConsent } = await import('../uni-app/composables/useReminderConsent')
     const requestAuthorization = vi.fn()
       .mockRejectedValueOnce(new Error('platform failure'))
@@ -386,7 +411,9 @@ describe('reminder consent composable', () => {
     })
 
     await expect(consent.topUpQuota()).resolves.toBeUndefined()
+    vi.advanceTimersByTime(31_000)
     await consent.topUpQuota()
+    vi.useRealTimers()
 
     expect(requestAuthorization).toHaveBeenCalledTimes(2)
     expect(consent.status.value).toBe('accepted')
