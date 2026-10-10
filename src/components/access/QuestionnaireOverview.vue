@@ -42,10 +42,7 @@ const questionnaireCount = computed(() =>
   props.plan?.questionnaire_count ?? questionnaireItems.value.length
 )
 const includesStroop = computed(() => questionnaireItems.value.some(item => item.task_type === 'STROOP'))
-const isBaseline = computed(() => (
-  props.currentQuestionnaire.checkpoint === 'baseline'
-    || props.plan?.checkpoint === 'baseline'
-))
+const isBaseline = computed(() => props.currentQuestionnaire.checkpoint !== 'daily')
 const estimatedMinutes = computed(() =>
   props.plan?.estimated_total_minutes
     ?? questionnaireItems.value.reduce((total, item) => total + item.estimated_minutes, 0)

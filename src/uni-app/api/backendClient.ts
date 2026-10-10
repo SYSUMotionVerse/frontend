@@ -601,8 +601,8 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         '/psychology/scales/'
       ).then(response => unwrapCollectionResponse<BackendPsychologyScale>(response))
     },
-    startStroop(scaleId: number, screening: StroopColor[]) {
-      return request<StroopStartResponse>(`/psychology/scales/${scaleId}/stroop-start/`, { method: 'POST', data: { screening } })
+    startStroop(scaleId: number, screening: StroopColor[], checkpoint: BackendQuestionnairePlan['checkpoint'] = 'baseline') {
+      return request<StroopStartResponse>(`/psychology/scales/${scaleId}/stroop-start/`, { method: 'POST', data: { screening, checkpoint } })
     },
     submitStroop(scaleId: number, payload: StroopSubmission) {
       return request<PsychologyScaleSubmitResponse>(`/psychology/scales/${scaleId}/stroop-submit/`, { method: 'POST', data: payload })

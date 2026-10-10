@@ -92,7 +92,7 @@ onLoad((query) => {
 })
 
 const checkpointLabel = computed(() => CHECKPOINT_LABELS[checkpoint.value])
-const title = computed(() => checkpoint.value === 'baseline' ? STUDY_TITLE : `${checkpointLabel.value}问卷`)
+const title = computed(() => checkpoint.value !== 'daily' ? STUDY_TITLE : `${checkpointLabel.value}问卷`)
 const subtitle = computed(() => questionnaire.value?.taskType === 'STROOP'
   ? '请忽略单词含义，只判断字体颜色。'
   : '请根据自己的真实情况作答，没有标准答案。')
@@ -102,7 +102,7 @@ const estimatedMinutes = computed(() =>
     ?? questionnaire.value?.estimatedMinutes
     ?? Math.max(3, Math.ceil(((questionnaire.value?.questions?.length ?? 0) * 8) / 60))
 )
-const estimatedMinutesLabel = computed(() => checkpoint.value === 'baseline'
+const estimatedMinutesLabel = computed(() => checkpoint.value !== 'daily'
   ? STUDY_ESTIMATED_TIME_LABEL
   : String(estimatedMinutes.value)
 )
@@ -500,6 +500,7 @@ function returnToQuestionnaireList() {
             v-if="questionnaire.taskType === 'STROOP'"
             :key="questionnaireRunnerKey"
             :scale-id="questionnaire.scaleId"
+            :checkpoint="checkpoint"
             :student-id="draftStudentId"
             :active="hasStartedQuestionnaire && !confirmedSubmission"
             :interruption-key="stroopInterruptionKey"

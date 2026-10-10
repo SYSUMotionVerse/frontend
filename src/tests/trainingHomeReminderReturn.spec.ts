@@ -187,6 +187,24 @@ describe('training home reminder return orchestration', () => {
     wrapper.unmount()
   })
 
+  it('opens the daily questionnaire after resolving an authenticated 09:00 reminder return', async () => {
+    const navigateTo = vi.fn()
+    vi.stubGlobal('uni', { navigateTo })
+    const HomePage = (await import('../uni-app/pages/training/home.vue')).default
+    const wrapper = mount(HomePage, { global: { stubs: {
+      UniTrainingPageShell: { template: '<div><slot /></div>' },
+      TrainingHomeHeader: true, TrainingHomeCoachCard: true
+    } } })
+    loadPage?.({ tracking: 'bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26', slot: '09:00', date: '2026-07-16' })
+    await showPage?.()
+    expect(resolveReminderReturn).toHaveBeenCalled()
+    expect(navigateTo).toHaveBeenCalledWith({ url: '/pages/access/questionnaire?checkpoint=daily' })
+    await showPage?.()
+    expect(navigateTo).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
   it('keeps the reminder card hidden after authorization is detected', async () => {
     reminderStatus.value = 'accepted'
     const HomePage = (await import('../uni-app/pages/training/home.vue')).default

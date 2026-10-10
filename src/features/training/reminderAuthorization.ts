@@ -16,7 +16,7 @@ export const REMINDER_AUTHORIZATION_PRESENTATION = {
   },
   accepted: {
     homeTitle: '微信提醒已开启',
-    homeDetail: '我们会在 12:00 和 18:00 检查训练进度，符合条件且有授权额度时发送提醒。',
+    homeDetail: '北京时间 09:00 提醒填写久坐问卷，12:00 和 18:00 按进度提醒训练；微信发送需有授权额度。',
     consentMessage: '微信授权已记录。',
     canRetryAuthorization: false
   },

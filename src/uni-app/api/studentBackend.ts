@@ -912,13 +912,18 @@ export function createStudentBackendSync(
         psychologyRecords,
         questionnairePlan
       )
+      const registeredProfileHasNoPsychologyRecords = completedCheckpoints.size === 0 && psychologyRecords.length === 0
+      const nextScale = await dependencies.getNextPsychologyScale()
+      if (nextScale && 'completed_checkpoints' in nextScale && Array.isArray(nextScale.completed_checkpoints)) {
+        completedCheckpoints.clear()
+        for (const point of nextScale.completed_checkpoints) {
+          if (['baseline', 'week4', 'week8', 'week12'].includes(point)) completedCheckpoints.add(point)
+        }
+      }
+      const questionnaireAccess = resolveDueCheckpoint(nextScale)
       if (!hasSequentialCompletedCheckpoints(completedCheckpoints)) {
         throw new Error('Backend checkpoint records are out of order.')
       }
-      const registeredProfileHasNoPsychologyRecords = completedCheckpoints.size === 0 && psychologyRecords.length === 0
-      const questionnaireAccess = resolveDueCheckpoint(
-        await dependencies.getNextPsychologyScale()
-      )
       // A record proves completion of one scale, not every scale in its
       // checkpoint. next_scale is authoritative about outstanding work,
       // including plans changed since the history/plan requests completed.
@@ -959,6 +964,16 @@ export function createStudentBackendSync(
 
       await dependencies.ensureSession()
 
+      if (preferredCheckpoint && questionnairePlanLoader) {
+        const plan = await questionnairePlanLoader(preferredCheckpoint)
+        if (plan.checkpoint !== preferredCheckpoint) throw new Error('Backend questionnaire checkpoint does not match.')
+        if (!plan.available || plan.completed_questionnaire_count >= plan.questionnaire_count) return null
+        const current = plan.current_questionnaire_id ?? plan.questionnaires.find(item => !item.completed)?.id
+        const scales = await dependencies.listPsychologyScales()
+        const scale = scales.find(item => item.id === current)
+        if (!scale) throw new Error('Backend questionnaire definition is unavailable.')
+        return mapBackendScaleToQuestionnaire({ ...scale, checkpoint: preferredCheckpoint })
+      }
       const nextScale = await dependencies.getNextPsychologyScale()
       if (hasQuestions(nextScale) && (nextScale.questions.length > 0 || nextScale.task_type === 'STROOP')) {
         return mapBackendScaleToQuestionnaire(nextScale)
@@ -1048,9 +1063,9 @@ export function createStudentBackendSync(
         }
       })
     },
-    async startStroop(scaleId: number, screening: StroopColor[]) {
+    async startStroop(scaleId: number, screening: StroopColor[], checkpoint: CheckpointKey = 'baseline') {
       await dependencies.ensureSession()
-      return dependencies.startStroop(scaleId, screening)
+      return dependencies.startStroop(scaleId, screening, checkpoint)
     },
     async submitStroop(scaleId: number, payload: StroopSubmission) {
       await dependencies.ensureSession()
@@ -1066,7 +1081,7 @@ export function createStudentBackendSync(
 
       await dependencies.ensureSession()
       const response = await dependencies.submitPsychologyScale(
-        buildPsychologyScaleSubmitPayload(input.scaleId, input.answers)
+        { ...buildPsychologyScaleSubmitPayload(input.scaleId, input.answers), checkpoint: input.checkpoint }
       )
       const summary = mapPsychologyRecordSummary(response.record)
 

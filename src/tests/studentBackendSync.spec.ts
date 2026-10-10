@@ -19,6 +19,42 @@ function createProfile(overrides: Partial<StudentProfile> = {}): StudentProfile 
 }
 
 describe('student backend sync orchestration', () => {
+  it('loads the requested follow-up battery using the existing baseline definition, independently of daily work', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const getNextPsychologyScale = vi.fn()
+    const sync = createStudentBackendSync({
+      isEnabled: () => true, ensureSession: vi.fn(), getNextPsychologyScale,
+      getPsychologyQuestionnairePlan: vi.fn(async checkpoint => ({
+        checkpoint, scheduled_at: null, available: true, delay_days: 0, is_late: false,
+        questionnaire_count: 1, completed_questionnaire_count: 0, estimated_total_minutes: 3,
+        current_questionnaire_id: 5, questionnaires: [{ id: 5, code: null, title: '基线定义', short_title: '',
+          order: 1, estimated_minutes: 3, question_count: 1, completed: false }]
+      })),
+      listPsychologyScales: vi.fn(async () => [{ id: 5, title: '基线定义', checkpoint: 'baseline' as const,
+        description: '', order: 1, created_at: '', questions: [{ id: 11, question_text: '题目',
+          question_type: 'SINGLE' as const, order: 1, options: [{ id: 101, option_text: '选项', score: 1, order: 1 }] }] }])
+    })
+    for (const checkpoint of ['baseline', 'week4', 'week8', 'week12'] as const) {
+      expect(await sync.loadLongQuestionnaire(checkpoint)).toMatchObject({ scaleId: 5, checkpoint })
+    }
+    expect(getNextPsychologyScale).not.toHaveBeenCalled()
+  })
+
+  it('does not load completed or not-yet-open follow-up questionnaires', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const listPsychologyScales = vi.fn()
+    const getPsychologyQuestionnairePlan = vi.fn().mockResolvedValue({
+      checkpoint: 'week4', available: false, questionnaire_count: 1, completed_questionnaire_count: 0
+    })
+    const sync = createStudentBackendSync({ isEnabled: () => true, ensureSession: vi.fn(),
+      getPsychologyQuestionnairePlan, listPsychologyScales })
+    expect(await sync.loadLongQuestionnaire('week4')).toBeNull()
+    getPsychologyQuestionnairePlan.mockResolvedValue({
+      checkpoint: 'week4', available: true, questionnaire_count: 1, completed_questionnaire_count: 1
+    })
+    expect(await sync.loadLongQuestionnaire('week4')).toBeNull()
+    expect(listPsychologyScales).not.toHaveBeenCalled()
+  })
   it('loads a Stroop task with no survey questions and uses dedicated endpoints', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const ensureSession = vi.fn().mockResolvedValue(undefined)
@@ -37,7 +73,7 @@ describe('student backend sync orchestration', () => {
     await sync.startStroop(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'])
     const payload = { session_id: 'session', trials: [], completion_time_ms: 1500 }
     await sync.submitStroop(12, payload)
-    expect(startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'])
+    expect(startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'], 'baseline')
     expect(submitStroop).toHaveBeenCalledWith(12, payload)
     expect(ensureSession).toHaveBeenCalledTimes(3)
   })
@@ -141,6 +177,7 @@ describe('student backend sync orchestration', () => {
     expect(ensureSession).toHaveBeenCalledTimes(1)
     expect(submitPsychologyScale).toHaveBeenCalledWith({
       scale_id: 1,
+      checkpoint: 'week4',
       answers: [
         {
           question_id: 11,

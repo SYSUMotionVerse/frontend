@@ -158,7 +158,7 @@ export function mapPsychologyRecordSummary(record: BackendPsychologyRecord) {
       ? 'computed'
       : 'raw_only')
   return {
-    checkpoint: record.scale_info.checkpoint
+    checkpoint: record.checkpoint ?? record.scale_info.checkpoint
       ?? resolveCheckpointFromScaleOrder(record.scale_info.order),
     title: record.scale_info.title,
     score: scoringStatus === 'raw_only' ? null : normalizedScore,

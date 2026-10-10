@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import type { CheckpointKey } from '../../domain/student/types'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { studentBackendSync } from '../../uni-app/api/studentBackend'
 import type { BackendPsychologyRecord, StroopColor, StroopStimulus, StroopSubmission } from '../../uni-app/api/studentBackendTypes'
 
 const props = defineProps<{
+  checkpoint?: CheckpointKey
   scaleId: number
   studentId: string
   active: boolean
@@ -32,7 +34,10 @@ let trialStarted = 0
 let taskStarted = 0
 let generation = 0
 let renderTimer: ReturnType<typeof setTimeout> | undefined
-const storageKey = computed(() => `sport-snack:stroop:v1:${encodeURIComponent(props.studentId)}:${props.scaleId}`)
+const storageKey = computed(() => {
+  const base = `sport-snack:stroop:v1:${encodeURIComponent(props.studentId)}:${props.scaleId}`
+  return !props.checkpoint || props.checkpoint === 'baseline' ? base : `${base}:${props.checkpoint}`
+})
 const stimulus = computed(() => stimuli.value[trialIndex.value])
 const ink = computed(() => colors.find(color => color.value === stimulus.value?.ink_color)?.hex)
 const screenColor = computed(() => colors[screenAnswers.value.length])
@@ -74,7 +79,7 @@ async function answerScreen(color: StroopColor) {
   error.value = ''
   const token = generation
   try {
-    const response = await studentBackendSync.startStroop(props.scaleId, [...screenAnswers.value])
+    const response = await studentBackendSync.startStroop(props.scaleId, [...screenAnswers.value], props.checkpoint ?? 'baseline')
     if (token !== generation) return
     if (response.already_completed && response.record) {
       record.value = response.record
@@ -125,7 +130,7 @@ function answerTrial(color: StroopColor) {
     return
   }
   const completion = Math.max(Math.round(now() - taskStarted), trials.reduce((sum, trial) => sum + trial.reaction_time_ms, 0))
-  pending.value = { session_id: sessionId.value, trials: [...trials], completion_time_ms: completion }
+  pending.value = { checkpoint: props.checkpoint ?? 'baseline', session_id: sessionId.value, trials: [...trials], completion_time_ms: completion }
   phase.value = 'upload'
   void upload()
 }

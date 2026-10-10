@@ -606,6 +606,25 @@ describe('startup access bootstrap', () => {
     await expect(sync.bootstrapAccess()).rejects.toThrow('baseline questionnaire is not completed')
   })
 
+  it('uses full-battery completion from the server instead of partial follow-up records', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const sync = createStudentBackendSync({
+      isEnabled: () => true, ensureSession: vi.fn(),
+      getCurrentUser: vi.fn().mockResolvedValue(createBackendUser()),
+      listPsychologyRecords: vi.fn().mockResolvedValue([createCompletedScaleRecord(1), createCompletedScaleRecord(3)]),
+      getNextPsychologyScale: vi.fn().mockResolvedValue({
+        ...createBaselineScale(1), checkpoint: 'daily', completed_checkpoints: ['baseline']
+      })
+    }, { hydrateAccessState, resolveLocalProfile: vi.fn().mockReturnValue(createCompleteSeedProfile()) })
+    await expect(sync.bootstrapAccess()).resolves.toMatchObject({
+      targetPage: 'home', questionnaireCheckpoint: 'daily'
+    })
+    expect(hydrateAccessState).toHaveBeenCalledWith(expect.objectContaining({
+      completedQuestionnaireCheckpoints: ['baseline'], activeCheckpoint: 'baseline'
+    }))
+  })
+
   it('blocks non-sequential checkpoint records', async () => {
     const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
     const sync = createStudentBackendSync(

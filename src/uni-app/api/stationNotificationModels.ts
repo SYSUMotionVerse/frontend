@@ -5,7 +5,7 @@ export interface StationNotificationViewModel {
   title: string
   content: string
   isRead: boolean
-  slot: '12:00' | '18:00' | null
+  slot: '09:00' | '12:00' | '18:00' | null
   actionTarget: string
   createdAtLabel: string
   readSyncFailed: boolean

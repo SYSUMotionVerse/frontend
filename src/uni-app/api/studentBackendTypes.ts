@@ -70,6 +70,7 @@ export interface BackendScaleQuestion {
 }
 
 export interface BackendPsychologyScale {
+  completed_checkpoints?: CheckpointKey[]
   task_type?: 'QUESTIONNAIRE' | 'STROOP'
   id: number
   code?: string | null
@@ -122,6 +123,7 @@ export interface BackendQuestionnairePlan {
 }
 
 export interface BackendPsychologyNextMessage {
+  completed_checkpoints?: CheckpointKey[]
   message: string
   checkpoint?: CheckpointKey
   available?: boolean
@@ -129,6 +131,7 @@ export interface BackendPsychologyNextMessage {
 }
 
 export interface BackendPsychologyRecord {
+  checkpoint?: CheckpointKey
   task_result?: { accuracy_percent: number; completion_time_ms: number; mean_reaction_time_ms: number }
   id: number
   total_score: number | string | null
@@ -142,6 +145,7 @@ export interface BackendPsychologyRecord {
 }
 
 export interface PsychologyScaleSubmitPayload {
+  checkpoint?: CheckpointKey
   scale_id: number
   answers: {
     question_id: number
@@ -634,7 +638,7 @@ export interface GrowthAssessmentHistoryItem {
 }
 
 export interface StudentBackendSyncDependencies {
-  startStroop: (scaleId: number, screening: StroopColor[]) => Promise<StroopStartResponse>
+  startStroop: (scaleId: number, screening: StroopColor[], checkpoint?: CheckpointKey) => Promise<StroopStartResponse>
   submitStroop: (scaleId: number, payload: StroopSubmission) => Promise<PsychologyScaleSubmitResponse>
   isEnabled: () => boolean
   ensureSession: () => Promise<void>
@@ -683,7 +687,7 @@ export interface BackendStationNotification {
   title: string
   content: string
   is_read: boolean
-  reminder_slot: '12:00' | '18:00' | null
+  reminder_slot: '09:00' | '12:00' | '18:00' | null
   action_target: string
   created_at: string
 }
@@ -700,13 +704,13 @@ export interface BackendUnreadNotifications {
 
 export interface BackendReminderReturnPayload {
   tracking_id: string
-  slot: '12:00' | '18:00'
+  slot: '09:00' | '12:00' | '18:00'
   local_date: string
 }
 
 export interface BackendReminderReturn {
   resolved: true
-  slot: '12:00' | '18:00'
+  slot: '09:00' | '12:00' | '18:00'
   local_date: string
   first_returned_at: string
 }
@@ -826,6 +830,7 @@ export interface StudentAdherenceData {
 export type StroopColor = 'RED' | 'GREEN' | 'BLUE' | 'YELLOW'
 export interface StroopStimulus { word: StroopColor; ink_color: StroopColor; congruent: boolean }
 export interface StroopSubmission {
+  checkpoint?: CheckpointKey
   session_id: string
   trials: Array<{ selected_color: StroopColor; reaction_time_ms: number }>
   completion_time_ms: number

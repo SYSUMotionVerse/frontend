@@ -40,6 +40,20 @@ async function finish(wrapper: ReturnType<typeof mount>) {
 }
 
 describe('Stroop test', () => {
+  it('keeps follow-up pending scores isolated from the baseline session', async () => {
+    const baselinePending = { session_id: 'baseline-pending', trials: Array.from({ length: 10 }, () => ({
+      selected_color: 'RED', reaction_time_ms: 100
+    })), completion_time_ms: 1200 }
+    stored.set('sport-snack:stroop:v1:student1:12', baselinePending)
+    const wrapper = mount(StroopTest, { props: { ...props, checkpoint: 'week4' } })
+    expect(wrapper.text()).toContain('先做辨色检查')
+    await ready(wrapper)
+    expect(api.startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'], 'week4')
+    await finish(wrapper)
+    expect(api.submitStroop.mock.calls[0]![1].checkpoint).toBe('week4')
+    expect(stored.get('sport-snack:stroop:v1:student1:12')).toBe(baselinePending)
+    wrapper.unmount()
+  })
   it('shows the neutral task name and the configured full instruction', () => {
     const wrapper = mount(StroopTest, {
       props: {
@@ -57,7 +71,7 @@ describe('Stroop test', () => {
   it('screens four colors, records ten timed answers, and completes only after a saved result', async () => {
     const wrapper = mount(StroopTest, { props })
     await ready(wrapper)
-    expect(api.startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'])
+    expect(api.startStroop).toHaveBeenCalledWith(12, ['RED', 'GREEN', 'BLUE', 'YELLOW'], 'baseline')
     expect(wrapper.get('.stroop__stimulus').text()).toBe('GREEN')
     await finish(wrapper)
     const payload = api.submitStroop.mock.calls[0]![1]

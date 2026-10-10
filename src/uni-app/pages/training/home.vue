@@ -180,8 +180,10 @@ const showReminderAuthorizationCard = computed(() => (
     reminderConsent.status.value
   ))
 ))
+let openDailyQuestionnaireOnReturn = false
 onLoad((query) => {
   const nextQuery = query ?? {}
+  openDailyQuestionnaireOnReturn = nextQuery.slot === '09:00'
   reminderReturn.capture({
     tracking: nextQuery.tracking?.toString(),
     slot: nextQuery.slot?.toString(),
@@ -197,6 +199,10 @@ onShow(async () => {
     store.setReminderSource('wechat-reminder')
   }
   await refreshAccessDiscovery()
+  if (openDailyQuestionnaireOnReturn && reminderReturn.state.value.status === 'resolved') {
+    openDailyQuestionnaireOnReturn = false
+    uni.navigateTo({ url: '/pages/access/questionnaire?checkpoint=daily' })
+  }
   await Promise.all([
     trainingProgress.refresh(),
     stationNotifications.refresh()

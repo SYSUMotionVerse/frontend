@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 describe('growth backend read models', () => {
+  it('keeps four measurement histories distinct when all use the baseline definition', async () => {
+    const { mapBackendAssessmentHistory } = await import('../uni-app/api/growthBackendModels')
+    const records = (['baseline', 'week4', 'week8', 'week12'] as const).map((checkpoint, index) => ({
+      id: index + 1, checkpoint, total_score: index + 10, percentage: 20 + index,
+      analysis: '', completed_at: `2026-10-${10 + index}T01:00:00Z`,
+      scale_info: { id: 5, title: '同一份量表', checkpoint: 'baseline' as const, order: 1 }
+    }))
+    expect(mapBackendAssessmentHistory(records).map(item => item.checkpoint)).toEqual(['baseline', 'week4', 'week8', 'week12'])
+    expect(mapBackendAssessmentHistory(records).map(item => item.score)).toEqual([10, 11, 12, 13])
+  })
   it('merges exercise and stairs records into a sorted training history model', async () => {
     const { mapBackendTrainingHistory } = await import('../uni-app/api/growthBackendModels')
 

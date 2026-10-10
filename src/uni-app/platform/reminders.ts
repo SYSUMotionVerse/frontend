@@ -1,6 +1,6 @@
 import type { StudentAppState } from '../../domain/student/types'
 
-export type ReminderSlot = '12:00' | '18:00'
+export type ReminderSlot = '09:00' | '12:00' | '18:00'
 
 export interface ReminderReturnTarget {
   trackingId: string
@@ -28,7 +28,7 @@ export function parseReminderReturnQuery(
   const localDate = query.date?.trim() ?? ''
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trackingId)
 
-  if (!isUuid || (slot !== '12:00' && slot !== '18:00') || !isIsoCalendarDate(localDate)) {
+  if (!isUuid || (slot !== '09:00' && slot !== '12:00' && slot !== '18:00') || !isIsoCalendarDate(localDate)) {
     return null
   }
 

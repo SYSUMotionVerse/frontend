@@ -26,7 +26,7 @@ export function questionnaireDisplayName(
   if (taskType === 'STROOP') return '颜色判断任务'
 
   const rawTitle = item.title?.trim() || item.short_title?.trim() || item.shortTitle?.trim()
-  if (item.checkpoint && item.checkpoint !== 'baseline') return rawTitle || '问卷'
+  if (item.checkpoint === 'daily') return rawTitle || '问卷'
   if (rawTitle && isGenericQuestionnaireTitle(rawTitle)) return rawTitle
 
   const order = Number(item.order ?? fallbackOrder)
