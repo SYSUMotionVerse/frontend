@@ -458,7 +458,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
   }
 
   async function listNotificationPage(
-    nextPage = '/notifications/messages/?notification_type=TRAINING_REMINDER'
+    nextPage = '/notifications/messages/?notification_type=TRAINING_REMINDER,SCALE_REMINDER'
   ): Promise<BackendStationNotificationPage> {
     const response = await request<
       BackendStationNotification[] | PaginatedResponse<BackendStationNotification>
@@ -596,6 +596,9 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         data: payload
       })
     },
+    checkStairsTrainingAccess() {
+      return request<{ allowed: boolean }>('/exercises/stairs/training-access/', { method: 'POST', data: {} })
+    },
     listPsychologyScales() {
       return request<BackendPsychologyScale[] | PaginatedResponse<BackendPsychologyScale>>(
         '/psychology/scales/'
@@ -669,7 +672,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     },
     getUnreadNotifications() {
       return request<BackendUnreadNotifications>(
-        '/notifications/messages/unread/?notification_type=TRAINING_REMINDER'
+        '/notifications/messages/unread/?notification_type=TRAINING_REMINDER,SCALE_REMINDER'
       )
     },
     markNotificationRead(id: number) {

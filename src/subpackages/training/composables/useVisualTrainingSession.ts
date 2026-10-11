@@ -17,6 +17,7 @@ import {
 } from '../../../uni-app/api/reportBackendSyncError'
 import type { DetectResult } from '../components/pose/PoseDetectModel'
 import type { PoseAngleFrame } from '../../../uni-app/components/pose/poseAnalysis'
+import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/training/groupAccess'
 import { useStudentStore } from '../../../uni-app/composables/useStudentStore'
 import { useVisualTrainingSubmission } from '../../../uni-app/composables/useVisualTrainingSubmission'
 import { invalidateGrowthOverview } from '../../../uni-app/composables/useGrowthOverview'
@@ -1291,6 +1292,10 @@ export function useVisualTrainingSession(options: UseVisualTrainingSessionOption
   }
 
   async function startTraining() {
+    if (!isTrainingAllowed(store.state.profile, options.modality.value)) {
+      showTrainingGroupDenied()
+      return
+    }
     // Must run inside the foreground button interaction: on devices, per-player
     // mute settings alone do not reliably configure the native output route.
     configureTrainingAudioOutput()

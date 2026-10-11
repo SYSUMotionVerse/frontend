@@ -24,9 +24,11 @@ export function useTrainingHomeProgressViewModel(
     if (!progress.value) {
       return '今日训练进度同步中'
     }
+    const total = progress.value.modalities.length
+    if (!total) return '今日请完成久坐问卷'
     return progress.value.goalCompleted
-      ? '今天的三项训练已完成'
-      : `今日已完成 ${progress.value.dailyCount}/3`
+      ? (total === 3 ? '今天的三项训练已完成' : '今天的组内训练已完成')
+      : `今日已完成 ${progress.value.dailyCount}/${total}`
   })
 
   const quests = computed(() => {

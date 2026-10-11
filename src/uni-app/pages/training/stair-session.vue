@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef } from 'vue'
 import { onHide, onLoad } from '@dcloudio/uni-app'
+import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/training/groupAccess'
 import StairTrainingPanel from '../../../components/training/StairTrainingPanel.vue'
 import {
   resolveStairTrainingInstruction,
@@ -218,10 +219,30 @@ function collectHorizontalEvidence() {
   return horizontalEvidenceResultPromise
 }
 
-function startTimer() {
-  if (timerId || isRunning.value || isFinishing.value) return
+let trainingAccessPending = false
+
+async function startTimer() {
+  if (!isTrainingAllowed(store.state.profile, 'stair')) {
+    showTrainingGroupDenied()
+    return
+  }
+  if (timerId || isRunning.value || isFinishing.value || trainingAccessPending) return
 
   configureTrainingAudioOutput()
+  const generation = captureGeneration
+  trainingAccessPending = true
+  try {
+    if (!(await studentBackendSync.ensureStairsTrainingAccess())) {
+      showTrainingGroupDenied()
+      return
+    }
+  } catch (error) {
+    reportBackendSyncError('跑楼梯训练权限校验', error)
+    return
+  } finally {
+    trainingAccessPending = false
+  }
+  if (generation !== captureGeneration) return
   secondsLeft.value = stairTrainingDurationSeconds
   resetLiveMetrics()
   sensorStatus.value = 'ready'

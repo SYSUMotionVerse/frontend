@@ -126,6 +126,7 @@ const studentBackendSync = {
       order: 1
     }]
   }),
+  ensureStairsTrainingAccess: vi.fn().mockResolvedValue(true),
   syncStairSession: vi.fn().mockResolvedValue({ synced: true }),
   loadGrowthHistory: vi.fn().mockResolvedValue({
     assessments: [
@@ -312,6 +313,7 @@ describe('page-level backend sync wiring', () => {
     })
 
     store.getSnapshot.mockReturnValue(initialStudentState)
+    studentBackendSync.ensureStairsTrainingAccess.mockResolvedValue(true)
     studentBackendSync.loadAdherenceData.mockResolvedValue(null)
     studentBackendSync.prepareVisualTrainingSession.mockResolvedValue({
       credential: 'signed-training-credential',
@@ -2828,6 +2830,51 @@ describe('page-level backend sync wiring', () => {
 
     expect(studentBackendSync.syncVisualSession).not.toHaveBeenCalled()
     expect(store.completeTrainingSession).not.toHaveBeenCalled()
+  })
+
+  it('does not start stair capture when the server denies training access', async () => {
+    vi.useFakeTimers()
+    studentBackendSync.ensureStairsTrainingAccess.mockResolvedValue(false)
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: { stubs: {
+        UniTrainingPageShell: { template: '<div><slot /></div>' },
+        StairTrainingPanel: {
+          template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+        }
+      } }
+    })
+    await wrapper.get('.start-stair-session').trigger('click')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(studentBackendSync.ensureStairsTrainingAccess).toHaveBeenCalledTimes(1)
+    expect(startStairSensorCapture).not.toHaveBeenCalled()
+    expect(studentBackendSync.syncStairSession).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('cancels a pending stair start when the page is hidden', async () => {
+    vi.useFakeTimers()
+    let allow!: (value: boolean) => void
+    studentBackendSync.ensureStairsTrainingAccess.mockReturnValue(new Promise<boolean>(resolve => { allow = resolve }))
+    const StairSessionPage = (await import('../uni-app/pages/training/stair-session.vue')).default
+    const wrapper = mount(StairSessionPage, {
+      global: { stubs: {
+        UniTrainingPageShell: { template: '<div><slot /></div>' },
+        StairTrainingPanel: {
+          template: '<button class="start-stair-session" @click="$emit(\'start\')">start</button>'
+        }
+      } }
+    })
+    await wrapper.get('.start-stair-session').trigger('click')
+    const { onHide } = await import('@dcloudio/uni-app')
+    vi.mocked(onHide).mock.calls.at(-1)?.[0]()
+    allow(true)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(startStairSensorCapture).not.toHaveBeenCalled()
+    expect(studentBackendSync.syncStairSession).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('runs the five-minute guide, captures only the sprint window, and prevents duplicate starts', async () => {

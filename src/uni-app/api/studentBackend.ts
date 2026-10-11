@@ -149,6 +149,7 @@ function resolveEducationValue(
 
 export function mapStudentProfileToUserUpdatePayload(profile: RegistrationSyncInput): UserUpdatePayload {
   return omitUndefined({
+    invitation_code: profile.invitationCode?.trim() || undefined,
     name: profile.name.trim() || undefined,
     gender: resolveGenderValue(profile.gender),
     student_id: profile.studentId.trim() || undefined,
@@ -409,6 +410,7 @@ function resolveVisualSessionSummary(
 
 export function isBackendProfileComplete(user: BackendCurrentUser) {
   return (
+    user.study_group !== null &&
     hasTextValue(user.name) &&
     user.gender !== null &&
     hasTextValue(user.student_id) &&
@@ -446,6 +448,11 @@ export function mapBackendCurrentUserToStudentProfile(
 
   return {
     ...seedProfile,
+    invitationCode: undefined,
+    studyGroup: user.study_group,
+    allowedModalities: user.study_group === undefined ? undefined : (user.study_group?.allowed_modalities ?? []).map(
+      modality => modality === 'MARTIAL_ARTS' ? 'wushu' : modality === 'HIIT' ? 'hiit' : 'stair'
+    ),
     studentId: hasTextValue(user.student_id) ? user.student_id.trim() : '',
     name: hasTextValue(user.name) ? user.name.trim() : '',
     gender: resolveBackendGenderLabel(user.gender),
@@ -870,6 +877,11 @@ export function createStudentBackendSync(
 
   return {
     isEnabled: dependencies.isEnabled,
+    async ensureStairsTrainingAccess() {
+      if (!dependencies.isEnabled()) return true
+      await dependencies.ensureSession()
+      return (await dependencies.checkStairsTrainingAccess()).allowed === true
+    },
     async bootstrapAccess() {
       if (!dependencies.isEnabled()) {
         return buildRegistrationAccessResult()
@@ -1019,7 +1031,7 @@ export function createStudentBackendSync(
       return runIfEnabled(dependencies.isEnabled(), async () => {
         await dependencies.ensureSession()
         await dependencies.updateProfile(mapStudentProfileToUserUpdatePayload(profile))
-        submissionOptions.registrationProfileStorage.save(profile)
+        submissionOptions.registrationProfileStorage.save({ ...profile, invitationCode: undefined })
       })
     },
     async syncShortQuestionnaire(

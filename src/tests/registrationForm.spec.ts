@@ -18,6 +18,7 @@ function mountForm() {
 }
 
 async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
+  await wrapper.get('input[name="invitationCode"]').setValue('test-traditional')
   await wrapper.get('input[name="studentId"]').setValue('20260001')
   await wrapper.get('input[name="name"]').setValue('Lin')
   await wrapper.get('input[name="major"]').setValue('Sports Science')
@@ -37,6 +38,17 @@ async function fillValidProfileFields(wrapper: ReturnType<typeof mountForm>) {
 }
 
 describe('registration form', () => {
+  it('requires an invitation code and includes it in the submission', async () => {
+    const wrapper = mountForm()
+    await fillValidProfileFields(wrapper)
+    await wrapper.get('input[name="invitationCode"]').setValue(' ')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await wrapper.get('input[name="invitationCode"]').setValue('test-questionnaire')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toHaveProperty('invitationCode', 'test-questionnaire')
+  })
+
   it('offers descending enrollment years through 2020 and rolls forward with the year', () => {
     expect(registrationGradeOptions(new Date('2026-09-20T00:00:00Z'))).toEqual([
       '2026级', '2025级', '2024级', '2023级', '2022级', '2021级', '2020级'
@@ -63,7 +75,7 @@ describe('registration form', () => {
 
     expect(wrapper.get('input[name="studentId"]').attributes('placeholder'))
       .toBe('八位数字，例如：20260001')
-    expect(wrapper.findAll('.registration-label')).toHaveLength(10)
+    expect(wrapper.findAll('.registration-label')).toHaveLength(11)
     expect(wrapper.findAll('.form-row__field')).toHaveLength(8)
     expect(wrapper.text()).not.toContain('静息心率')
   })

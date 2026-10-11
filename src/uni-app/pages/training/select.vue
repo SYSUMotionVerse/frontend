@@ -5,6 +5,7 @@ import { onShow } from '@dcloudio/uni-app'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
+import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/training/groupAccess'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useStationNotifications } from '../../composables/useStationNotifications'
@@ -128,7 +129,7 @@ const launchModes = computed(() => {
     ? progress.value.modalities.find(item => !item.completed)?.id
     : undefined
 
-  const modes = trainingModes.map<TrainingLaunchMode>(mode => {
+  const modes = trainingModes.filter(mode => isTrainingAllowed(store.state.profile, mode.modality)).map<TrainingLaunchMode>(mode => {
     const completed = completionByModality.get(mode.modality)
     const hasAuthoritativeStatus = completed !== undefined
     const status: TrainingModeStatus = isBrowseOnly.value
@@ -156,6 +157,7 @@ const launchModes = computed(() => {
 })
 
 const heroCopy = computed(() => {
+  if (store.state.profile.allowedModalities?.length === 0) return '您所在组别仅需填写问卷，无需进行训练。'
   if (isBrowseOnly.value) {
     return '先完成问卷，解锁适合你的训练。'
   }
@@ -172,6 +174,10 @@ const heroCopy = computed(() => {
 })
 
 async function chooseMode(modality: TrainingModality) {
+  if (!isTrainingAllowed(store.state.profile, modality)) {
+    showTrainingGroupDenied()
+    return
+  }
   if (isBrowseOnly.value) {
     continueRequiredQuestionnaire()
     return

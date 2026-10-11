@@ -8,6 +8,7 @@ import TrainingHomeProgressOverview from '../../../components/training/TrainingH
 import TrainingReminderAuthorizationCard from '../../../components/training/TrainingReminderAuthorizationCard.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
+import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/training/groupAccess'
 import { pickTrainingHomeQuote } from '../../../features/training/trainingHomeQuotes'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
@@ -150,7 +151,7 @@ const trainingVisuals: Record<TrainingModality, {
 }
 
 const nextTraining = computed(() => {
-  const nextQuest = quests.value.find(quest => quest.highlight)
+  const nextQuest = quests.value.find(quest => quest.highlight && isTrainingAllowed(store.state.profile, quest.id))
   if (!nextQuest) return null
 
   return {
@@ -241,6 +242,10 @@ async function handlePullDownRefresh() {
 async function startNextTraining() {
   const next = nextTraining.value
   if (!next) return
+  if (!isTrainingAllowed(store.state.profile, next.id)) {
+    showTrainingGroupDenied()
+    return
+  }
 
   if (isBrowseOnly.value) {
     continueRequiredQuestionnaire()
@@ -370,14 +375,16 @@ function authorizeTrainingReminders() {
       />
 
       <TrainingHomeProgressOverview
-        v-if="progress"
+        v-if="progress && progress.modalities.length > 0"
         :completed-count="completedQuestCount"
         :goal-completed="progress.goalCompleted"
         :total-count="progress.modalities.length"
         :week-qualifying-day-count="weeklyQualifyingDayCount"
       />
       <view v-else class="home-page__progress-status">
-        <text>{{ trainingProgress.state.value.status === 'error'
+        <text>{{ store.state.profile.allowedModalities?.length === 0
+          ? '您所在组别仅需填写问卷，无需进行训练。'
+          : trainingProgress.state.value.status === 'error'
           ? trainingProgress.state.value.message
           : '正在同步训练概览…' }}</text>
       </view>

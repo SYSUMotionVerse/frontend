@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const controls = vi.hoisted(() => ({
+  profile: { allowedModalities: undefined as undefined | string[] },
   onLoadHandler: null as null | ((query?: Record<string, unknown>) => void),
   listArrangements: vi.fn(),
   ensureAccess: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('../uni-app/composables/useNavigationGuard', () => ({
 
 vi.mock('../uni-app/composables/useStudentStore', () => ({
   useStudentStore: () => ({
+    state: { profile: controls.profile },
     completeTrainingSession: controls.completeTrainingSession
   })
 }))
@@ -94,6 +96,7 @@ async function mountPage() {
 
 describe('exercise arrangement selection page', () => {
   beforeEach(() => {
+    controls.profile.allowedModalities = undefined
     controls.onLoadHandler = null
     controls.listArrangements.mockReset().mockResolvedValue(arrangementFixtures)
     controls.ensureAccess.mockReset().mockResolvedValue(true)

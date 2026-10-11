@@ -23,6 +23,7 @@ export type VisualPoseAngleName =
   | 'torso_rotation'
 
 export interface UserUpdatePayload {
+  invitation_code?: string
   name?: string
   gender?: 1 | 2
   student_id?: string
@@ -36,6 +37,7 @@ export interface UserUpdatePayload {
 }
 
 export interface BackendCurrentUser {
+  study_group?: { id: number, name: string, code: string, allowed_modalities: BackendExerciseType[] } | null
   id: number
   name: string | null
   gender: 1 | 2 | null
@@ -656,6 +658,7 @@ export interface StudentBackendSyncDependencies {
   ) => Promise<TrainingCredentialResponse>
   getExerciseScoreTrend: () => Promise<BackendExerciseScoreTrendResponse>
   createStairsRecord: (payload: StairsRecordCreatePayload) => Promise<unknown>
+  checkStairsTrainingAccess: () => Promise<{ allowed: boolean }>
   listPsychologyScales: () => Promise<BackendPsychologyScale[]>
   getPsychologyQuestionnairePlan?: (
     checkpoint: CheckpointKey

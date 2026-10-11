@@ -9,6 +9,9 @@ export type EducationLevel = '本科生' | '研究生' | '博士生'
 export type TrainingModality = 'wushu' | 'hiit' | 'stair'
 
 export interface StudentProfile {
+  invitationCode?: string
+  studyGroup?: { id: number, name: string, code: string } | null
+  allowedModalities?: TrainingModality[]
   studentId: string
   name: string
   gender: string

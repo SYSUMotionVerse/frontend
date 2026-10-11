@@ -9,6 +9,7 @@ import { createTrainingSessionId } from '../../platform/trainingSessionId'
 import { reportBackendSyncError } from '../../api/reportBackendSyncError'
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { ensureProtectedStudentAccess } from '../../composables/useNavigationGuard'
+import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/training/groupAccess'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { invalidateGrowthOverview } from '../../composables/useGrowthOverview'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
@@ -79,6 +80,10 @@ async function loadArrangements(options: { refresh?: boolean } = {}) {
 async function selectArrangement(arrangement: ExerciseArrangementSummary) {
   const canExecute = await ensureProtectedStudentAccess('execute')
   if (!canExecute) return
+  if (!isTrainingAllowed(store.state.profile, modality.value)) {
+    showTrainingGroupDenied()
+    return
+  }
 
   if (mockEnabled) {
     const completion = buildMockTrainingCompletion({

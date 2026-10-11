@@ -18,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const form = reactive<RegistrationPayload>({
+  invitationCode: '',
   studentId: '',
   name: '',
   gender: '',
@@ -96,6 +97,7 @@ function handleNumericFieldInput(
 
 const canSubmit = computed(() => {
   return (
+    Boolean(form.invitationCode?.trim()) &&
     /^\d{8}$/.test(form.studentId) &&
     form.name.trim().length > 0 &&
     genderOptions.includes(form.gender) &&
@@ -153,6 +155,10 @@ function handleConsentChange(event: { detail?: { value?: string[] } }) {
         </view>
       </view>
 
+      <view class="form-stack-field">
+        <text class="registration-label">邀请码（必填）</text>
+        <input v-model.trim="form.invitationCode" aria-label="邀请码" name="invitationCode" maxlength="100" class="input-shell registration-input-shell" placeholder="请输入研究管理员提供的邀请码" />
+      </view>
       <view class="form-stack-field">
         <text class="registration-label">学号</text>
         <input

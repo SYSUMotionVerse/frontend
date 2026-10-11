@@ -3,7 +3,7 @@ import { computed, shallowRef } from 'vue'
 import RegistrationForm from '../../../components/access/RegistrationForm.vue'
 import type { StudentProfile } from '../../../domain/student/types'
 import { studentBackendSync } from '../../api/studentBackend'
-import { reportBackendSyncError } from '../../api/reportBackendSyncError'
+import { reportBackendSyncError, formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 
@@ -34,13 +34,13 @@ async function handleSubmit(payload: RegistrationPayload) {
     }
   } catch (error) {
     reportBackendSyncError('资料同步', error)
-    errorMessage.value = '资料提交失败，请检查网络后重新提交。'
+    errorMessage.value = `资料提交失败：${formatBackendErrorMessage(error, '请检查网络后重新提交。')}`
     return
   } finally {
     isSubmitting.value = false
   }
 
-  store.completeProfile(completedProfile)
+  store.completeProfile({ ...completedProfile, invitationCode: undefined })
   store.setActiveCheckpoint('baseline')
   void uni.reLaunch({
     url: '/pages/access/questionnaire?checkpoint=baseline'
