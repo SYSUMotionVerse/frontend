@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BackendRequestError } from '../uni-app/api/backendClient'
 const backend = vi.hoisted(() => ({ loadStudyConsent: vi.fn(), submitStudyConsent: vi.fn(), bootstrapAccess: vi.fn() }))
 const recognizer = vi.hoisted(() => ({ prepare: vi.fn(), recognize: vi.fn(), dispose: vi.fn() }))
 vi.mock('../uni-app/api/studentBackend', () => ({ studentBackendSync: backend }))
@@ -109,9 +110,21 @@ describe('local verified signatures and formal consent submission', () => {
     const wrapper = await page(); await complete(wrapper); await agree(wrapper)
     await wrapper.get('.consent-confirm').trigger('click'); await settle()
     expect(uni.reLaunch).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('已保留您的签名')
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
     await wrapper.get('.consent-confirm').trigger('click'); await settle()
     expect(backend.submitStudyConsent.mock.calls[1][0].client_request_id).toBe(backend.submitStudyConsent.mock.calls[0][0].client_request_id)
     expect(uni.reLaunch).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+  it('reports service failure as a retryable submission error with its request ID', async () => {
+    backend.submitStudyConsent.mockRejectedValueOnce(new BackendRequestError('文档服务暂不可用', 503, { requestId: 'consent-service-failed' }))
+    const wrapper = await page(); await complete(wrapper); await agree(wrapper)
+    await wrapper.get('.consent-confirm').trigger('click'); await settle()
+    expect(wrapper.text()).toContain('已保留您的签名')
+    expect(wrapper.text()).toContain('consent-service-failed')
+    expect(wrapper.text()).not.toContain('重新签名后再试')
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
     wrapper.unmount()
   })
   it('ignores late verification after outside close and keeps the mask outside the scrolling shell', async () => {

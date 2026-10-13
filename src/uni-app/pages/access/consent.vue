@@ -4,6 +4,7 @@ import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import SignatureSheet from '../../../components/access/SignatureSheet.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
+import { BackendRequestError } from '../../api/backendClient'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureInput } from '../../api/consentTypes'
 import { createSignatureRecognizer, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
 import { consentFieldStyle } from '../../platform/consentLayout'
@@ -143,7 +144,18 @@ async function confirm() {
     const submitted = await studentBackendSync.submitStudyConsent(pendingUpload)
     if (submitted.status !== 'ACCEPTED') throw new Error('signature_not_submitted')
     await goNext()
-  } catch { error.value = '签名确认未完成，请重新签名后再试。' }
+  } catch (cause) {
+    const status = cause instanceof BackendRequestError ? cause.statusCode : undefined
+    console.warn('[consent-signature] submission_failed', {
+      statusCode: status, requestId: cause instanceof BackendRequestError ? cause.requestId : undefined,
+      stage: 'formal_submission'
+    })
+    const message = status === 400
+      ? formatBackendErrorMessage(cause, '提交未完成，请检查同意书和签名后再试。')
+      : '提交暂未完成，已保留您的签名，请稍后再次点击“确认签署并继续”。'
+    const requestId = cause instanceof BackendRequestError ? cause.requestId : ''
+    error.value = status === 400 ? message : `${message}${requestId ? `（请求编号：${requestId}）` : ''}`
+  }
   finally { busy.value = false }
 }
 function preview(index: number) {
