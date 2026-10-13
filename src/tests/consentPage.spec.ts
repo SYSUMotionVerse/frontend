@@ -68,7 +68,7 @@ describe('local verified signatures and formal consent submission', () => {
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
     await complete(wrapper)
     expect(recognizer.recognize).toHaveBeenCalledOnce()
-    expect(recognizer.dispose).toHaveBeenCalledOnce()
+    expect(recognizer.dispose).not.toHaveBeenCalled()
     expect(wrapper.get('.consent-signed-image').attributes('src')).toMatch(/^data:image\/png;base64,/)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
@@ -93,7 +93,6 @@ describe('local verified signatures and formal consent submission', () => {
   it('drops the first failed draft without sending an error history to the server', async () => {
     recognizer.recognize.mockRejectedValue(new Error('signature_detection_timeout'))
     const wrapper = await page(), sheet = await complete(wrapper)
-    expect(recognizer.dispose).toHaveBeenCalled()
     expect(sheet.props('error')).toContain('请点击“重写”')
     expect(wrapper.text()).not.toMatch(/OCR|超时/)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
@@ -111,6 +110,21 @@ describe('local verified signatures and formal consent submission', () => {
     await wrapper.get('.consent-document-field--signature').trigger('click')
     expect(sheet.props('draft')).toEqual(saved)
     expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('retains the page-scoped session across verified signatures until leaving the page', async () => {
+    const wrapper = await page()
+    await complete(wrapper); await complete(wrapper, draft(80))
+    expect(recognizer.recognize).toHaveBeenCalledTimes(2)
+    expect(recognizer.dispose).not.toHaveBeenCalled()
+    wrapper.unmount()
+    expect(recognizer.dispose).toHaveBeenCalledOnce()
+  })
+  it('prompts an unsupported device to update instead of retrying the native engine indefinitely', async () => {
+    recognizer.recognize.mockRejectedValue(new Error('signature_ocr_unsupported'))
+    const wrapper = await page(), sheet = await complete(wrapper)
+    expect(sheet.props('error')).toContain('请更新微信后重试')
+    expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('keeps signed height and left edge but narrows the frame to the real image aspect', async () => {

@@ -10,7 +10,7 @@ import { createSignatureRecognizer, normalizeSignatureName, type SignaturePixels
 import { consentFieldStyle } from '../../platform/consentLayout'
 import { signatureOperation } from '../../platform/signatureOperation'
 import { yieldSignatureUi, cropSignatureImage, type SignatureDraft } from '../../platform/signatureImage'
-import { SIGNATURE_REWRITE_MESSAGE } from '../../platform/signaturePresentation'
+import { SIGNATURE_REWRITE_MESSAGE, SIGNATURE_UNSUPPORTED_MESSAGE } from '../../platform/signaturePresentation'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 interface SavedSignature { imageBase64: string, imageUrl: string, aspect: number, text: string, draft: SignatureDraft }
@@ -93,10 +93,10 @@ async function verifySignature(value: { imageBase64: string, pixels: SignaturePi
         else cancel()
       }).then(resolve, reject)
     }, 'signature_recognition_deadline', 30000) }
-    catch {
+    catch (cause) {
       cancelRecognition?.()
       cancelRecognition = undefined
-      throw new Error('signature_verification_failed')
+      throw cause instanceof Error && cause.message === 'signature_ocr_unsupported' ? cause : new Error('signature_verification_failed')
     }
     if (!current()) return
     if (normalizeSignatureName(text) !== normalizeSignatureName(document.value.participant_name)) throw new Error('signature_name_mismatch')
@@ -104,13 +104,17 @@ async function verifySignature(value: { imageBase64: string, pixels: SignaturePi
     signature.value = { ...cropped, imageUrl: `data:image/png;base64,${cropped.imageBase64}`, text, draft }
     sheetOpen.value = false
     pendingUpload = null
-  } catch { if (current()) signatureError.value = SIGNATURE_REWRITE_MESSAGE }
-  finally { if (current()) { recognizer.dispose(); cancelRecognition = undefined; busy.value = false } }
+  } catch (cause) {
+    if (current()) signatureError.value = cause instanceof Error && cause.message === 'signature_ocr_unsupported'
+      ? SIGNATURE_UNSUPPORTED_MESSAGE : SIGNATURE_REWRITE_MESSAGE
+  }
+  // Keep the ready native session for this page. Releasing it after a result
+  // can overlap the native result dispatch and the sheet's closing render.
+  finally { if (current()) { cancelRecognition = undefined; busy.value = false } }
 }
 function closeSignature() {
   uploadAttempt++
   cancelRecognition?.()
-  if (!cancelRecognition) recognizer.dispose()
   cancelRecognition = undefined
   sheetOpen.value = false
   busy.value = false
