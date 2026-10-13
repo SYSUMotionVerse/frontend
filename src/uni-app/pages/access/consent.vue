@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, shallowRef } from 'vue'
+import { getCurrentInstance, onMounted, onBeforeUnmount, shallowRef } from 'vue'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import SignatureSheet from '../../../components/access/SignatureSheet.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureResult, ConsentSignatureInput } from '../../api/consentTypes'
 import { recognizeSignatureWithVisionKit, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
+import { consentFieldStyle } from '../../platform/consentLayout'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 const signature = shallowRef<ConsentSignatureResult | null>(null)
@@ -17,9 +18,26 @@ const signatureError = shallowRef('')
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
+const instance = getCurrentInstance()?.proxy
+const pageWidths = shallowRef<Record<number, number>>({})
 
-function fieldStyle(field: ConsentField) {
-  return { left: `${field.x * 100}%`, top: `${field.y * 100}%`, width: `${field.width * 100}%`, height: `${field.height * 100}%` }
+function fieldText(name: string, field: ConsentField) {
+  if (name === 'participant') return '点击进行电子签名'
+  if (name === 'researcher') return document.value?.researcher_name ?? ''
+  return `${field.value_only ? '' : '日期：'}${document.value?.date ?? ''}`
+}
+function fieldStyle(field: ConsentField, index: number, name: string) {
+  const page = document.value!.pages[index]
+  const screenWidth = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync().windowWidth : 375
+  const width = pageWidths.value[index] ?? screenWidth * 654 / 750
+  return consentFieldStyle(field, width, width * page.height / page.width, fieldText(name, field))
+}
+function measurePage(index: number) {
+  if (typeof uni.createSelectorQuery !== 'function') return
+  uni.createSelectorQuery().in(instance).select(`#consent-page-${index}`).boundingClientRect(rect => {
+    const width = (rect as UniApp.NodeInfo | null)?.width
+    if (active && width && width > 0) pageWidths.value = { ...pageWidths.value, [index]: width }
+  }).exec()
 }
 function requestId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, key => {
@@ -97,13 +115,12 @@ onBeforeUnmount(() => { active = false })
     <view v-if="loading" class="consent-status">正在加载同意书…</view>
     <template v-if="document">
       <text class="consent-hint">请完整阅读，文档可点击放大。参加研究完全自愿，如有疑问请联系研究人员。</text>
-      <view v-for="(page, index) in document.pages" :key="index" class="consent-document-page" :style="{ aspectRatio: `${page.width} / ${page.height}` }">
-        <image class="consent-document-image" :src="page.url" mode="widthFix" @click="preview(index)" />
+      <view v-for="(page, index) in document.pages" :id="`consent-page-${index}`" :key="index" class="consent-document-page" :style="{ aspectRatio: `${page.width} / ${page.height}` }">
+        <image class="consent-document-image" :src="page.url" mode="widthFix" @load="measurePage(index)" @click="preview(index)" />
         <template v-for="(field, name) in document.layout" :key="name">
-          <view v-if="field.page === index" class="consent-document-field" :class="{ 'consent-document-field--signature': name === 'participant' }" :style="fieldStyle(field)" @click="name === 'participant' && (sheetOpen = true)">
+          <view v-if="field.page === index" class="consent-document-field" :class="{ 'consent-document-field--signature': name === 'participant' }" :style="fieldStyle(field, index, name)" @click="name === 'participant' && (sheetOpen = true)">
             <template v-if="name === 'participant'"><image v-if="signature" :src="signature.image_url" mode="aspectFit" class="consent-signed-image" /><text v-else>点击进行电子签名</text></template>
-            <text v-else-if="name === 'researcher'">{{ document.researcher_name }}</text>
-            <text v-else>日期：{{ document.date }}</text>
+            <text v-else>{{ fieldText(name, field) }}</text>
           </view>
         </template>
       </view>
@@ -116,5 +133,5 @@ onBeforeUnmount(() => { active = false })
 </template>
 
 <style scoped>
-.consent-hint{display:block;color:#667584;font-size:27rpx;line-height:1.7;margin-bottom:24rpx}.consent-document-page{position:relative;width:100%;margin-bottom:20rpx;background:#fff;border-radius:16rpx;overflow:hidden}.consent-document-image{display:block;width:100%;height:auto}.consent-document-field{position:absolute;display:flex;align-items:center;background:#fff;color:#203344;font-size:19rpx;overflow:hidden;box-sizing:border-box}.consent-document-field--signature{border:2rpx dashed #ce8b7d;justify-content:center;color:#a65b51;font-size:19rpx}.consent-signed-image{width:100%;height:100%}.consent-agreement{display:flex;align-items:flex-start;gap:12rpx;font-size:27rpx;line-height:1.6;color:#526270;margin:28rpx 0}.consent-confirm{margin-top:20rpx}.consent-error{color:#a4473b;font-size:27rpx;margin-top:24rpx}.consent-status{color:#667584;padding:30rpx}
+.consent-hint{display:block;color:#667584;font-size:27rpx;line-height:1.7;margin-bottom:24rpx}.consent-document-page{position:relative;width:100%;margin-bottom:20rpx;background:#fff;border-radius:16rpx;overflow:hidden}.consent-document-image{display:block;width:100%;height:auto}.consent-document-field{position:absolute;display:flex;align-items:center;background:#fff;color:#203344;line-height:1;white-space:nowrap;overflow:hidden;box-sizing:border-box}.consent-document-field--signature{border:2rpx dashed #ce8b7d;justify-content:center;color:#a65b51}.consent-signed-image{width:100%;height:100%}.consent-agreement{display:flex;align-items:flex-start;gap:12rpx;font-size:27rpx;line-height:1.6;color:#526270;margin:28rpx 0}.consent-confirm{margin-top:20rpx}.consent-error{color:#a4473b;font-size:27rpx;margin-top:24rpx}.consent-status{color:#667584;padding:30rpx}
 </style>

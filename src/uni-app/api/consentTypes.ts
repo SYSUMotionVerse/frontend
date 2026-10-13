@@ -4,6 +4,11 @@ export interface ConsentField {
   y: number
   width: number
   height: number
+  font_size?: number
+  baseline_offset?: number
+  value_only?: boolean
+  layout_version?: number
+  mask_padding?: number
 }
 
 export interface StudyConsentDocument {

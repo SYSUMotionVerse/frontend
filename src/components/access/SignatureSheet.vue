@@ -12,11 +12,12 @@ const width = Math.max(240, uni.getSystemInfoSync().windowWidth - 48)
 const height = 170
 const hasInk = shallowRef(false)
 let context: ReturnType<typeof uni.createCanvasContext> | undefined
-let drawing = false
+let previousPoint: { x: number, y: number } | null = null
 let drawPending = false
 let destroyed = false
 
 function reset() {
+  previousPoint = null
   context = uni.createCanvasContext('consentSignature', instance)
   context.setFillStyle('#ffffff')
   context.fillRect(0, 0, width, height)
@@ -35,29 +36,33 @@ watch(() => props.visible, async visible => {
 })
 
 function point(event: unknown) {
-  return (event as { touches: Array<{ x: number, y: number }> }).touches[0]
+  const touch = (event as { touches?: Array<{ x: number, y: number }> }).touches?.[0]
+  return touch && Number.isFinite(touch.x) && Number.isFinite(touch.y) ? touch : null
 }
 function start(event: unknown) {
   if (props.busy || drawPending) return
   const touch = point(event)
   if (!touch || !context) return
-  drawing = true
-  context.beginPath()
-  context.moveTo(touch.x, touch.y)
+  previousPoint = { x: touch.x, y: touch.y }
 }
 function move(event: unknown) {
   const touch = point(event)
-  if (!drawing || !context || !touch || props.busy) return
+  if (!previousPoint || !context || !touch || props.busy || drawPending) return
+  // draw() flushes the native command path on Android. Every segment must
+  // establish its own origin rather than continuing a flushed path.
+  context.beginPath()
+  context.moveTo(previousPoint.x, previousPoint.y)
   context.lineTo(touch.x, touch.y)
   context.stroke()
   context.draw(true)
+  previousPoint = { x: touch.x, y: touch.y }
   hasInk.value = true
 }
-function end() { drawing = false }
+function end() { previousPoint = null }
 
 async function finish() {
   if (!hasInk.value || props.busy || drawPending || !context) return
-  drawing = false
+  previousPoint = null
   drawPending = true
   try {
     await new Promise<void>(resolve => context!.draw(true, () => resolve()))

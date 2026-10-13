@@ -43,6 +43,24 @@ describe('informed consent page', () => {
     await wrapper.get('.consent-confirm').trigger('click')
     expect(backend.acceptStudyConsent).not.toHaveBeenCalled()
   })
+  it('fills only the original date blank and recomputes typography from the measured image width', async () => {
+    const document = await backend.loadStudyConsent()
+    document.layout = Object.fromEntries(Object.entries(document.layout).map(([name, field]) => [name, {
+      ...(field as object), value_only: true, font_size: .02
+    }]))
+    backend.loadStudyConsent.mockResolvedValue(document)
+    vi.stubGlobal('uni', { getSystemInfoSync: () => ({ windowWidth: 375 }),
+      createSelectorQuery: () => ({ in() { return this }, select() { return this },
+        boundingClientRect(callback: (rect: { width: number }) => void) { callback({ width: 250 }); return this }, exec() {} }) })
+    const wrapper = await page()
+    const field = wrapper.get('.consent-document-field').element as HTMLElement
+    const before = parseFloat(field.style.fontSize)
+    await wrapper.get('.consent-document-image').trigger('load')
+    await flushPromises()
+    expect(parseFloat(field.style.fontSize)).toBeLessThan(before)
+    expect(wrapper.text()).not.toContain('日期：')
+    expect(wrapper.text().match(/2026年10月13日/g)).toHaveLength(2)
+  })
   it('asks for a new signature after OCR rejection and never confirms the rejected attempt', async () => {
     backend.uploadConsentSignature.mockResolvedValue({ id: 'bad', status: 'REJECTED', error: '请重新签名' })
     const wrapper = await page()
