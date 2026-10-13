@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UniIcons from '@dcloudio/uni-ui/lib/uni-icons/uni-icons.vue'
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import TrainingHomeHeader from '../../../components/training/TrainingHomeHeader.vue'
 import QuestionnaireUnlockBanner from '../../../components/access/QuestionnaireUnlockBanner.vue'
 import type { TrainingModality } from '../../../domain/student/types'
@@ -9,6 +9,7 @@ import { isTrainingAllowed, showTrainingGroupDenied } from '../../../features/tr
 import UniTrainingPageShell from '../../components/training/UniTrainingPageShell.vue'
 import { useStudentStore } from '../../composables/useStudentStore'
 import { useStationNotifications } from '../../composables/useStationNotifications'
+import { useReminderReturn } from '../../composables/useReminderReturn'
 import { useReminderConsent } from '../../composables/useReminderConsent'
 import { useTrainingProgress } from '../../composables/useTrainingProgress'
 import { useTrainingHomeProgressViewModel } from '../../composables/useTrainingHomeProgressViewModel'
@@ -86,6 +87,7 @@ const trainingModes: TrainingModeSummary[] = [
 const store = useStudentStore()
 const trainingProgress = useTrainingProgress()
 const stationNotifications = useStationNotifications()
+const reminderReturn = useReminderReturn()
 const reminderConsent = useReminderConsent()
 const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
@@ -100,8 +102,18 @@ const {
   displayName
 })
 
-onShow(() => {
-  void Promise.all([
+onLoad(query => {
+  reminderReturn.capture({
+    tracking: query?.tracking?.toString(),
+    slot: query?.slot?.toString(),
+    date: query?.date?.toString()
+  })
+})
+
+onShow(async () => {
+  await reminderReturn.resolvePending()
+  if (reminderReturn.state.value.status === 'resolved') store.setReminderSource('wechat-reminder')
+  await Promise.all([
     trainingProgress.refresh(),
     stationNotifications.refresh(),
     reminderConsent.loadStatus()

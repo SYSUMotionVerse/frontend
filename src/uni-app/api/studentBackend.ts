@@ -1379,7 +1379,7 @@ export function createStudentBackendSync(
       const [page, unreadNotifications] = await Promise.all([notificationPage, unread])
       return {
         count: unreadNotifications?.count ?? 0,
-        notifications: page.notifications.filter(item => item.notification_type === 'TRAINING_REMINDER'),
+        notifications: page.notifications.filter(item => ['TRAINING_REMINDER', 'SCALE_REMINDER'].includes(item.notification_type)),
         nextPage: page.nextPage
       }
     },
@@ -1390,6 +1390,13 @@ export function createStudentBackendSync(
 
       await dependencies.ensureSession()
       await dependencies.markNotificationRead(id)
+      return { synced: true } as const
+    },
+    async markAllStationNotificationsRead() {
+      if (!dependencies.isEnabled()) return { synced: false, reason: 'disabled' } as const
+      if (!dependencies.markAllNotificationsRead) throw new Error('批量已读接口不可用，请更新后重试。')
+      await dependencies.ensureSession()
+      await dependencies.markAllNotificationsRead()
       return { synced: true } as const
     },
     async resolveReminderReturn(target: ReminderReturnTarget) {

@@ -787,6 +787,17 @@ describe('backend client session handling', () => {
     expect(uniMock.request).toHaveBeenCalledTimes(2)
   })
 
+  it('marks training and questionnaire reminders read across every page', async () => {
+    const uniMock = createUniMock([{ statusCode: 200, data: { message: '已标记为已读' } }])
+    ;(globalThis as { uni?: unknown }).uni = uniMock
+    const client = createBackendClient('http://api.example.com')
+    await client.markAllNotificationsRead()
+    expect(uniMock.request.mock.calls[0]?.[0]).toMatchObject({
+      url: 'http://api.example.com/notifications/messages/mark_all_read/?notification_type=TRAINING_REMINDER,SCALE_REMINDER',
+      method: 'POST'
+    })
+  })
+
   it('loads persisted achievement awards from training progress', async () => {
     const payload = {
       milestones: [],

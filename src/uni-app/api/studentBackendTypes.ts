@@ -682,6 +682,7 @@ export interface StudentBackendSyncDependencies {
   listNotifications: () => Promise<BackendStationNotification[]>
   getUnreadNotifications: () => Promise<BackendUnreadNotifications>
   markNotificationRead: (id: number) => Promise<unknown>
+  markAllNotificationsRead?: () => Promise<unknown>
   resolveReminderReturn: (payload: BackendReminderReturnPayload) => Promise<BackendReminderReturn>
   submitShortQuestionnaire?: (
     payload: ShortQuestionnaireCreatePayload

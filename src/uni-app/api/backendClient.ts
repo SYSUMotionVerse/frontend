@@ -689,6 +689,11 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
         method: 'POST'
       })
     },
+    markAllNotificationsRead() {
+      return request('/notifications/messages/mark_all_read/?notification_type=TRAINING_REMINDER,SCALE_REMINDER', {
+        method: 'POST'
+      })
+    },
     resolveReminderReturn(payload: BackendReminderReturnPayload) {
       return request<BackendReminderReturn>('/notifications/messages/resolve_return/', {
         method: 'POST',

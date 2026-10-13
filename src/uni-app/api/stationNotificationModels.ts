@@ -7,6 +7,7 @@ export interface StationNotificationViewModel {
   isRead: boolean
   slot: '09:00' | '12:00' | '18:00' | null
   actionTarget: string
+  actionLabel: string
   createdAtLabel: string
   readSyncFailed: boolean
 }
@@ -68,7 +69,10 @@ export function mapStationNotification(
     content: notification.content,
     isRead: notification.is_read,
     slot: notification.reminder_slot,
-    actionTarget: notification.action_target,
+    actionTarget: notification.notification_type === 'TRAINING_REMINDER'
+      ? (notification.action_target.trim() || '/pages/training/select').replace(/^\/pages\/training\/home(?=\?|$)/, '/pages/training/select')
+      : notification.action_target,
+    actionLabel: notification.notification_type === 'SCALE_REMINDER' ? '填写问卷' : '去跟练',
     createdAtLabel: formatNotificationCreatedAt(notification.created_at),
     readSyncFailed: false
   }

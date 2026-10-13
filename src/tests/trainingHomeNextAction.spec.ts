@@ -4,7 +4,9 @@ import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const controls = vi.hoisted(() => ({
-  accessState: { value: { level: 'execute', questionnaireUrl: '/pages/access/questionnaire?checkpoint=baseline' } },
+  accessState: { value: { level: 'execute', questionnaireUrl: '/pages/access/questionnaire?checkpoint=baseline' } as {
+    level: string, questionnaireUrl: string, questionnaireCheckpoint?: 'week4', questionnaireAvailable?: boolean
+  } },
   continueRequiredQuestionnaire: vi.fn(),
   ensureProtectedStudentAccess: vi.fn(),
   navigateTo: vi.fn(),
@@ -299,6 +301,18 @@ describe('training home next action', () => {
     expect(controls.topUpQuota).not.toHaveBeenCalled()
     expect(maybePromptThenAuthorize).toHaveBeenCalledTimes(1)
     expect(authorizeReminders).not.toHaveBeenCalled()
+  })
+
+  it('only shows follow-up reminders when their questionnaire is available', async () => {
+    controls.accessState.value = { level: 'execute', questionnaireUrl: '/pages/access/questionnaire?checkpoint=week4',
+      questionnaireCheckpoint: 'week4', questionnaireAvailable: false }
+    const closed = await mountHome()
+    expect(closed.findComponent({ name: 'QuestionnaireUnlockBanner' }).exists()).toBe(false)
+    closed.unmount()
+    controls.accessState.value = { ...controls.accessState.value, questionnaireAvailable: true }
+    const open = await mountHome()
+    expect(open.findComponent({ name: 'QuestionnaireUnlockBanner' }).exists()).toBe(true)
+    open.unmount()
   })
 
   it('uses the coach quote milk-white surface for every home card', () => {

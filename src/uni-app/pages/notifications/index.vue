@@ -36,12 +36,23 @@ async function handlePullDownRefresh() {
     @refresh="handlePullDownRefresh"
   >
     <view class="notification-page">
-      <UniPageHeading
-        inset
-        eyebrow="训练提醒"
-        title="提醒中心"
-        description="查看午间和晚间提醒，安排今天的训练。"
-      />
+      <view class="notification-page__heading">
+        <UniPageHeading
+          inset
+          eyebrow="训练提醒"
+          title="提醒中心"
+          description="查看提醒，安排今天的训练与问卷。"
+        />
+        <button
+          class="notification-page__read-all"
+          data-notification-read-all
+          :disabled="stationNotifications.isMarkingAllRead.value || stationNotifications.unreadCount.value === 0"
+          @click="stationNotifications.markAllRead"
+        >{{ stationNotifications.isMarkingAllRead.value ? '正在同步…' : '一键已读' }}</button>
+      </view>
+      <text v-if="stationNotifications.markAllReadError.value" class="notification-page__read-error">
+        {{ stationNotifications.markAllReadError.value }}
+      </text>
 
       <view v-if="stationNotifications.state.value.status === 'loading'" class="notification-page__status">
         <text>正在同步提醒…</text>
@@ -76,6 +87,28 @@ async function handlePullDownRefresh() {
   gap: 36rpx;
   padding: 20rpx 32rpx 80rpx;
 }
+
+.notification-page__heading {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.notification-page__read-all {
+  flex: none;
+  margin: 24rpx 0 0;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: #fff;
+  color: #c76b5b;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.notification-page__read-all::after { border: none; }
+.notification-page__read-all[disabled] { color: #9ba4ae; }
+.notification-page__read-error { color: #a14f4f; font-size: 24rpx; }
 
 .notification-page__status {
   color: #7b8798;

@@ -33,6 +33,8 @@ const state = shallowRef<StationNotificationState>({
 const unreadCount = shallowRef(0)
 const isLoadingMore = shallowRef(false)
 const loadMoreError = shallowRef('')
+const isMarkingAllRead = shallowRef(false)
+const markAllReadError = shallowRef('')
 let notificationRequestGeneration = 0
 const notificationsCache = createRequestCache({
   ttlMs: 60_000,
@@ -135,7 +137,7 @@ export function useStationNotifications() {
       }
     }
 
-    const actionTarget = notification.actionTarget.trim() || '/pages/training/home'
+    const actionTarget = notification.actionTarget.trim() || '/pages/training/select'
     const separator = actionTarget.includes('?') ? '&' : '?'
     const targetUrl = `${actionTarget}${separator}source=reminder`
     const targetPath = actionTarget.split('?')[0]
@@ -157,6 +159,29 @@ export function useStationNotifications() {
     uni.navigateTo({ url: targetUrl })
   }
 
+  async function markAllRead() {
+    if (isMarkingAllRead.value || unreadCount.value === 0) return
+    isMarkingAllRead.value = true
+    markAllReadError.value = ''
+    try {
+      const result = await studentBackendSync.markAllStationNotificationsRead()
+      if (!result.synced) throw new Error('提醒服务尚未启用。')
+      notificationRequestGeneration += 1
+      notificationsCache.invalidate()
+      unreadCount.value = 0
+      state.value = {
+        status: 'ready',
+        nextPage: state.value.nextPage,
+        notifications: state.value.notifications.map(item => ({ ...item, isRead: true, readSyncFailed: false }))
+      }
+    } catch (error) {
+      reportBackendSyncError('提醒全部已读同步', error)
+      markAllReadError.value = '全部已读同步失败，请点击按钮重试。'
+    } finally {
+      isMarkingAllRead.value = false
+    }
+  }
+
   function openList() {
     uni.navigateTo({ url: '/pages/notifications/index' })
   }
@@ -165,6 +190,7 @@ export function useStationNotifications() {
     notificationRequestGeneration += 1
     notificationsCache.invalidate()
     loadMoreError.value = ''
+    markAllReadError.value = ''
   }
 
   return {
@@ -175,6 +201,9 @@ export function useStationNotifications() {
     hasMore: computed(() => Boolean(state.value.nextPage)),
     isLoadingMore: readonly(isLoadingMore),
     loadMoreError: readonly(loadMoreError),
+    isMarkingAllRead: readonly(isMarkingAllRead),
+    markAllReadError: readonly(markAllReadError),
+    markAllRead,
     invalidate,
     open,
     openList

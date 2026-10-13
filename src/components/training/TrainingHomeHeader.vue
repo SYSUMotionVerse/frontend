@@ -76,11 +76,11 @@ const reminderActionLabel = computed(() => {
           aria-label="查看训练提醒"
           @click="emit('openNotifications')"
         >
-          <text v-if="props.unreadCount > 0" class="home-header__bell-badge">
-            {{ props.unreadCount > 99 ? '99+' : props.unreadCount }}
-          </text>
           <uni-icons type="notification-filled" size="25" color="#ff8c93" />
         </button>
+        <text v-if="props.unreadCount > 0" class="home-header__bell-badge">
+          {{ props.unreadCount > 99 ? '99+' : props.unreadCount }}
+        </text>
         <button
           v-if="reminderActionLabel"
           class="home-header__reminder-action"
@@ -249,23 +249,28 @@ const reminderActionLabel = computed(() => {
 
 .home-header__bell-badge {
   position: absolute;
-  top: 20rpx;
-  right: 20rpx;
+  top: -4rpx;
+  right: -4rpx;
+  z-index: 1;
+  pointer-events: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 28rpx;
-  min-height: 28rpx;
-  padding: 2rpx 7rpx;
+  height: 28rpx;
+  padding: 0 7rpx;
   border-radius: 9999px;
   background: #ff8b8b;
   color: #fffaf6;
   font-size: 16rpx;
-  line-height: 1.4;
+  line-height: 28rpx;
   font-weight: 900;
   text-align: center;
 }
 
 .home-header--compact .home-header__bell-badge {
-  top: 16rpx;
-  right: 16rpx;
+  right: 2rpx;
 }
 
 .home-header__reminder-action {

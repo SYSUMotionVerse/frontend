@@ -35,10 +35,10 @@ const accessState = useProtectedAccessState()
 const isBrowseOnly = computed(() => accessState.value.level === 'browse')
 const pendingQuestionnaire = computed(() => {
   const checkpoint = accessState.value.questionnaireCheckpoint
-  if (!checkpoint || checkpoint === 'baseline') return null
+  if (!checkpoint || checkpoint === 'baseline' || accessState.value.questionnaireAvailable === false) return null
   return {
     checkpoint,
-    available: accessState.value.questionnaireAvailable !== false,
+    available: true,
     scheduledAt: accessState.value.questionnaireScheduledAt ?? null
   }
 })

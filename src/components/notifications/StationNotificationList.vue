@@ -26,14 +26,11 @@ const emit = defineEmits<{
     >
       <view class="notification-row__topline">
         <text class="notification-row__title">{{ notification.title }}</text>
-        <text v-if="notification.slot" class="notification-row__slot">
-          {{ notification.slot }}
-        </text>
       </view>
       <text class="notification-row__content">{{ notification.content }}</text>
       <view class="notification-row__footer">
         <text>{{ notification.createdAtLabel }}</text>
-        <text class="notification-row__action">查看今日训练</text>
+        <text class="notification-row__action">{{ notification.actionLabel }}</text>
       </view>
       <text v-if="notification.readSyncFailed" class="notification-row__sync-error">
         未读状态同步失败，点击可重试
@@ -101,17 +98,6 @@ const emit = defineEmits<{
 .notification-row__title {
   font-size: 30rpx;
   line-height: 1.3;
-  font-weight: 900;
-}
-
-.notification-row__slot {
-  flex: none;
-  padding: 6rpx 14rpx;
-  border-radius: 9999px;
-  background: rgba(255, 236, 199, 0.46);
-  color: #a87313;
-  font-size: 20rpx;
-  line-height: 1.2;
   font-weight: 900;
 }
 

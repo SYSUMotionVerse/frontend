@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const loadStationNotifications = vi.fn()
 const markStationNotificationRead = vi.fn()
+const markAllStationNotificationsRead = vi.fn()
 const navigateTo = vi.fn()
 const switchTab = vi.fn()
 const reLaunch = vi.fn()
@@ -21,7 +22,8 @@ vi.mock('@dcloudio/uni-app', () => ({
 vi.mock('../uni-app/api/studentBackend', () => ({
   studentBackendSync: {
     loadStationNotifications,
-    markStationNotificationRead
+    markStationNotificationRead,
+    markAllStationNotificationsRead
   }
 }))
 
@@ -76,6 +78,7 @@ describe('station notifications', () => {
       ]
     })
     markStationNotificationRead.mockReset().mockResolvedValue(undefined)
+    markAllStationNotificationsRead.mockReset().mockResolvedValue({ synced: true })
     navigateTo.mockReset()
     switchTab.mockReset()
     reLaunch.mockReset()
@@ -178,7 +181,15 @@ describe('station notifications', () => {
     expect(formatNotificationCreatedAt('not-a-date')).toBe('时间待同步')
   })
 
-  it('renders notification rows and opens a reminder at the three-mode overview', async () => {
+  it('keeps daily questionnaire reminder targets separate from training', async () => {
+    const { mapStationNotification } = await import('../uni-app/api/stationNotificationModels')
+    const notification = mapStationNotification({ id: 18, notification_type: 'SCALE_REMINDER', title: '问卷提醒', content: '填写今日问卷',
+      is_read: false, reminder_slot: '09:00', action_target: '/pages/training/home?slot=09%3A00', created_at: '2026-10-13T01:00:00Z' })
+    expect(notification.actionTarget).toBe('/pages/training/home?slot=09%3A00')
+    expect(notification.actionLabel).toBe('填写问卷')
+  })
+
+  it('renders one timestamp and opens a reminder at the training selection page', async () => {
     const NotificationPage = (await import('../uni-app/pages/notifications/index.vue')).default
     const wrapper = mount(NotificationPage, {
       global: {
@@ -193,13 +204,15 @@ describe('station notifications', () => {
     expect(wrapper.text()).toContain('18:00')
     expect(wrapper.text()).toContain('自重抗阻跟练、楼梯训练')
     expect(wrapper.text()).toContain('7月16日 18:00')
+    expect(wrapper.find('.notification-row__slot').exists()).toBe(false)
+    expect(wrapper.get('.notification-row__action').text()).toBe('去跟练')
 
     await wrapper.get('[data-notification-id="17"]').trigger('click')
     await flushPromises()
 
     expect(markStationNotificationRead).toHaveBeenCalledWith(17)
     expect(switchTab).toHaveBeenCalledWith({
-      url: '/pages/training/home'
+      url: '/pages/training/select'
     })
   })
 
@@ -223,7 +236,7 @@ describe('station notifications', () => {
       expect.any(Error)
     )
     expect(switchTab).toHaveBeenCalledWith({
-      url: '/pages/training/home'
+      url: '/pages/training/select'
     })
     expect(wrapper.text()).toContain('未读状态同步失败，点击可重试')
 
@@ -256,7 +269,7 @@ describe('station notifications', () => {
 
     expect(markStationNotificationRead).not.toHaveBeenCalled()
     expect(reLaunch).toHaveBeenCalledWith({
-      url: '/pages/training/home?tracking=bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26&slot=18%3A00&date=2026-07-16&source=reminder'
+      url: '/pages/training/select?tracking=bc4f8e6e-7418-4a9d-9f89-f6cb7441ca26&slot=18%3A00&date=2026-07-16&source=reminder'
     })
   })
 
@@ -282,6 +295,38 @@ describe('station notifications', () => {
     expect(wrapper.text()).toContain('晚间训练提醒')
   })
 
+  it('marks all pages read through one request and clears the shared unread count', async () => {
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    const notifications = useStationNotifications()
+    notifications.invalidate()
+    const NotificationPage = (await import('../uni-app/pages/notifications/index.vue')).default
+    const wrapper = mount(NotificationPage, { global: { stubs: { UniTrainingPageShell: { template: '<div><slot /></div>' } } } })
+    await flushPromises()
+    await wrapper.get('[data-notification-read-all]').trigger('click')
+    await flushPromises()
+    expect(markAllStationNotificationsRead).toHaveBeenCalledTimes(1)
+    expect(notifications.unreadCount.value).toBe(0)
+    expect(notifications.state.value.notifications.every(item => item.isRead)).toBe(true)
+    expect(wrapper.get('[data-notification-read-all]').attributes('disabled')).toBeDefined()
+    expect(navigateTo).not.toHaveBeenCalled()
+    expect(switchTab).not.toHaveBeenCalled()
+  })
+
+  it('retains unread state and allows retry after batch read fails', async () => {
+    const { useStationNotifications } = await import('../uni-app/composables/useStationNotifications')
+    const notifications = useStationNotifications()
+    notifications.invalidate()
+    await notifications.refresh({ force: true })
+    markAllStationNotificationsRead.mockRejectedValueOnce(new Error('offline'))
+    await notifications.markAllRead()
+    expect(notifications.unreadCount.value).toBe(1)
+    expect(notifications.state.value.notifications[0].isRead).toBe(false)
+    expect(notifications.markAllReadError.value).toContain('重试')
+    await notifications.markAllRead()
+    expect(notifications.unreadCount.value).toBe(0)
+    expect(notifications.markAllReadError.value).toBe('')
+  })
+
   it('home header exposes the unread indicator and routes to the list', async () => {
     const HomePage = (await import('../uni-app/pages/training/home.vue')).default
     const wrapper = mount(HomePage, {
@@ -299,6 +344,7 @@ describe('station notifications', () => {
 
     await flushPromises()
     expect(wrapper.get('.home-header__bell-badge').text()).toBe('1')
+    expect(wrapper.get('.home-header__bell-shell').find('.home-header__bell-badge').exists()).toBe(false)
     await wrapper.get('.home-header__bell-shell').trigger('click')
     expect(navigateTo).toHaveBeenCalledWith({ url: '/pages/notifications/index' })
     expect(topUpQuota).toHaveBeenCalledTimes(1)
