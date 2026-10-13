@@ -10,9 +10,16 @@ vi.mock('../uni-app/platform/signatureOcr', async importOriginal => ({
   ...await importOriginal<typeof import('../uni-app/platform/signatureOcr')>(), recognizeSignatureWithVisionKit: ocr
 }))
 
+async function settleUpload() {
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(5)
+  await flushPromises()
+}
+
 describe('informed consent page', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
   beforeEach(() => {
+    vi.useFakeTimers()
     ocr.mockReset()
     ocr.mockResolvedValue('李芳滨')
     backend.uploadConsentSignature.mockReset()
@@ -30,10 +37,10 @@ describe('informed consent page', () => {
   async function page() {
     const ConsentPage = (await import('../uni-app/pages/access/consent.vue')).default
     const wrapper = mount(ConsentPage, { global: { stubs: {
-      UniAccessPageShell: { template: '<div><slot /></div>' },
+      UniAccessPageShell: { name: 'UniAccessPageShell', template: '<div><slot /></div>' },
       SignatureSheet: { name: 'SignatureSheet', props: ['visible', 'error', 'busy'], template: '<div class="sheet">{{ error }}</div>' }
     } } })
-    await flushPromises()
+    await settleUpload()
     return wrapper
   }
   it('shows document fields and requires a signature plus voluntary agreement', async () => {
@@ -57,7 +64,7 @@ describe('informed consent page', () => {
     const field = wrapper.get('.consent-document-field').element as HTMLElement
     const before = parseFloat(field.style.fontSize)
     await wrapper.get('.consent-document-image').trigger('load')
-    await flushPromises()
+    await settleUpload()
     expect(parseFloat(field.style.fontSize)).toBeLessThan(before)
     expect(wrapper.text()).not.toContain('日期：')
     expect(wrapper.text().match(/2026年10月13日/g)).toHaveLength(2)
@@ -66,7 +73,7 @@ describe('informed consent page', () => {
     backend.uploadConsentSignature.mockResolvedValue({ id: 'bad', status: 'REJECTED', error: '请重新签名' })
     const wrapper = await page()
     wrapper.findComponent({ name: 'SignatureSheet' }).vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(), width: 1, height: 1 } })
-    await flushPromises()
+    await settleUpload()
     expect(wrapper.text()).toContain('请重新签名')
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
     expect(backend.acceptStudyConsent).not.toHaveBeenCalled()
@@ -74,11 +81,11 @@ describe('informed consent page', () => {
   it('only confirms the verified attempt after agreement and then routes using backend progress', async () => {
     const wrapper = await page()
     wrapper.findComponent({ name: 'SignatureSheet' }).vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(), width: 1, height: 1 } })
-    await flushPromises()
+    await settleUpload()
     wrapper.get('checkbox-group').element.dispatchEvent(new CustomEvent('change', { detail: { value: ['agree'] } }))
-    await flushPromises()
+    await settleUpload()
     await wrapper.get('.consent-confirm').trigger('click')
-    await flushPromises()
+    await settleUpload()
     expect(backend.acceptStudyConsent).toHaveBeenCalledWith('verified')
     expect(uni.reLaunch).toHaveBeenCalledWith({ url: '/pages/access/questionnaire?checkpoint=baseline' })
   })
@@ -87,7 +94,7 @@ describe('informed consent page', () => {
     backend.uploadConsentSignature.mockResolvedValue({ id: 'bad', status: 'REJECTED', error: '需重签' })
     const wrapper = await page()
     wrapper.findComponent({ name: 'SignatureSheet' }).vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(), width: 1, height: 1 } })
-    await flushPromises()
+    await settleUpload()
     expect(backend.uploadConsentSignature).toHaveBeenCalledWith(expect.objectContaining({
       image_base64: 'png', client_recognition: { method: 'wechat-visionkit', text: '', error: '当前微信不支持签名识别，请更新微信后重新签名。' }
     }))
@@ -102,17 +109,17 @@ describe('informed consent page', () => {
     const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
     const input = { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(4), width: 1, height: 1 } }
     sheet.vm.$emit('complete', input)
-    await flushPromises()
+    await settleUpload()
     expect(sheet.props('busy')).toBe(true)
     await vi.advanceTimersByTimeAsync(35000)
-    await flushPromises()
+    await settleUpload()
     expect(sheet.props('busy')).toBe(false)
     expect(wrapper.text()).toContain('签名上传超时')
     resolveLate({ id: 'late', status: 'VERIFIED', image_url: 'late.png' })
-    await flushPromises()
+    await settleUpload()
     expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
     sheet.vm.$emit('complete', input)
-    await flushPromises()
+    await settleUpload()
     expect(backend.uploadConsentSignature.mock.calls[1][0].client_request_id).toBe(backend.uploadConsentSignature.mock.calls[0][0].client_request_id)
     expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
     wrapper.unmount()
@@ -124,13 +131,44 @@ describe('informed consent page', () => {
     const wrapper = await page()
     const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
     sheet.vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(4), width: 1, height: 1 } })
-    await flushPromises()
+    await settleUpload()
     await vi.advanceTimersByTimeAsync(8000)
-    await flushPromises()
+    await settleUpload()
     expect(sheet.props('busy')).toBe(false)
     expect(wrapper.text()).toContain('微信 OCR 识别未完成')
     expect(backend.uploadConsentSignature.mock.calls[0][0].client_recognition.error).toContain('微信 OCR 识别未完成')
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+  it('mounts the signature mask outside the scrolling shell so it covers the navigation title', async () => {
+    const wrapper = await page()
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    expect(wrapper.findComponent({ name: 'UniAccessPageShell' }).element.contains(sheet.element)).toBe(false)
+    wrapper.unmount()
+  })
+  it('cancels recognition on outside close and ignores the result of a previous upload after reopening', async () => {
+    let resolveLate!: (value: unknown) => void
+    backend.uploadConsentSignature.mockImplementationOnce(() => new Promise(resolve => { resolveLate = resolve }))
+    const cancel = vi.fn()
+    ocr.mockImplementationOnce((_pixels, _runtime, registerCancel) => {
+      registerCancel(cancel)
+      return Promise.resolve('李芳滨')
+    })
+    const wrapper = await page()
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    sheet.vm.$emit('complete', { imageBase64: 'old', pixels: { data: new Uint8ClampedArray(4), width: 1, height: 1 } })
+    await settleUpload()
+    sheet.vm.$emit('close')
+    await settleUpload()
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(sheet.props('busy')).toBe(false)
+    expect(sheet.props('visible')).toBe(false)
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    resolveLate({ id: 'old', status: 'VERIFIED', image_url: 'old.png' })
+    await settleUpload()
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
+    expect(sheet.props('visible')).toBe(true)
     wrapper.unmount()
   })
 })

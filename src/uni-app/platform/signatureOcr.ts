@@ -21,7 +21,8 @@ export function normalizeSignatureName(value: string) {
 
 export function recognizeSignatureWithVisionKit(
   pixels: SignaturePixels,
-  runtime: VisionKitRuntime = typeof wx === 'undefined' ? {} : wx
+  runtime: VisionKitRuntime = typeof wx === 'undefined' ? {} : wx,
+  registerCancel?: (cancel: () => void) => void
 ): Promise<string> {
   if (!runtime.createVKSession) return Promise.reject(new Error('当前微信不支持签名识别，请更新微信后重新签名。'))
   return new Promise((resolve, reject) => {
@@ -31,12 +32,18 @@ export function recognizeSignatureWithVisionKit(
       if (settled) return
       settled = true
       clearTimeout(timeout)
-      try { session?.stop() } catch { /* Release even after native errors. */ }
-      try { session?.destroy() } catch { /* No session may remain on retry. */ }
       if (error) reject(error)
       else resolve(text ?? '')
+      // Do not destroy a native session while it is dispatching OCR anchors.
+      // Release it on the next task, outside that native callback stack.
+      setTimeout(() => {
+        try { session?.stop() } catch { /* Release even after native errors. */ }
+        try { session?.destroy() } catch { /* No session may remain on retry. */ }
+      }, 0)
     }
     const timeout = setTimeout(() => finish(undefined, new Error('微信 OCR 超时，请重新签名并重试。')), 6000)
+    registerCancel?.(() => finish(undefined, new Error('签名识别已取消。')))
+    if (settled) return
     try {
       session = runtime.createVKSession!({ track: { OCR: { mode: 2 } } })
       session.on('updateAnchors', anchors => finish(anchors.map(anchor => anchor.text ?? '').join('')))

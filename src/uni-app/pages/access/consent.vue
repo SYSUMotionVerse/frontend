@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getCurrentInstance, onMounted, onBeforeUnmount, shallowRef } from 'vue'
+import { getCurrentInstance, nextTick, onMounted, onBeforeUnmount, shallowRef } from 'vue'
 import UniAccessPageShell from '../../components/access/UniAccessPageShell.vue'
 import SignatureSheet from '../../../components/access/SignatureSheet.vue'
 import { studentBackendSync } from '../../api/studentBackend'
@@ -8,6 +8,7 @@ import type { StudyConsentDocument, ConsentField, ConsentSignatureResult, Consen
 import { recognizeSignatureWithVisionKit, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
 import { consentFieldStyle } from '../../platform/consentLayout'
 import { signatureOperation } from '../../platform/signatureOperation'
+import { yieldSignatureUi } from '../../platform/signatureImage'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 const signature = shallowRef<ConsentSignatureResult | null>(null)
@@ -20,6 +21,8 @@ const signatureProgress = shallowRef('')
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
+let uploadAttempt = 0
+let cancelRecognition: (() => void) | undefined
 const instance = getCurrentInstance()?.proxy
 const pageWidths = shallowRef<Record<number, number>>({})
 
@@ -64,16 +67,24 @@ async function load() {
 async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
   if (busy.value || !document.value) return
   busy.value = true
+  const attempt = ++uploadAttempt
+  const current = () => active && uploadAttempt === attempt
   signatureError.value = ''
   signatureProgress.value = '正在识别姓名，最多等待 8 秒…'
   try {
+    await nextTick()
+    await yieldSignatureUi()
+    if (!current()) return
     let text = ''
     let recognitionError = ''
     try { text = await signatureOperation<string>((resolve, reject) => {
-      recognizeSignatureWithVisionKit(value.pixels).then(resolve, reject)
+      recognizeSignatureWithVisionKit(value.pixels, undefined, cancel => {
+        if (current()) cancelRecognition = cancel
+        else cancel()
+      }).then(resolve, reject)
     }, '微信 OCR 识别未完成，请重新签名并重试。', 8000) }
     catch (cause) { recognitionError = cause instanceof Error ? cause.message : '微信 OCR 识别失败，请重新签名。' }
-    if (!active) return
+    if (!current()) return
     const matched = !recognitionError && normalizeSignatureName(text) === normalizeSignatureName(document.value.participant_name)
     if (!matched) signatureError.value = recognitionError || '未能识别完整姓名，请用清晰楷体重新签名。'
     signatureProgress.value = '正在上传签名，请稍候…'
@@ -85,7 +96,7 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
     const result = await signatureOperation<ConsentSignatureResult>((resolve, reject) => {
       studentBackendSync.uploadConsentSignature(input).then(resolve, reject)
     }, '签名上传超时，请检查网络后再次点击完成。', 35000)
-    if (!active) return
+    if (!current()) return
     if (!matched || (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED')) {
       signature.value = null
       signatureError.value = recognitionError || result.error || '未能识别完整姓名，请用清晰楷体重新签名。'
@@ -95,8 +106,21 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
     signature.value = result
     sheetOpen.value = false
     pendingUpload = null
-  } catch (cause) { signatureError.value = formatBackendErrorMessage(cause, '识别或上传失败，请重试。') }
-  finally { busy.value = false; signatureProgress.value = '' }
+  } catch (cause) { if (current()) signatureError.value = formatBackendErrorMessage(cause, '识别或上传失败，请重试。') }
+  finally { if (current()) { cancelRecognition = undefined; busy.value = false; signatureProgress.value = '' } }
+}
+function closeSignature() {
+  uploadAttempt++
+  cancelRecognition?.()
+  cancelRecognition = undefined
+  sheetOpen.value = false
+  busy.value = false
+  signatureProgress.value = ''
+}
+function openSignature() {
+  if (busy.value) return
+  signatureError.value = ''
+  sheetOpen.value = true
 }
 async function goNext() {
   const result = await studentBackendSync.bootstrapAccess()
@@ -117,7 +141,7 @@ function preview(index: number) {
   if (document.value) void uni.previewImage({ current: document.value.pages[index].url, urls: document.value.pages.map(page => page.url) })
 }
 onMounted(() => { void load() })
-onBeforeUnmount(() => { active = false })
+onBeforeUnmount(() => { active = false; cancelRecognition?.(); cancelRecognition = undefined })
 </script>
 
 <template>
@@ -128,7 +152,7 @@ onBeforeUnmount(() => { active = false })
       <view v-for="(page, index) in document.pages" :id="`consent-page-${index}`" :key="index" class="consent-document-page" :style="{ aspectRatio: `${page.width} / ${page.height}` }">
         <image class="consent-document-image" :src="page.url" mode="widthFix" @load="measurePage(index)" @click="preview(index)" />
         <template v-for="(field, name) in document.layout" :key="name">
-          <view v-if="field.page === index" class="consent-document-field" :class="{ 'consent-document-field--signature': name === 'participant' }" :style="fieldStyle(field, index, name)" @click="name === 'participant' && (sheetOpen = true)">
+          <view v-if="field.page === index" class="consent-document-field" :class="{ 'consent-document-field--signature': name === 'participant' }" :style="fieldStyle(field, index, name)" @click="name === 'participant' && openSignature()">
             <template v-if="name === 'participant'"><image v-if="signature" :src="signature.image_url" mode="aspectFit" class="consent-signed-image" /><text v-else>点击进行电子签名</text></template>
             <text v-else>{{ fieldText(name, field) }}</text>
           </view>
@@ -138,8 +162,8 @@ onBeforeUnmount(() => { active = false })
       <button class="btn-primary consent-confirm" :disabled="!agreed || !signature || busy" @click="confirm">{{ busy ? '正在保存签署…' : '确认签署并继续' }}</button>
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
-    <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :progress="signatureProgress" @close="sheetOpen = false" @complete="upload" />
   </UniAccessPageShell>
+  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :progress="signatureProgress" @close="closeSignature" @complete="upload" />
 </template>
 
 <style scoped>
