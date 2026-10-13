@@ -1,12 +1,17 @@
 import type { SignaturePixels } from './signatureOcr'
 
-// Only remove blank margins and reduce oversized input. The uploaded PNG stays
-// unchanged, and the recognition input still contains every written stroke.
-export function prepareSignatureOcrPixels(source: SignaturePixels): SignaturePixels {
+export function validateSignatureOcrPixels(source: SignaturePixels) {
   const { width, height, data } = source
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 2048 || height > 1024 || data.length !== width * height * 4) {
     throw new Error('signature_input_invalid')
   }
+}
+
+// Only remove blank margins and reduce oversized input. The uploaded PNG stays
+// unchanged, and the recognition input still contains every written stroke.
+export function prepareSignatureOcrPixels(source: SignaturePixels): SignaturePixels {
+  validateSignatureOcrPixels(source)
+  const { width, height, data } = source
   let left = width, top = height, right = -1, bottom = -1
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const offset = (y * width + x) * 4

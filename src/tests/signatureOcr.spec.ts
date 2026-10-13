@@ -13,7 +13,7 @@ function native(automaticStart = true) {
   }
   return { session, anchors: (text: string) => anchor([{ text }]), start: (errno: number | null = null) => started(errno) }
 }
-const runtime = (createVKSession: () => SignatureOcrSession) => ({ createVKSession, getAppBaseInfo: () => ({ SDKVersion: '3.11.0' }), isVKSupport: () => true })
+const runtime = (createVKSession: () => SignatureOcrSession) => ({ createVKSession, getAppBaseInfo: () => ({ SDKVersion: '3.11.0' }) })
 
 describe('page-scoped VisionKit recognition', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.spyOn(console, 'info').mockImplementation(() => {}) })
@@ -33,7 +33,8 @@ describe('page-scoped VisionKit recognition', () => {
     expect(createVKSession).toHaveBeenCalledTimes(1)
     expect(session.start).toHaveBeenCalledTimes(1)
     expect(session.runOCR).toHaveBeenCalledTimes(2)
-    expect(createVKSession).toHaveBeenCalledWith({ version: 'v1', track: { OCR: { mode: 2 } } })
+    // Native configuration from the last working release, 6cae89b.
+    expect(createVKSession).toHaveBeenCalledWith({ track: { OCR: { mode: 2 } } })
     recognizer.dispose()
     await vi.advanceTimersByTimeAsync(1)
     expect(session.destroy).toHaveBeenCalledTimes(1)
@@ -128,10 +129,18 @@ describe('page-scoped VisionKit recognition', () => {
     await expect(recognizer.recognize(pixels())).rejects.toThrow('signature_ocr_unsupported')
     expect(factory).not.toHaveBeenCalled()
   })
-  it('checks device support and validates pixel data before creating any native session', async () => {
+  it('does not force an AR version or probe AR support when using static OCR', async () => {
+    const item = native(), isVKSupport = vi.fn(() => false), factory = vi.fn(() => item.session)
+    const nativeRuntime = { ...runtime(factory), isVKSupport }
+    const recognizer = createSignatureRecognizer(nativeRuntime)
+    const result = recognizer.recognize(pixels()); await flushPromises()
+    item.anchors('李芳滨'); await expect(result).resolves.toBe('李芳滨')
+    expect(isVKSupport).not.toHaveBeenCalled()
+    expect(factory.mock.calls[0]).toEqual([{ track: { OCR: { mode: 2 } } }])
+    recognizer.dispose()
+  })
+  it('validates corrupt pixel metadata before native startup without allocating the crop before start', async () => {
     const factory = vi.fn(() => native().session)
-    const recognizer = createSignatureRecognizer({ ...runtime(factory), isVKSupport: () => false })
-    await expect(recognizer.recognize(pixels())).rejects.toThrow('signature_ocr_unsupported')
     await expect(createSignatureRecognizer(runtime(factory)).recognize({ width: 2, height: 2, data: new Uint8ClampedArray(3) })).rejects.toThrow('signature_input_invalid')
     expect(factory).not.toHaveBeenCalled()
   })

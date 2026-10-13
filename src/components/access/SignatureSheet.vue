@@ -7,6 +7,7 @@ import { SIGNATURE_REWRITE_MESSAGE, SIGNATURE_UNSUPPORTED_MESSAGE } from '../../
 
 const props = defineProps<{ visible: boolean, name: string, busy: boolean, error: string, handoffId: string, draft?: SignatureDraft | null }>()
 const emit = defineEmits<{
+  ready: []
   close: []
   complete: [value: SignatureCompletion]
   change: [draft: SignatureDraft]
@@ -19,7 +20,6 @@ const hasInk = computed(() => strokes.value.length > 0)
 const rendered = shallowRef(false)
 const entered = shallowRef(false)
 const canvasVisible = shallowRef(false)
-const processingPreview = shallowRef('')
 const ready = shallowRef(false)
 let context: ReturnType<typeof uni.createCanvasContext> | undefined
 let previousPoint: { x: number, y: number } | null = null
@@ -34,13 +34,13 @@ let animationTimer: ReturnType<typeof setTimeout> | undefined
 function publishDraft() {
   emit('change', { width, height, strokes: strokes.value.map(stroke => stroke.map(segment => [...segment] as SignatureSegment)) })
 }
-async function waitForCanvas(present: boolean) {
+async function waitForCanvas() {
   await nextTick()
   await signatureOperation<void>((resolve, reject) => {
     if (typeof uni.createSelectorQuery !== 'function') { yieldSignatureUi().then(resolve); return }
     uni.createSelectorQuery().in(instance).select('#consentSignature').boundingClientRect(rect => {
       const node = rect as UniApp.NodeInfo | null
-      if (present ? !!(node?.width && node.height) : !node) resolve()
+      if (node?.width && node.height) resolve()
       else reject(new Error('signature_canvas_view_pending'))
     }).exec()
   }, 'signature_canvas_not_ready', 1500)
@@ -57,7 +57,7 @@ async function redraw() {
   if (!context) {
     // Vue's nextTick does not guarantee that the native canvas is mounted.
     // A selector response comes from the rendered mini-program view.
-    await waitForCanvas(true)
+    await waitForCanvas()
     if (!current()) return
     context = uni.createCanvasContext('consentSignature', instance)
   }
@@ -80,6 +80,7 @@ async function redraw() {
   if (!current()) return
   if (batch) context.draw(true)
   ready.value = true
+  emit('ready')
 }
 function renderStrokes() {
   const attempt = revision + 1
@@ -116,7 +117,6 @@ watch(() => props.visible, async visible => {
   drawPending.value = false
   ready.value = false
   if (!visible) {
-    processingPreview.value = ''
     context = undefined
     previousPoint = null
     currentStroke = null
@@ -141,21 +141,6 @@ watch(() => props.visible, async visible => {
     }, 320)
   }, 20)
 }, { immediate: true })
-
-async function resumeDrawing(current: () => boolean, message = '') {
-  await yieldSignatureUi()
-  if (!current()) return
-  processingPreview.value = ''
-  canvasVisible.value = true
-  await nextTick()
-  if (current()) { renderStrokes(); exportError.value = message }
-}
-watch(() => props.busy, busy => {
-  if (!busy && props.visible && processingPreview.value) {
-    const cycle = presentation
-    void resumeDrawing(() => !destroyed && props.visible && !props.busy && presentation === cycle)
-  }
-})
 
 function point(event: unknown) {
   const touch = (event as { touches?: Array<{ x: number, y: number }> }).touches?.[0]
@@ -197,20 +182,11 @@ async function finish() {
     const image = await signatureOperation<Awaited<ReturnType<typeof createSignatureImage>>>((resolve, reject) => {
       createSignatureImage(strokes.value.flat(), width, height, () => current() && drawPending.value).then(resolve, reject)
     }, '生成签名图片超时，请重写后重试。', 10000)
-    if (!current()) return
-    // Remove the drawing surface before starting another native engine.
-    // The local PNG keeps the user's writing visible during verification.
-    processingPreview.value = `data:image/png;base64,${image.imageBase64}`
-    canvasVisible.value = false
-    ready.value = false
-    context = undefined
-    await waitForCanvas(false)
+    // The known-working sheet keeps its drawing canvas mounted throughout
+    // verification. Completion must not tear it down during native startup.
     if (current()) emit('complete', stageSignatureImage(props.handoffId, image))
   } catch {
-    if (current()) {
-      if (processingPreview.value) await resumeDrawing(current, SIGNATURE_REWRITE_MESSAGE)
-      else exportError.value = SIGNATURE_REWRITE_MESSAGE
-    }
+    if (current()) exportError.value = SIGNATURE_REWRITE_MESSAGE
   } finally {
     if (current()) drawPending.value = false
   }
@@ -231,7 +207,7 @@ onBeforeUnmount(() => { destroyed = true; revision++; presentation++; clearTimeo
     <view class="signature-sheet" :class="{ 'signature-sheet--ready': canvasVisible }" @click.stop>
       <view class="signature-heading"><text>手写电子签名</text></view>
       <text class="signature-instruction">请用楷体清晰书写完整姓名，与登记姓名“<text class="signature-name">{{ name }}</text>”一致。</text>
-      <view class="signature-frame" :style="{ width: `${width + 8}px`, height: `${height + 8}px` }"><canvas v-if="canvasVisible" canvas-id="consentSignature" id="consentSignature" class="signature-canvas" :style="{ width: `${width}px`, height: `${height}px` }" @touchstart.stop.prevent="start" @touchmove.stop.prevent="move" @touchend="end" @touchcancel="end" /><image v-else-if="processingPreview" class="signature-preview" :src="processingPreview" mode="aspectFit" :style="{ width: `${width}px`, height: `${height}px` }" /></view>
+      <view class="signature-frame" :style="{ width: `${width + 8}px`, height: `${height + 8}px` }"><canvas v-if="canvasVisible" canvas-id="consentSignature" id="consentSignature" class="signature-canvas" :style="{ width: `${width}px`, height: `${height}px` }" @touchstart.stop.prevent="start" @touchmove.stop.prevent="move" @touchend="end" @touchcancel="end" /></view>
       <text v-if="exportError || error" class="signature-error">{{ error === SIGNATURE_UNSUPPORTED_MESSAGE ? SIGNATURE_UNSUPPORTED_MESSAGE : SIGNATURE_REWRITE_MESSAGE }}</text>
       <view class="signature-actions"><button class="signature-clear" :disabled="!ready || busy" @click="reset">重写</button><button class="signature-undo" :disabled="!ready || !hasInk || busy" @click="undo">撤回</button><button class="signature-done" :disabled="!ready || !hasInk || busy || drawPending" @click="finish">{{ drawPending || busy ? '处理中…' : '完成' }}</button></view>
     </view>
@@ -239,7 +215,6 @@ onBeforeUnmount(() => { destroyed = true; revision++; presentation++; clearTimeo
 </template>
 
 <style scoped>
-.signature-preview{display:block}
 .signature-mask--open .signature-sheet.signature-sheet--ready{transform:none}
 .signature-mask{position:fixed;inset:0;background:rgba(24,39,51,0);z-index:1000;display:flex;align-items:flex-end;transition:background-color 240ms cubic-bezier(.7,0,.84,0)}.signature-mask--open{background:rgba(24,39,51,.38);transition-duration:320ms;transition-timing-function:cubic-bezier(.16,1,.3,1)}.signature-sheet{width:100%;min-height:50vh;box-sizing:border-box;padding:30rpx 24px calc(30rpx + env(safe-area-inset-bottom));background:#fcf7f0;border-radius:36rpx 36rpx 0 0;transform:translateY(100%);transition:transform 240ms cubic-bezier(.7,0,.84,0)}.signature-mask--open .signature-sheet{transform:translateY(0);transition-duration:320ms;transition-timing-function:cubic-bezier(.16,1,.3,1)}.signature-heading{display:flex;align-items:center;font-size:34rpx;font-weight:700;color:#203344}.signature-instruction{display:block;margin:18rpx 0;color:#526270;font-size:28rpx;line-height:1.6}.signature-frame{display:block;box-sizing:border-box;padding:3px;border:1px dashed #d59182;background:#fff}.signature-canvas{display:block;background:#fff}.signature-name{font-weight:700}.signature-error{display:block;color:#a4473b;font-size:25rpx;margin-top:12rpx}.signature-actions{display:flex;gap:24rpx;margin-top:24rpx}.signature-actions button{flex:0 0 calc(25% - 12rpx);min-width:0;padding:0;margin:0;box-sizing:border-box;border:1px solid transparent;border-radius:20rpx;overflow:hidden;font-size:30rpx;line-height:2.6}.signature-actions button::after{border:0;border-radius:inherit}.signature-actions .signature-clear,.signature-actions .signature-undo{color:#667584;background:#fff;border-color:#d3d5d5}.signature-actions .signature-done{flex:0 0 calc(50% - 24rpx);background:#ff8580;color:#fff;border-color:#ff8580}.signature-actions .signature-done[disabled]{background:#efdfd7;color:#9ba4ae;border-color:#efdfd7}
 </style>

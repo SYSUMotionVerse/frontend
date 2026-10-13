@@ -1,4 +1,4 @@
-import { prepareSignatureOcrPixels } from './signatureOcrImage'
+import { prepareSignatureOcrPixels, validateSignatureOcrPixels } from './signatureOcrImage'
 
 export interface SignaturePixels { data: Uint8ClampedArray, width: number, height: number }
 export interface SignatureOcrSession {
@@ -10,10 +10,9 @@ export interface SignatureOcrSession {
 }
 type SignatureOcrInput = Parameters<SignatureOcrSession['runOCR']>[0]
 type VisionKitRuntime = {
-  createVKSession?: (options: { version: 'v1', track: { OCR: { mode: 2 } } }) => SignatureOcrSession
-  getAppBaseInfo?: () => { SDKVersion?: string }
+  createVKSession?: (options: { track: { OCR: { mode: 2 } } }) => SignatureOcrSession
+  getAppBaseInfo?: () => { SDKVersion?: string, version?: string }
   getSystemInfoSync?: () => { SDKVersion?: string }
-  isVKSupport?: (version: 'v1') => boolean
   getStorageSync?: (key: string) => unknown
   setStorageSync?: (key: string, value: unknown) => void
 }
@@ -23,15 +22,19 @@ export const SIGNATURE_OCR_DETECTION_TIMEOUT = 10000
 const diagnosticKey = 'sport-snack:signature-native-stage'
 const nativeStages = ['session_create_begin', 'session_created', 'session_start_begin', 'startup_ready', 'startup_failed', 'detection_begin', 'detection_dispatched', 'detection_complete', 'detection_failed', 'session_release_begin', 'session_released', 'unsupported']
 
-function supported(runtime: VisionKitRuntime) {
+function supported(runtime: VisionKitRuntime, metadata: Record<string, string>) {
   let sdk = ''
-  try { sdk = runtime.getAppBaseInfo?.().SDKVersion ?? '' } catch { /* Try the older API below. */ }
+  try {
+    const info = runtime.getAppBaseInfo?.()
+    sdk = info?.SDKVersion ?? ''
+    if (info?.version && /^[\d.]{1,32}$/.test(info.version)) metadata.wechatVersion = info.version
+  } catch { /* Try the older API below. */ }
   if (!sdk) try { sdk = runtime.getSystemInfoSync?.().SDKVersion ?? '' } catch { /* Fail closed without version information. */ }
+  metadata.SDKVersion = sdk
   if (!/^\d+\.\d+\.\d+$/.test(sdk)) return false
   const [major, minor] = sdk.split('.').map(Number)
   if (major! < 2 || (major === 2 && minor! < 27)) return false
-  try { return !!runtime.createVKSession && (!runtime.isVKSupport || runtime.isVKSupport('v1')) }
-  catch { return false }
+  return !!runtime.createVKSession
 }
 
 export function normalizeSignatureName(value: string) { return value.normalize('NFKC').replace(/\s/g, '') }
@@ -44,15 +47,18 @@ export function createSignatureRecognizer(runtime: VisionKitRuntime = typeof wx 
   let input: SignatureOcrInput | undefined
   let releasing = Promise.resolve()
   let generation = 0
+  const runtimeMetadata: Record<string, string> = {}
   try {
-    const previous = runtime.getStorageSync?.(diagnosticKey) as { stage?: unknown, timestamp?: unknown } | undefined
+    const previous = runtime.getStorageSync?.(diagnosticKey) as { stage?: unknown, timestamp?: unknown, SDKVersion?: unknown, wechatVersion?: unknown } | undefined
     if (previous && nativeStages.includes(String(previous.stage)) && typeof previous.timestamp === 'number') {
-      console.info('[consent-signature]', { stage: 'previous_native_stage', previous_stage: previous.stage, timestamp: previous.timestamp })
+      console.info('[consent-signature]', { stage: 'previous_native_stage', previous_stage: previous.stage, timestamp: previous.timestamp,
+        SDKVersion: typeof previous.SDKVersion === 'string' ? previous.SDKVersion : undefined,
+        wechatVersion: typeof previous.wechatVersion === 'string' ? previous.wechatVersion : undefined })
     }
   } catch { /* Diagnostics must not prevent signing. */ }
   const log = (stage: string, started: number, details: Record<string, number | string> = {}) => {
     // Keep diagnostic timings available without logging a name or image.
-    const record = { stage, elapsed_ms: Date.now() - started, timestamp: Date.now(), ...details }
+    const record = { stage, elapsed_ms: Date.now() - started, timestamp: Date.now(), ...runtimeMetadata, ...details }
     console.info('[consent-signature]', record)
     try { runtime.setStorageSync?.(diagnosticKey, record) } catch { /* Store only the latest nonpersonal stage. */ }
   }
@@ -77,7 +83,7 @@ export function createSignatureRecognizer(runtime: VisionKitRuntime = typeof wx 
   }
   function prepare(): Promise<void> {
     if (startup) return startup
-    if (!supported(runtime)) { log('unsupported', Date.now()); return Promise.reject(new Error('signature_ocr_unsupported')) }
+    if (!supported(runtime, runtimeMetadata)) { log('unsupported', Date.now()); return Promise.reject(new Error('signature_ocr_unsupported')) }
     const cycle = ++generation, started = Date.now()
     // Assign the cached promise before running start(), whose callback may be
     // synchronous on a warm device. A rejected startup must never be cached.
@@ -97,7 +103,9 @@ export function createSignatureRecognizer(runtime: VisionKitRuntime = typeof wx 
       abortStartup = error => finish(error)
       try {
         log('session_create_begin', started)
-        session = runtime.createVKSession!({ version: 'v1', track: { OCR: { mode: 2 } } })
+        // Match the working 6cae89b static OCR configuration. AR version
+        // selection and isVKSupport(v1) are not part of that configuration.
+        session = runtime.createVKSession!({ track: { OCR: { mode: 2 } } })
         log('session_created', started)
         session.on('updateAnchors', anchors => {
           if (cycle === generation) detection?.(anchors.map(anchor => anchor.text ?? '').join(''))
@@ -116,10 +124,12 @@ export function createSignatureRecognizer(runtime: VisionKitRuntime = typeof wx 
     let cancelled = false
     registerCancel?.(() => { cancelled = true; dispose() })
     if (cancelled) throw new Error('signature_detection_cancelled')
-    const pixels = prepareSignatureOcrPixels(source)
+    validateSignatureOcrPixels(source)
     await prepare()
     if (cancelled || !session) throw new Error('signature_detection_cancelled')
     if (detection) throw new Error('signature_detection_busy')
+    // As in the working version, allocate the cropped copy only after startup.
+    const pixels = prepareSignatureOcrPixels(source)
     const cycle = generation, started = Date.now()
     return new Promise<string>((resolve, reject) => {
       let settled = false

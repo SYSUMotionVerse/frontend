@@ -130,9 +130,20 @@ function openSignature() {
   signatureHandoff.clear()
   signatureError.value = ''
   signatureDraft.value = cloneDraft(signature.value?.draft ?? null)
-  // Opening the native canvas must not also start the native recognition engine.
-  // Recognition starts only after the user finishes writing.
+  // The sheet notifies us after its native drawing view is mounted.
   sheetOpen.value = true
+}
+async function prepareSignature() {
+  const cycle = uploadAttempt
+  await yieldSignatureUi()
+  if (!active || !sheetOpen.value || busy.value || uploadAttempt !== cycle) return
+  // Restore the working release's warm session while writing, but never start
+  // it before the native panel has rendered as the old open handler did.
+  try { await recognizer.prepare() }
+  catch (cause) {
+    if (active && sheetOpen.value && !busy.value && uploadAttempt === cycle) signatureError.value = cause instanceof Error && cause.message === 'signature_ocr_unsupported'
+      ? SIGNATURE_UNSUPPORTED_MESSAGE : SIGNATURE_REWRITE_MESSAGE
+  }
 }
 function updateSignatureDraft(draft: SignatureDraft) {
   signatureDraft.value = draft
@@ -193,7 +204,7 @@ onBeforeUnmount(() => { active = false; signatureHandoff.dispose(); recognizer.d
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
   </UniAccessPageShell>
-  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :handoff-id="signatureHandoff.id" :draft="signatureDraft" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
+  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :handoff-id="signatureHandoff.id" :draft="signatureDraft" @ready="prepareSignature" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
 </template>
 
 <style scoped>

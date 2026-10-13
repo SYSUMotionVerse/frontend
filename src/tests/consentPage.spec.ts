@@ -52,7 +52,7 @@ describe('local verified signatures and formal consent submission', () => {
     wrapper.get('checkbox-group').element.dispatchEvent(new CustomEvent('change', { detail: { value: ['agree'] } }))
     await settle()
   }
-  it('opens, rewrites and reopens the canvas without starting the native recognizer', async () => {
+  it('does not start the native recognizer before the drawing view reports ready', async () => {
     const wrapper = await page()
     await wrapper.get('.consent-document-field--signature').trigger('click')
     const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
@@ -63,6 +63,26 @@ describe('local verified signatures and formal consent submission', () => {
     expect(recognizer.prepare).not.toHaveBeenCalled()
     expect(recognizer.recognize).not.toHaveBeenCalled()
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('prepares the working release warm session after native view readiness and reuses it for completion', async () => {
+    const wrapper = await page()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    expect(recognizer.prepare).not.toHaveBeenCalled()
+    sheet.vm.$emit('ready'); await settle()
+    expect(recognizer.prepare).toHaveBeenCalledOnce()
+    expect(recognizer.recognize).not.toHaveBeenCalled()
+    await complete(wrapper)
+    expect(recognizer.recognize).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+  it('ignores a view-ready event cancelled by closing before its native preparation task', async () => {
+    const wrapper = await page()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    sheet.vm.$emit('ready'); sheet.vm.$emit('close'); await settle()
+    expect(recognizer.prepare).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('ignores late native events for an image discarded when the sheet closed', async () => {

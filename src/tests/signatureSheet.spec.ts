@@ -5,7 +5,7 @@ import { createSignatureImageHandoff, type SignatureCompletion } from '../uni-ap
 const handoffs: ReturnType<typeof createSignatureImageHandoff>[] = []
 afterEach(() => { for (const handoff of handoffs.splice(0)) handoff.dispose(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
-async function sheet(deferCanvas = false, deferRemoval = false) {
+async function sheet(deferCanvas = false) {
   vi.useFakeTimers()
   const segments: number[][] = []
   let origin = [0, 0], target = [0, 0]
@@ -20,7 +20,7 @@ async function sheet(deferCanvas = false, deferRemoval = false) {
   const renderedCanvas = () => renderCallback?.(wrapper.find('canvas').exists() ? { width: 319, height: 190 } : null)
   const query = { in: () => query, select: () => query,
     boundingClientRect: (callback: typeof renderCallback) => { renderCallback = callback; return query },
-    exec: () => { if (!deferCanvas && !(deferRemoval && !wrapper.find('canvas').exists())) renderedCanvas() } }
+    exec: () => { if (!deferCanvas) renderedCanvas() } }
   const runtime = { getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: vi.fn(() => context), createSelectorQuery: () => query,
     canvasGetImageData: vi.fn(forbidden), canvasToTempFilePath: vi.fn(forbidden), getFileSystemManager: vi.fn(forbidden) }
   vi.stubGlobal('uni', runtime)
@@ -41,38 +41,40 @@ async function sheet(deferCanvas = false, deferRemoval = false) {
 }
 
 describe('signature sheet', () => {
-  it('starts verification only after native view confirms the drawing canvas was removed', async () => {
-    const { wrapper, write, renderedCanvas } = await sheet(false, true)
+  it('keeps the known-good native canvas mounted when verification begins', async () => {
+    const { wrapper, write, context, runtime } = await sheet()
     await write(); await wrapper.get('.signature-done').trigger('click')
+    const draws = context.draw.mock.calls.length
     await vi.advanceTimersByTimeAsync(200)
-    expect(wrapper.find('canvas').exists()).toBe(false)
-    expect(wrapper.find('.signature-preview').exists()).toBe(true)
-    expect(wrapper.emitted('complete')).toBeUndefined()
-    renderedCanvas(); await flushPromises()
+    expect(wrapper.find('canvas').exists()).toBe(true)
     expect(wrapper.emitted('complete')).toHaveLength(1)
+    await wrapper.setProps({ busy: true })
+    expect(wrapper.find('canvas').exists()).toBe(true)
+    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
+    expect(context.draw).toHaveBeenCalledTimes(draws)
     wrapper.unmount()
   })
-  it('restores editable strokes after a failed verification without duplicating processing text', async () => {
+  it('retains editable strokes after a failed verification without recreating the drawing context', async () => {
     const { wrapper, write, segments, runtime } = await sheet()
     await write(); await wrapper.get('.signature-done').trigger('click')
     await vi.advanceTimersByTimeAsync(200)
-    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(wrapper.find('canvas').exists()).toBe(true)
     await wrapper.setProps({ busy: true }); await wrapper.setProps({ busy: false, error: 'retry' })
     await vi.advanceTimersByTimeAsync(5); await flushPromises()
     expect(wrapper.find('canvas').exists()).toBe(true)
-    expect(wrapper.find('.signature-preview').exists()).toBe(false)
-    expect(runtime.createCanvasContext).toHaveBeenCalledTimes(2)
+    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
     expect(segments.at(-1)).toEqual([20, 30, 25, 35])
     await write(80, 90)
     expect(segments.at(-1)).toEqual([80, 90, 85, 95])
     wrapper.unmount()
   })
-  it('does not start verification if closed while waiting for canvas removal', async () => {
-    const { wrapper, write, renderedCanvas } = await sheet(false, true)
+  it('blocks drawing during verification while preserving the last strokes', async () => {
+    const { wrapper, write, segments } = await sheet()
     await write(); await wrapper.get('.signature-done').trigger('click')
-    await vi.advanceTimersByTimeAsync(200); await wrapper.setProps({ visible: false })
-    renderedCanvas(); await flushPromises()
-    expect(wrapper.emitted('complete')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(200); await wrapper.setProps({ busy: true })
+    await write(80, 90)
+    expect(segments).toEqual([[20, 30, 25, 35]])
+    expect(wrapper.get('.signature-done').text()).toBe('处理中…')
     wrapper.unmount()
   })
   it('waits for the native canvas view before drawing and removes its animated transform', async () => {
