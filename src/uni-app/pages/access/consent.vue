@@ -5,10 +5,11 @@ import SignatureSheet from '../../../components/access/SignatureSheet.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureResult, ConsentSignatureInput } from '../../api/consentTypes'
-import { recognizeSignatureWithVisionKit, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
+import { createSignatureRecognizer, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
 import { consentFieldStyle } from '../../platform/consentLayout'
 import { signatureOperation } from '../../platform/signatureOperation'
-import { yieldSignatureUi } from '../../platform/signatureImage'
+import { yieldSignatureUi, type SignatureDraft } from '../../platform/signatureImage'
+import { SIGNATURE_REWRITE_MESSAGE } from '../../platform/signaturePresentation'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 const signature = shallowRef<ConsentSignatureResult | null>(null)
@@ -17,7 +18,8 @@ const busy = shallowRef(false)
 const loading = shallowRef(true)
 const error = shallowRef('')
 const signatureError = shallowRef('')
-const signatureProgress = shallowRef('')
+const signatureDraft = shallowRef<SignatureDraft | null>(null)
+const recognizer = createSignatureRecognizer()
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
@@ -54,6 +56,7 @@ async function load() {
   loading.value = true
   error.value = ''
   signature.value = null
+  signatureDraft.value = null
   agreed.value = false
   pendingUpload = null
   try {
@@ -70,7 +73,6 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
   const attempt = ++uploadAttempt
   const current = () => active && uploadAttempt === attempt
   signatureError.value = ''
-  signatureProgress.value = '正在识别姓名，最多等待 8 秒…'
   try {
     await nextTick()
     await yieldSignatureUi()
@@ -78,36 +80,52 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
     let text = ''
     let recognitionError = ''
     try { text = await signatureOperation<string>((resolve, reject) => {
-      recognizeSignatureWithVisionKit(value.pixels, undefined, cancel => {
+      recognizer.recognize(value.pixels, cancel => {
         if (current()) cancelRecognition = cancel
         else cancel()
       }).then(resolve, reject)
-    }, '微信 OCR 识别未完成，请重新签名并重试。', 8000) }
-    catch (cause) { recognitionError = cause instanceof Error ? cause.message : '微信 OCR 识别失败，请重新签名。' }
+    }, 'signature_recognition_deadline', 30000) }
+    catch (cause) {
+      recognitionError = cause instanceof Error ? cause.message : 'signature_recognition_failed'
+      cancelRecognition?.()
+      cancelRecognition = undefined
+    }
     if (!current()) return
     const matched = !recognitionError && normalizeSignatureName(text) === normalizeSignatureName(document.value.participant_name)
-    if (!matched) signatureError.value = recognitionError || '未能识别完整姓名，请用清晰楷体重新签名。'
-    signatureProgress.value = '正在上传签名，请稍候…'
     if (!pendingUpload || pendingUpload.image_base64 !== value.imageBase64) {
       pendingUpload = { template_id: document.value.template_id, client_request_id: requestId(), image_base64: value.imageBase64,
         client_recognition: { method: 'wechat-visionkit', text, error: recognitionError } }
     }
     const input = pendingUpload
+    if (!matched) {
+      signature.value = null
+      pendingUpload = null
+      signatureError.value = SIGNATURE_REWRITE_MESSAGE
+      busy.value = false
+      // Archive the failed attempt without making the user wait for that
+      // request before rewriting. It cannot modify a later attempt's UI.
+      void signatureOperation<ConsentSignatureResult>((resolve, reject) => {
+        studentBackendSync.uploadConsentSignature(input).then(resolve, reject)
+      }, 'signature_archive_deadline', 35000).catch(() => {
+        console.warn('[consent-signature]', { stage: 'archive_failed' })
+      })
+      return
+    }
     const result = await signatureOperation<ConsentSignatureResult>((resolve, reject) => {
       studentBackendSync.uploadConsentSignature(input).then(resolve, reject)
     }, '签名上传超时，请检查网络后再次点击完成。', 35000)
     if (!current()) return
-    if (!matched || (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED')) {
+    if (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED') {
       signature.value = null
-      signatureError.value = recognitionError || result.error || '未能识别完整姓名，请用清晰楷体重新签名。'
+      signatureError.value = SIGNATURE_REWRITE_MESSAGE
       pendingUpload = null
       return
     }
     signature.value = result
     sheetOpen.value = false
     pendingUpload = null
-  } catch (cause) { if (current()) signatureError.value = formatBackendErrorMessage(cause, '识别或上传失败，请重试。') }
-  finally { if (current()) { cancelRecognition = undefined; busy.value = false; signatureProgress.value = '' } }
+  } catch { if (current()) signatureError.value = SIGNATURE_REWRITE_MESSAGE }
+  finally { if (current()) { cancelRecognition = undefined; busy.value = false } }
 }
 function closeSignature() {
   uploadAttempt++
@@ -115,12 +133,19 @@ function closeSignature() {
   cancelRecognition = undefined
   sheetOpen.value = false
   busy.value = false
-  signatureProgress.value = ''
 }
 function openSignature() {
   if (busy.value) return
   signatureError.value = ''
+  // Static-image mode needs no camera stream. Start while the user writes,
+  // then reuse the session for subsequent completed signatures on this page.
+  void recognizer.prepare().catch(() => {})
   sheetOpen.value = true
+}
+function updateSignatureDraft(draft: SignatureDraft) {
+  signatureDraft.value = draft
+  signatureError.value = ''
+  if (sheetOpen.value && !busy.value && !draft.strokes.length) void recognizer.prepare().catch(() => {})
 }
 async function goNext() {
   const result = await studentBackendSync.bootstrapAccess()
@@ -134,14 +159,14 @@ async function confirm() {
   try {
     await studentBackendSync.acceptStudyConsent(signature.value.id)
     await goNext()
-  } catch (cause) { error.value = formatBackendErrorMessage(cause, '签署确认失败，请重试。') }
+  } catch { error.value = '签名确认未完成，请重新签名后再试。' }
   finally { busy.value = false }
 }
 function preview(index: number) {
   if (document.value) void uni.previewImage({ current: document.value.pages[index].url, urls: document.value.pages.map(page => page.url) })
 }
 onMounted(() => { void load() })
-onBeforeUnmount(() => { active = false; cancelRecognition?.(); cancelRecognition = undefined })
+onBeforeUnmount(() => { active = false; recognizer.dispose(); cancelRecognition = undefined })
 </script>
 
 <template>
@@ -159,11 +184,11 @@ onBeforeUnmount(() => { active = false; cancelRecognition?.(); cancelRecognition
         </template>
       </view>
       <checkbox-group @change="agreed = $event.detail.value.includes('agree')"><label class="consent-agreement"><checkbox value="agree" :checked="agreed" color="#ff8580" /><text>本人已完整阅读并理解知情同意书，自愿同意参加研究。</text></label></checkbox-group>
-      <button class="btn-primary consent-confirm" :disabled="!agreed || !signature || busy" @click="confirm">{{ busy ? '正在保存签署…' : '确认签署并继续' }}</button>
+      <button class="btn-primary consent-confirm" :disabled="!agreed || !signature || busy" @click="confirm">{{ busy ? '处理中…' : '确认签署并继续' }}</button>
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
   </UniAccessPageShell>
-  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :progress="signatureProgress" @close="closeSignature" @complete="upload" />
+  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :draft="signatureDraft" @change="updateSignatureDraft" @close="closeSignature" @complete="upload" />
 </template>
 
 <style scoped>

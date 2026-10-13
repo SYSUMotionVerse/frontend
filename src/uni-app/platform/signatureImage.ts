@@ -2,6 +2,7 @@ import { zlibSync } from 'fflate'
 import type { SignaturePixels } from './signatureOcr'
 
 export type SignatureSegment = readonly [number, number, number, number]
+export interface SignatureDraft { width: number, height: number, strokes: readonly (readonly SignatureSegment[])[] }
 
 export const yieldSignatureUi = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 
