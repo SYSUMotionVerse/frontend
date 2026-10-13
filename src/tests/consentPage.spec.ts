@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackendRequestError } from '../uni-app/api/backendClient'
+import { stageSignatureImage } from '../uni-app/platform/signatureImageHandoff'
 const backend = vi.hoisted(() => ({ loadStudyConsent: vi.fn(), submitStudyConsent: vi.fn(), bootstrapAccess: vi.fn() }))
 const recognizer = vi.hoisted(() => ({ prepare: vi.fn(), recognize: vi.fn(), dispose: vi.fn() }))
 vi.mock('../uni-app/api/studentBackend', () => ({ studentBackendSync: backend }))
@@ -33,7 +34,7 @@ describe('local verified signatures and formal consent submission', () => {
     const Page = (await import('../uni-app/pages/access/consent.vue')).default
     const wrapper = mount(Page, { global: { stubs: {
       UniAccessPageShell: { name: 'UniAccessPageShell', template: '<div><slot /></div>' },
-      SignatureSheet: { name: 'SignatureSheet', props: ['visible', 'busy', 'error', 'draft'], template: '<div class="sheet">{{ busy ? "处理中…" : error }}</div>' }
+      SignatureSheet: { name: 'SignatureSheet', props: ['visible', 'busy', 'error', 'draft', 'handoffId'], template: '<div class="sheet">{{ busy ? "处理中…" : error }}</div>' }
     } } })
     await settle()
     return wrapper
@@ -42,7 +43,8 @@ describe('local verified signatures and formal consent submission', () => {
     await wrapper.get('.consent-document-field--signature').trigger('click')
     const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
     sheet.vm.$emit('change', value)
-    sheet.vm.$emit('complete', image())
+    // Emulate a native component event crossing a serialization boundary.
+    sheet.vm.$emit('complete', JSON.parse(JSON.stringify(stageSignatureImage(sheet.props('handoffId'), image()))))
     await settle()
     return sheet
   }
@@ -61,6 +63,18 @@ describe('local verified signatures and formal consent submission', () => {
     expect(recognizer.prepare).not.toHaveBeenCalled()
     expect(recognizer.recognize).not.toHaveBeenCalled()
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('ignores late native events for an image discarded when the sheet closed', async () => {
+    const wrapper = await page()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    const completion = stageSignatureImage(sheet.props('handoffId'), image())
+    sheet.vm.$emit('close'); await settle()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    sheet.vm.$emit('change', draft()); sheet.vm.$emit('complete', completion); await settle()
+    expect(recognizer.recognize).not.toHaveBeenCalled()
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
     wrapper.unmount()
   })
   it('saves a valid signature locally and sends nothing until agreement and submit', async () => {

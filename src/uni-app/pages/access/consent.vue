@@ -6,7 +6,8 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import { BackendRequestError } from '../../api/backendClient'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureInput } from '../../api/consentTypes'
-import { createSignatureRecognizer, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
+import { createSignatureRecognizer, normalizeSignatureName } from '../../platform/signatureOcr'
+import { createSignatureImageHandoff, type SignatureCompletion } from '../../platform/signatureImageHandoff'
 import { consentFieldStyle } from '../../platform/consentLayout'
 import { signatureOperation } from '../../platform/signatureOperation'
 import { yieldSignatureUi, cropSignatureImage, type SignatureDraft } from '../../platform/signatureImage'
@@ -22,6 +23,7 @@ const error = shallowRef('')
 const signatureError = shallowRef('')
 const signatureDraft = shallowRef<SignatureDraft | null>(null)
 const recognizer = createSignatureRecognizer()
+const signatureHandoff = createSignatureImageHandoff()
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
@@ -62,6 +64,7 @@ async function load() {
   signatureDraft.value = null
   agreed.value = false
   pendingUpload = null
+  signatureHandoff.clear()
   try {
     document.value = await studentBackendSync.loadStudyConsent()
     if (!active) return
@@ -74,8 +77,9 @@ function cloneDraft(draft: SignatureDraft | null) {
   return draft ? { width: draft.width, height: draft.height,
     strokes: draft.strokes.map(stroke => stroke.map(segment => [...segment] as typeof segment)) } : null
 }
-async function verifySignature(value: { imageBase64: string, pixels: SignaturePixels }) {
-  if (busy.value || !document.value) return
+async function verifySignature(completion: SignatureCompletion) {
+  const value = signatureHandoff.take(completion?.token)
+  if (busy.value || !document.value || !sheetOpen.value || !value) return
   const draft = cloneDraft(signatureDraft.value)
   if (!draft) return
   busy.value = true
@@ -114,6 +118,7 @@ async function verifySignature(value: { imageBase64: string, pixels: SignaturePi
 }
 function closeSignature() {
   uploadAttempt++
+  signatureHandoff.clear()
   cancelRecognition?.()
   cancelRecognition = undefined
   sheetOpen.value = false
@@ -122,6 +127,7 @@ function closeSignature() {
 }
 function openSignature() {
   if (busy.value) return
+  signatureHandoff.clear()
   signatureError.value = ''
   signatureDraft.value = cloneDraft(signature.value?.draft ?? null)
   // Opening the native canvas must not also start the native recognition engine.
@@ -165,7 +171,7 @@ function preview(index: number) {
   if (document.value) void uni.previewImage({ current: document.value.pages[index].url, urls: document.value.pages.map(page => page.url) })
 }
 onMounted(() => { void load() })
-onBeforeUnmount(() => { active = false; recognizer.dispose(); cancelRecognition = undefined })
+onBeforeUnmount(() => { active = false; signatureHandoff.dispose(); recognizer.dispose(); cancelRecognition = undefined })
 </script>
 
 <template>
@@ -187,7 +193,7 @@ onBeforeUnmount(() => { active = false; recognizer.dispose(); cancelRecognition 
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
   </UniAccessPageShell>
-  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :draft="signatureDraft" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
+  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :handoff-id="signatureHandoff.id" :draft="signatureDraft" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
 </template>
 
 <style scoped>

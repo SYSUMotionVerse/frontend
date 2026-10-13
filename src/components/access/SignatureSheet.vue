@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onBeforeUnmount, shallowRef, watch } from 'vue'
-import type { SignaturePixels } from '../../uni-app/platform/signatureOcr'
+import { stageSignatureImage, type SignatureCompletion } from '../../uni-app/platform/signatureImageHandoff'
 import { signatureOperation } from '../../uni-app/platform/signatureOperation'
 import { createSignatureImage, yieldSignatureUi, type SignatureSegment, type SignatureDraft } from '../../uni-app/platform/signatureImage'
 import { SIGNATURE_REWRITE_MESSAGE, SIGNATURE_UNSUPPORTED_MESSAGE } from '../../uni-app/platform/signaturePresentation'
 
-const props = defineProps<{ visible: boolean, name: string, busy: boolean, error: string, draft?: SignatureDraft | null }>()
+const props = defineProps<{ visible: boolean, name: string, busy: boolean, error: string, handoffId: string, draft?: SignatureDraft | null }>()
 const emit = defineEmits<{
   close: []
-  complete: [value: { imageBase64: string, pixels: SignaturePixels }]
+  complete: [value: SignatureCompletion]
   change: [draft: SignatureDraft]
 }>()
 const instance = getCurrentInstance()?.proxy
@@ -205,7 +205,7 @@ async function finish() {
     ready.value = false
     context = undefined
     await waitForCanvas(false)
-    if (current()) emit('complete', image)
+    if (current()) emit('complete', stageSignatureImage(props.handoffId, image))
   } catch {
     if (current()) {
       if (processingPreview.value) await resumeDrawing(current, SIGNATURE_REWRITE_MESSAGE)

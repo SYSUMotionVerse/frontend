@@ -1,7 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createSignatureImageHandoff, type SignatureCompletion } from '../uni-app/platform/signatureImageHandoff'
 
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+const handoffs: ReturnType<typeof createSignatureImageHandoff>[] = []
+afterEach(() => { for (const handoff of handoffs.splice(0)) handoff.dispose(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 async function sheet(deferCanvas = false, deferRemoval = false) {
   vi.useFakeTimers()
@@ -23,7 +25,9 @@ async function sheet(deferCanvas = false, deferRemoval = false) {
     canvasGetImageData: vi.fn(forbidden), canvasToTempFilePath: vi.fn(forbidden), getFileSystemManager: vi.fn(forbidden) }
   vi.stubGlobal('uni', runtime)
   const SignatureSheet = (await import('../components/access/SignatureSheet.vue')).default
-  const wrapper = mount(SignatureSheet, { props: { visible: true, name: '测试', busy: false, error: '' } })
+  const handoff = createSignatureImageHandoff()
+  handoffs.push(handoff)
+  const wrapper = mount(SignatureSheet, { props: { visible: true, name: '测试', busy: false, error: '', handoffId: handoff.id } })
   await flushPromises()
   await vi.advanceTimersByTimeAsync(340)
   await flushPromises()
@@ -33,7 +37,7 @@ async function sheet(deferCanvas = false, deferRemoval = false) {
     await wrapper.get('canvas').trigger('touchmove', touch(x + 5, y + 5))
     await wrapper.get('canvas').trigger('touchend')
   }
-  return { wrapper, context, segments, runtime, touch, write, renderedCanvas }
+  return { wrapper, context, segments, runtime, touch, write, renderedCanvas, handoff }
 }
 
 describe('signature sheet', () => {
@@ -118,7 +122,7 @@ describe('signature sheet', () => {
     wrapper.unmount()
   })
   it('creates a signature when native export APIs would block, without replaying drawing commands', async () => {
-    const { wrapper, context, runtime, write } = await sheet()
+    const { wrapper, context, runtime, write, handoff } = await sheet()
     await write()
     const draws = context.draw.mock.calls.length
     await wrapper.get('.signature-done').trigger('click')
@@ -130,7 +134,12 @@ describe('signature sheet', () => {
     await vi.advanceTimersByTimeAsync(200)
     await flushPromises()
     expect(wrapper.emitted('complete')).toHaveLength(1)
-    expect(wrapper.emitted('complete')![0][0]).toMatchObject({ pixels: { width: 638, height: 380 } })
+    const detail = JSON.parse(JSON.stringify({ __args__: wrapper.emitted('complete')![0] }))
+    expect(JSON.stringify(detail).length).toBeLessThan(128)
+    expect(detail.__args__[0]).toEqual({ token: expect.any(String) })
+    const image = handoff.take((detail.__args__[0] as SignatureCompletion).token)
+    expect(image?.pixels).toMatchObject({ width: 638, height: 380 })
+    expect(image?.pixels.data).toBeInstanceOf(Uint8ClampedArray)
     expect(context.draw).toHaveBeenCalledTimes(draws)
     expect(runtime.canvasGetImageData).not.toHaveBeenCalled()
     expect(runtime.canvasToTempFilePath).not.toHaveBeenCalled()
