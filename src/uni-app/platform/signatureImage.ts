@@ -53,6 +53,23 @@ function png(pixels: SignaturePixels) {
   return base64(result)
 }
 
+export function cropSignatureImage(source: SignaturePixels) {
+  let left = source.width, top = source.height, right = -1, bottom = -1
+  for (let y = 0; y < source.height; y++) for (let x = 0; x < source.width; x++) {
+    const at = (y * source.width + x) * 4
+    const ink = Math.round((255 - source.data[at]!) * .299 + (255 - source.data[at + 1]!) * .587 + (255 - source.data[at + 2]!) * .114)
+    if (ink > 60) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y) }
+  }
+  if (right - left + 1 < 20 || bottom - top + 1 < 15) throw new Error('signature_too_small')
+  left = Math.max(0, left - 8); top = Math.max(0, top - 8)
+  right = Math.min(source.width - 1, right + 8); bottom = Math.min(source.height - 1, bottom + 8)
+  const width = right - left + 1, height = bottom - top + 1
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) data.set(source.data.subarray(((top + y) * source.width + left) * 4,
+    ((top + y) * source.width + right + 1) * 4), y * width * 4)
+  return { imageBase64: png({ width, height, data }), aspect: width / height }
+}
+
 // Build both the archived PNG and OCR pixels from the same captured strokes.
 // No native canvas readback/export or filesystem bridge runs on completion.
 export async function createSignatureImage(segments: readonly SignatureSegment[], width: number, height: number, current = () => true) {

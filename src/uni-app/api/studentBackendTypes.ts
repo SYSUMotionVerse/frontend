@@ -642,8 +642,7 @@ export interface GrowthAssessmentHistoryItem {
 
 export interface StudentBackendSyncDependencies {
   getStudyConsent: () => Promise<import('./consentTypes').StudyConsentDocument>
-  uploadConsentSignature: (input: import('./consentTypes').ConsentSignatureInput) => Promise<import('./consentTypes').ConsentSignatureResult>
-  acceptStudyConsent: (signatureId: string) => Promise<import('./consentTypes').ConsentSignatureResult>
+  submitStudyConsent: (input: import('./consentTypes').ConsentSignatureInput) => Promise<import('./consentTypes').ConsentSignatureResult>
   startStroop: (scaleId: number, screening: StroopColor[], checkpoint?: CheckpointKey) => Promise<StroopStartResponse>
   submitStroop: (scaleId: number, payload: StroopSubmission) => Promise<PsychologyScaleSubmitResponse>
   isEnabled: () => boolean

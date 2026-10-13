@@ -1,8 +1,21 @@
 import { unzlibSync } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
-import { createSignatureImage } from '../uni-app/platform/signatureImage'
+import { createSignatureImage, cropSignatureImage } from '../uni-app/platform/signatureImage'
 
 describe('signature PNG and OCR pixel consistency', () => {
+  it('crops blank margins and preserves the actual ink aspect ratio and all strokes', async () => {
+    const image = await createSignatureImage([[20, 20, 60, 20], [20, 20, 20, 45]], 200, 100)
+    const cropped = cropSignatureImage(image.pixels)
+    const png = Buffer.from(cropped.imageBase64, 'base64')
+    const width = png.readUInt32BE(16), height = png.readUInt32BE(20)
+    expect(width).toBeLessThan(image.pixels.width)
+    expect(height).toBeLessThan(image.pixels.height)
+    expect(cropped.aspect).toBeCloseTo(width / height)
+    // Both the long horizontal and vertical stroke extents remain, plus padding.
+    expect(width).toBeGreaterThanOrEqual(40 * 2 + 16)
+    expect(height).toBeGreaterThanOrEqual(25 * 2 + 16)
+    expect(() => cropSignatureImage({ width: 60, height: 30, data: new Uint8ClampedArray(60 * 30 * 4).fill(255) })).toThrow('signature_too_small')
+  })
   it('encodes a valid PNG with the same opaque RGBA pixels used for OCR, keeping pen lifts blank', async () => {
     const image = await createSignatureImage([[10, 10, 30, 10], [50, 30, 70, 30]], 80, 40)
     const png = Buffer.from(image.imageBase64, 'base64')

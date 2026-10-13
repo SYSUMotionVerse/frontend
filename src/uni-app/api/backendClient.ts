@@ -520,11 +520,8 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getStudyConsent() {
       return request<import('./consentTypes').StudyConsentDocument>('/users/consent/')
     },
-    uploadConsentSignature(data: import('./consentTypes').ConsentSignatureInput) {
-      return request<import('./consentTypes').ConsentSignatureResult>('/users/consent/signature/', { method: 'POST', data })
-    },
-    acceptStudyConsent(signatureId: string) {
-      return request<import('./consentTypes').ConsentSignatureResult>('/users/consent/accept/', { method: 'POST', data: { signature_id: signatureId, agree: true } })
+    submitStudyConsent(data: import('./consentTypes').ConsentSignatureInput) {
+      return request<import('./consentTypes').ConsentSignatureResult>('/users/consent/submit/', { method: 'POST', data })
     },
     updateProfile(payload: UserUpdatePayload) {
       return request('/users/me/', {

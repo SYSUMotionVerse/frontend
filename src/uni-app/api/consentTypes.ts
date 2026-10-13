@@ -34,4 +34,5 @@ export interface ConsentSignatureInput {
   client_request_id: string
   image_base64: string
   client_recognition: { method: string, text: string, error?: string }
+  agree: true
 }
