@@ -50,10 +50,25 @@ describe('local verified signatures and formal consent submission', () => {
     wrapper.get('checkbox-group').element.dispatchEvent(new CustomEvent('change', { detail: { value: ['agree'] } }))
     await settle()
   }
+  it('opens, rewrites and reopens the canvas without starting the native recognizer', async () => {
+    const wrapper = await page()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    expect(sheet.props('visible')).toBe(true)
+    sheet.vm.$emit('change', { width: 319, height: 190, strokes: [] }); await settle()
+    sheet.vm.$emit('close'); await settle()
+    await wrapper.get('.consent-document-field--signature').trigger('click'); await settle()
+    expect(recognizer.prepare).not.toHaveBeenCalled()
+    expect(recognizer.recognize).not.toHaveBeenCalled()
+    expect(backend.submitStudyConsent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('saves a valid signature locally and sends nothing until agreement and submit', async () => {
     const wrapper = await page()
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
     await complete(wrapper)
+    expect(recognizer.recognize).toHaveBeenCalledOnce()
+    expect(recognizer.dispose).toHaveBeenCalledOnce()
     expect(wrapper.get('.consent-signed-image').attributes('src')).toMatch(/^data:image\/png;base64,/)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
@@ -78,6 +93,7 @@ describe('local verified signatures and formal consent submission', () => {
   it('drops the first failed draft without sending an error history to the server', async () => {
     recognizer.recognize.mockRejectedValue(new Error('signature_detection_timeout'))
     const wrapper = await page(), sheet = await complete(wrapper)
+    expect(recognizer.dispose).toHaveBeenCalled()
     expect(sheet.props('error')).toContain('请点击“重写”')
     expect(wrapper.text()).not.toMatch(/OCR|超时/)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()

@@ -105,11 +105,12 @@ async function verifySignature(value: { imageBase64: string, pixels: SignaturePi
     sheetOpen.value = false
     pendingUpload = null
   } catch { if (current()) signatureError.value = SIGNATURE_REWRITE_MESSAGE }
-  finally { if (current()) { cancelRecognition = undefined; busy.value = false } }
+  finally { if (current()) { recognizer.dispose(); cancelRecognition = undefined; busy.value = false } }
 }
 function closeSignature() {
   uploadAttempt++
   cancelRecognition?.()
+  if (!cancelRecognition) recognizer.dispose()
   cancelRecognition = undefined
   sheetOpen.value = false
   busy.value = false
@@ -119,15 +120,13 @@ function openSignature() {
   if (busy.value) return
   signatureError.value = ''
   signatureDraft.value = cloneDraft(signature.value?.draft ?? null)
-  // Static-image mode needs no camera stream. Start while the user writes,
-  // then reuse the session for subsequent completed signatures on this page.
-  void recognizer.prepare().catch(() => {})
+  // Opening the native canvas must not also start the native recognition engine.
+  // Recognition starts only after the user finishes writing.
   sheetOpen.value = true
 }
 function updateSignatureDraft(draft: SignatureDraft) {
   signatureDraft.value = draft
   signatureError.value = ''
-  if (sheetOpen.value && !busy.value && !draft.strokes.length) void recognizer.prepare().catch(() => {})
 }
 async function goNext() {
   const result = await studentBackendSync.bootstrapAccess()

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-async function sheet() {
+async function sheet(deferCanvas = false) {
   vi.useFakeTimers()
   const segments: number[][] = []
   let origin = [0, 0], target = [0, 0]
@@ -14,7 +14,12 @@ async function sheet() {
     draw: vi.fn(() => { origin = [0, 0] }) // Never calls any callback.
   }
   const forbidden = () => { throw new Error('Native readback/export blocks this device') }
-  const runtime = { getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: () => context,
+  let renderCallback: ((rect: { width: number, height: number } | null) => void) | undefined
+  const renderedCanvas = () => renderCallback?.({ width: 319, height: 190 })
+  const query = { in: () => query, select: () => query,
+    boundingClientRect: (callback: typeof renderCallback) => { renderCallback = callback; return query },
+    exec: () => { if (!deferCanvas) renderedCanvas() } }
+  const runtime = { getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: vi.fn(() => context), createSelectorQuery: () => query,
     canvasGetImageData: vi.fn(forbidden), canvasToTempFilePath: vi.fn(forbidden), getFileSystemManager: vi.fn(forbidden) }
   vi.stubGlobal('uni', runtime)
   const SignatureSheet = (await import('../components/access/SignatureSheet.vue')).default
@@ -28,10 +33,39 @@ async function sheet() {
     await wrapper.get('canvas').trigger('touchmove', touch(x + 5, y + 5))
     await wrapper.get('canvas').trigger('touchend')
   }
-  return { wrapper, context, segments, runtime, touch, write }
+  return { wrapper, context, segments, runtime, touch, write, renderedCanvas }
 }
 
 describe('signature sheet', () => {
+  it('waits for the native canvas view before drawing and removes its animated transform', async () => {
+    const { wrapper, runtime, renderedCanvas } = await sheet(true)
+    expect(wrapper.get('.signature-sheet').classes()).toContain('signature-sheet--ready')
+    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
+    expect(wrapper.get('.signature-clear').attributes('disabled')).toBeDefined()
+    renderedCanvas(); await flushPromises()
+    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
+    expect(wrapper.get('.signature-clear').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it.each(['close', 'unmount'])('ignores a late native canvas response after %s', async action => {
+    const { wrapper, runtime, renderedCanvas } = await sheet(true)
+    if (action === 'close') await wrapper.setProps({ visible: false })
+    else wrapper.unmount()
+    renderedCanvas(); await flushPromises()
+    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
+    if (action === 'close') wrapper.unmount()
+  })
+  it('offers a rewrite after a missing native view response and initializes safely on retry', async () => {
+    const { wrapper, runtime, renderedCanvas } = await sheet(true)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
+    expect(wrapper.get('.signature-error').text()).toContain('请点击“重写”')
+    await wrapper.get('.signature-clear').trigger('click')
+    renderedCanvas(); await flushPromises()
+    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
+    expect(wrapper.find('.signature-error').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('retains stroke origins after native flushes and separates lifted strokes', async () => {
     const { wrapper, segments, touch } = await sheet()
     const canvas = wrapper.get('canvas')
