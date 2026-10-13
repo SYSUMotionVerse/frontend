@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const backend = vi.hoisted(() => ({
   loadStudyConsent: vi.fn(), uploadConsentSignature: vi.fn(), acceptStudyConsent: vi.fn(), bootstrapAccess: vi.fn()
@@ -11,10 +11,11 @@ vi.mock('../uni-app/platform/signatureOcr', async importOriginal => ({
 }))
 
 describe('informed consent page', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
   beforeEach(() => {
     ocr.mockReset()
     ocr.mockResolvedValue('李芳滨')
-    backend.uploadConsentSignature.mockClear()
+    backend.uploadConsentSignature.mockReset()
     vi.stubGlobal('uni', { reLaunch: vi.fn().mockResolvedValue(undefined), previewImage: vi.fn() })
     const field = { page: 0, x: .1, y: .7, width: .3, height: .05 }
     backend.loadStudyConsent.mockResolvedValue({ template_id: 1, title: '知情同意书', required: true,
@@ -92,5 +93,44 @@ describe('informed consent page', () => {
     }))
     expect(wrapper.text()).toContain('更新微信')
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
+  })
+  it('recovers from a stalled upload, ignores the late result and retries with the same request ID', async () => {
+    vi.useFakeTimers()
+    let resolveLate!: (value: unknown) => void
+    backend.uploadConsentSignature.mockImplementationOnce(() => new Promise(resolve => { resolveLate = resolve }))
+    const wrapper = await page()
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    const input = { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(4), width: 1, height: 1 } }
+    sheet.vm.$emit('complete', input)
+    await flushPromises()
+    expect(sheet.props('busy')).toBe(true)
+    await vi.advanceTimersByTimeAsync(35000)
+    await flushPromises()
+    expect(sheet.props('busy')).toBe(false)
+    expect(wrapper.text()).toContain('签名上传超时')
+    resolveLate({ id: 'late', status: 'VERIFIED', image_url: 'late.png' })
+    await flushPromises()
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
+    sheet.vm.$emit('complete', input)
+    await flushPromises()
+    expect(backend.uploadConsentSignature.mock.calls[1][0].client_request_id).toBe(backend.uploadConsentSignature.mock.calls[0][0].client_request_id)
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('reports a stalled OCR call and archives a rejected attempt without keeping the sheet locked', async () => {
+    vi.useFakeTimers()
+    ocr.mockImplementationOnce(() => new Promise(() => {}))
+    backend.uploadConsentSignature.mockResolvedValue({ status: 'REJECTED', error: '需重签' })
+    const wrapper = await page()
+    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
+    sheet.vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(4), width: 1, height: 1 } })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(8000)
+    await flushPromises()
+    expect(sheet.props('busy')).toBe(false)
+    expect(wrapper.text()).toContain('微信 OCR 识别未完成')
+    expect(backend.uploadConsentSignature.mock.calls[0][0].client_recognition.error).toContain('微信 OCR 识别未完成')
+    expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
   })
 })

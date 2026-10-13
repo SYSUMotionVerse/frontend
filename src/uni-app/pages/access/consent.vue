@@ -7,6 +7,7 @@ import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureResult, ConsentSignatureInput } from '../../api/consentTypes'
 import { recognizeSignatureWithVisionKit, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
 import { consentFieldStyle } from '../../platform/consentLayout'
+import { signatureOperation } from '../../platform/signatureOperation'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 const signature = shallowRef<ConsentSignatureResult | null>(null)
@@ -15,6 +16,7 @@ const busy = shallowRef(false)
 const loading = shallowRef(true)
 const error = shallowRef('')
 const signatureError = shallowRef('')
+const signatureProgress = shallowRef('')
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
@@ -30,7 +32,7 @@ function fieldStyle(field: ConsentField, index: number, name: string) {
   const page = document.value!.pages[index]
   const screenWidth = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync().windowWidth : 375
   const width = pageWidths.value[index] ?? screenWidth * 654 / 750
-  return consentFieldStyle(field, width, width * page.height / page.width, fieldText(name, field))
+  return consentFieldStyle(field, width, width * page.height / page.width, fieldText(name, field), name, document.value!.layout)
 }
 function measurePage(index: number) {
   if (typeof uni.createSelectorQuery !== 'function') return
@@ -63,18 +65,26 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
   if (busy.value || !document.value) return
   busy.value = true
   signatureError.value = ''
+  signatureProgress.value = '正在识别姓名，最多等待 8 秒…'
   try {
     let text = ''
     let recognitionError = ''
-    try { text = await recognizeSignatureWithVisionKit(value.pixels) }
+    try { text = await signatureOperation<string>((resolve, reject) => {
+      recognizeSignatureWithVisionKit(value.pixels).then(resolve, reject)
+    }, '微信 OCR 识别未完成，请重新签名并重试。', 8000) }
     catch (cause) { recognitionError = cause instanceof Error ? cause.message : '微信 OCR 识别失败，请重新签名。' }
     if (!active) return
     const matched = !recognitionError && normalizeSignatureName(text) === normalizeSignatureName(document.value.participant_name)
+    if (!matched) signatureError.value = recognitionError || '未能识别完整姓名，请用清晰楷体重新签名。'
+    signatureProgress.value = '正在上传签名，请稍候…'
     if (!pendingUpload || pendingUpload.image_base64 !== value.imageBase64) {
       pendingUpload = { template_id: document.value.template_id, client_request_id: requestId(), image_base64: value.imageBase64,
         client_recognition: { method: 'wechat-visionkit', text, error: recognitionError } }
     }
-    const result = await studentBackendSync.uploadConsentSignature(pendingUpload)
+    const input = pendingUpload
+    const result = await signatureOperation<ConsentSignatureResult>((resolve, reject) => {
+      studentBackendSync.uploadConsentSignature(input).then(resolve, reject)
+    }, '签名上传超时，请检查网络后再次点击完成。', 35000)
     if (!active) return
     if (!matched || (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED')) {
       signature.value = null
@@ -86,7 +96,7 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
     sheetOpen.value = false
     pendingUpload = null
   } catch (cause) { signatureError.value = formatBackendErrorMessage(cause, '识别或上传失败，请重试。') }
-  finally { busy.value = false }
+  finally { busy.value = false; signatureProgress.value = '' }
 }
 async function goNext() {
   const result = await studentBackendSync.bootstrapAccess()
@@ -128,10 +138,10 @@ onBeforeUnmount(() => { active = false })
       <button class="btn-primary consent-confirm" :disabled="!agreed || !signature || busy" @click="confirm">{{ busy ? '正在保存签署…' : '确认签署并继续' }}</button>
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
-    <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" @close="sheetOpen = false" @complete="upload" />
+    <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :progress="signatureProgress" @close="sheetOpen = false" @complete="upload" />
   </UniAccessPageShell>
 </template>
 
 <style scoped>
-.consent-hint{display:block;color:#667584;font-size:27rpx;line-height:1.7;margin-bottom:24rpx}.consent-document-page{position:relative;width:100%;margin-bottom:20rpx;background:#fff;border-radius:16rpx;overflow:hidden}.consent-document-image{display:block;width:100%;height:auto}.consent-document-field{position:absolute;display:flex;align-items:center;background:#fff;color:#203344;line-height:1;white-space:nowrap;overflow:hidden;box-sizing:border-box}.consent-document-field--signature{border:2rpx dashed #ce8b7d;justify-content:center;color:#a65b51}.consent-signed-image{width:100%;height:100%}.consent-agreement{display:flex;align-items:flex-start;gap:12rpx;font-size:27rpx;line-height:1.6;color:#526270;margin:28rpx 0}.consent-confirm{margin-top:20rpx}.consent-error{color:#a4473b;font-size:27rpx;margin-top:24rpx}.consent-status{color:#667584;padding:30rpx}
+.consent-hint{display:block;color:#667584;font-size:27rpx;line-height:1.7;margin-bottom:24rpx}.consent-document-page{position:relative;width:100%;margin-bottom:20rpx;background:#fff;border-radius:16rpx;overflow:hidden}.consent-document-image{display:block;width:100%;height:auto}.consent-document-field{position:absolute;display:flex;align-items:center;background:#fff;color:#203344;line-height:1.4;white-space:nowrap;overflow:hidden;box-sizing:border-box}.consent-document-field text{display:block;font-size:inherit;line-height:1.4;white-space:nowrap}.consent-document-field--signature{border:1px dashed #ce8b7d;padding:2px;justify-content:center;color:#a65b51}.consent-signed-image{width:100%;height:100%}.consent-agreement{display:flex;align-items:flex-start;gap:12rpx;font-size:27rpx;line-height:1.6;color:#526270;margin:28rpx 0}.consent-confirm{margin-top:20rpx}.consent-error{color:#a4473b;font-size:27rpx;margin-top:24rpx}.consent-status{color:#667584;padding:30rpx}
 </style>
