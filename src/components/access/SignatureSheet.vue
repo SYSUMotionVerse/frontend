@@ -72,7 +72,7 @@ async function finish() {
     const imageBase64 = await new Promise<string>((resolve, reject) => uni.getFileSystemManager().readFile({
       filePath: path, encoding: 'base64', success: result => resolve(String(result.data)), fail: reject
     }))
-    if (!destroyed) emit('complete', { imageBase64, pixels })
+    if (!destroyed && props.visible) emit('complete', { imageBase64, pixels })
   } catch {
     void uni.showToast({ title: '签名图片生成失败，请重新签名。', icon: 'none' })
   } finally { drawPending = false }

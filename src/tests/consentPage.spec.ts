@@ -4,11 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const backend = vi.hoisted(() => ({
   loadStudyConsent: vi.fn(), uploadConsentSignature: vi.fn(), acceptStudyConsent: vi.fn(), bootstrapAccess: vi.fn()
 }))
+const ocr = vi.hoisted(() => vi.fn())
 vi.mock('../uni-app/api/studentBackend', () => ({ studentBackendSync: backend }))
-vi.mock('../uni-app/platform/signatureOcr', () => ({ recognizeSignatureWithVisionKit: vi.fn().mockResolvedValue('李芳滨') }))
+vi.mock('../uni-app/platform/signatureOcr', async importOriginal => ({
+  ...await importOriginal<typeof import('../uni-app/platform/signatureOcr')>(), recognizeSignatureWithVisionKit: ocr
+}))
 
 describe('informed consent page', () => {
   beforeEach(() => {
+    ocr.mockReset()
+    ocr.mockResolvedValue('李芳滨')
+    backend.uploadConsentSignature.mockClear()
     vi.stubGlobal('uni', { reLaunch: vi.fn().mockResolvedValue(undefined), previewImage: vi.fn() })
     const field = { page: 0, x: .1, y: .7, width: .3, height: .05 }
     backend.loadStudyConsent.mockResolvedValue({ template_id: 1, title: '知情同意书', required: true,
@@ -56,5 +62,17 @@ describe('informed consent page', () => {
     await flushPromises()
     expect(backend.acceptStudyConsent).toHaveBeenCalledWith('verified')
     expect(uni.reLaunch).toHaveBeenCalledWith({ url: '/pages/access/questionnaire?checkpoint=baseline' })
+  })
+  it('archives the attempt and asks for an update when native OCR is unavailable', async () => {
+    ocr.mockRejectedValue(new Error('当前微信不支持签名识别，请更新微信后重新签名。'))
+    backend.uploadConsentSignature.mockResolvedValue({ id: 'bad', status: 'REJECTED', error: '需重签' })
+    const wrapper = await page()
+    wrapper.findComponent({ name: 'SignatureSheet' }).vm.$emit('complete', { imageBase64: 'png', pixels: { data: new Uint8ClampedArray(), width: 1, height: 1 } })
+    await flushPromises()
+    expect(backend.uploadConsentSignature).toHaveBeenCalledWith(expect.objectContaining({
+      image_base64: 'png', client_recognition: { method: 'wechat-visionkit', text: '', error: '当前微信不支持签名识别，请更新微信后重新签名。' }
+    }))
+    expect(wrapper.text()).toContain('更新微信')
+    expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
   })
 })

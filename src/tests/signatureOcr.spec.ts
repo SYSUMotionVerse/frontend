@@ -16,8 +16,8 @@ describe('VisionKit signature recognition', () => {
     expect(session.stop).toHaveBeenCalledTimes(1)
     expect(session.destroy).toHaveBeenCalledTimes(1)
   })
-  it('rejects unsupported devices so the caller can use server OCR', async () => {
-    await expect(recognizeSignatureWithVisionKit({ data: new Uint8ClampedArray(), width: 0, height: 0 }, {})).rejects.toThrow('服务器识别')
+  it('asks unsupported devices to update WeChat', async () => {
+    await expect(recognizeSignatureWithVisionKit({ data: new Uint8ClampedArray(), width: 0, height: 0 }, {})).rejects.toThrow('更新微信')
   })
   it('releases a timed-out session and ignores late callbacks', async () => {
     vi.useFakeTimers()

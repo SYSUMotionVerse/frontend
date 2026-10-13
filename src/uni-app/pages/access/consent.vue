@@ -5,7 +5,7 @@ import SignatureSheet from '../../../components/access/SignatureSheet.vue'
 import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureResult, ConsentSignatureInput } from '../../api/consentTypes'
-import { recognizeSignatureWithVisionKit, type SignaturePixels } from '../../platform/signatureOcr'
+import { recognizeSignatureWithVisionKit, normalizeSignatureName, type SignaturePixels } from '../../platform/signatureOcr'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
 const signature = shallowRef<ConsentSignatureResult | null>(null)
@@ -46,16 +46,21 @@ async function upload(value: { imageBase64: string, pixels: SignaturePixels }) {
   busy.value = true
   signatureError.value = ''
   try {
-    const text = await recognizeSignatureWithVisionKit(value.pixels).catch(() => '')
+    let text = ''
+    let recognitionError = ''
+    try { text = await recognizeSignatureWithVisionKit(value.pixels) }
+    catch (cause) { recognitionError = cause instanceof Error ? cause.message : '微信 OCR 识别失败，请重新签名。' }
+    if (!active) return
+    const matched = !recognitionError && normalizeSignatureName(text) === normalizeSignatureName(document.value.participant_name)
     if (!pendingUpload || pendingUpload.image_base64 !== value.imageBase64) {
       pendingUpload = { template_id: document.value.template_id, client_request_id: requestId(), image_base64: value.imageBase64,
-        client_recognition: { method: text ? 'wechat-visionkit' : 'server-fallback', text } }
+        client_recognition: { method: 'wechat-visionkit', text, error: recognitionError } }
     }
     const result = await studentBackendSync.uploadConsentSignature(pendingUpload)
     if (!active) return
-    if (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED') {
+    if (!matched || (result.status !== 'VERIFIED' && result.status !== 'ACCEPTED')) {
       signature.value = null
-      signatureError.value = result.error || '未能识别完整姓名，请用清晰楷体重新签名。'
+      signatureError.value = recognitionError || result.error || '未能识别完整姓名，请用清晰楷体重新签名。'
       pendingUpload = null
       return
     }
