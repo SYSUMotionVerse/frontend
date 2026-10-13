@@ -1,25 +1,16 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackendRequestError } from '../uni-app/api/backendClient'
-import { stageSignatureImage } from '../uni-app/platform/signatureImageHandoff'
-const backend = vi.hoisted(() => ({ loadStudyConsent: vi.fn(), submitStudyConsent: vi.fn(), bootstrapAccess: vi.fn() }))
-const recognizer = vi.hoisted(() => ({ prepare: vi.fn(), recognize: vi.fn(), dispose: vi.fn() }))
+const backend = vi.hoisted(() => ({ verifyStudyConsent: vi.fn(), loadStudyConsent: vi.fn(), submitStudyConsent: vi.fn(), bootstrapAccess: vi.fn() }))
 vi.mock('../uni-app/api/studentBackend', () => ({ studentBackendSync: backend }))
-vi.mock('../uni-app/platform/signatureOcr', async original => ({ ...await original<typeof import('../uni-app/platform/signatureOcr')>(), createSignatureRecognizer: () => recognizer }))
 const draft = (x = 20) => ({ width: 319, height: 190, strokes: [[[x, 30, x + 30, 50] as const]] })
-const image = () => {
-  const data = new Uint8ClampedArray(64 * 32 * 4).fill(255)
-  for (let y = 8; y < 24; y++) for (let x = 10; x < 40; x++) data.set([32, 51, 68, 255], (y * 64 + x) * 4)
-  return { imageBase64: 'full-image', pixels: { data, width: 64, height: 32 } }
-}
+const image = () => ({ imageBase64: 'image-png', aspect: 1.9 })
 async function settle() { await flushPromises(); await vi.advanceTimersByTimeAsync(5); await flushPromises() }
 
 describe('local verified signatures and formal consent submission', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    recognizer.recognize.mockReset().mockResolvedValue('李芳滨')
-    recognizer.prepare.mockReset().mockResolvedValue(undefined)
-    recognizer.dispose.mockReset()
+    backend.verifyStudyConsent.mockReset().mockResolvedValue({ signature_token: 'server-proof' })
     backend.submitStudyConsent.mockReset().mockResolvedValue({ id: 'formal', status: 'ACCEPTED' })
     backend.bootstrapAccess.mockReset().mockResolvedValue({ targetPageUrl: '/pages/access/questionnaire?checkpoint=baseline' })
     const field = { page: 0, x: .24, y: .7, width: .16, height: .014, value_only: true, font_size: .02 }
@@ -34,7 +25,7 @@ describe('local verified signatures and formal consent submission', () => {
     const Page = (await import('../uni-app/pages/access/consent.vue')).default
     const wrapper = mount(Page, { global: { stubs: {
       UniAccessPageShell: { name: 'UniAccessPageShell', template: '<div><slot /></div>' },
-      SignatureSheet: { name: 'SignatureSheet', props: ['visible', 'busy', 'error', 'draft', 'handoffId'], template: '<div class="sheet">{{ busy ? "处理中…" : error }}</div>' }
+      SignatureSheet: { name: 'SignatureSheet', props: ['visible', 'busy', 'error', 'draft'], template: '<div class="sheet">{{ busy ? "处理中…" : error }}</div>' }
     } } })
     await settle()
     return wrapper
@@ -43,8 +34,7 @@ describe('local verified signatures and formal consent submission', () => {
     await wrapper.get('.consent-document-field--signature').trigger('click')
     const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
     sheet.vm.$emit('change', value)
-    // Emulate a native component event crossing a serialization boundary.
-    sheet.vm.$emit('complete', JSON.parse(JSON.stringify(stageSignatureImage(sheet.props('handoffId'), image()))))
+    sheet.vm.$emit('complete', image())
     await settle()
     return sheet
   }
@@ -52,65 +42,36 @@ describe('local verified signatures and formal consent submission', () => {
     wrapper.get('checkbox-group').element.dispatchEvent(new CustomEvent('change', { detail: { value: ['agree'] } }))
     await settle()
   }
-  it('does not start the native recognizer before the drawing view reports ready', async () => {
-    const wrapper = await page()
-    await wrapper.get('.consent-document-field--signature').trigger('click')
-    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
-    expect(sheet.props('visible')).toBe(true)
-    sheet.vm.$emit('change', { width: 319, height: 190, strokes: [] }); await settle()
-    sheet.vm.$emit('close'); await settle()
-    await wrapper.get('.consent-document-field--signature').trigger('click'); await settle()
-    expect(recognizer.prepare).not.toHaveBeenCalled()
-    expect(recognizer.recognize).not.toHaveBeenCalled()
-    expect(backend.submitStudyConsent).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-  it('prepares the working release warm session after native view readiness and reuses it for completion', async () => {
-    const wrapper = await page()
-    await wrapper.get('.consent-document-field--signature').trigger('click')
-    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
-    expect(recognizer.prepare).not.toHaveBeenCalled()
-    sheet.vm.$emit('ready'); await settle()
-    expect(recognizer.prepare).toHaveBeenCalledOnce()
-    expect(recognizer.recognize).not.toHaveBeenCalled()
-    await complete(wrapper)
-    expect(recognizer.recognize).toHaveBeenCalledOnce()
-    wrapper.unmount()
-  })
-  it('ignores a view-ready event cancelled by closing before its native preparation task', async () => {
-    const wrapper = await page()
-    await wrapper.get('.consent-document-field--signature').trigger('click')
-    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
-    sheet.vm.$emit('ready'); sheet.vm.$emit('close'); await settle()
-    expect(recognizer.prepare).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-  it('ignores late native events for an image discarded when the sheet closed', async () => {
-    const wrapper = await page()
-    await wrapper.get('.consent-document-field--signature').trigger('click')
-    const sheet = wrapper.findComponent({ name: 'SignatureSheet' })
-    const completion = stageSignatureImage(sheet.props('handoffId'), image())
-    sheet.vm.$emit('close'); await settle()
-    await wrapper.get('.consent-document-field--signature').trigger('click')
-    sheet.vm.$emit('change', draft()); sheet.vm.$emit('complete', completion); await settle()
-    expect(recognizer.recognize).not.toHaveBeenCalled()
-    expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
-    wrapper.unmount()
-  })
   it('saves a valid signature locally and sends nothing until agreement and submit', async () => {
     const wrapper = await page()
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
     await complete(wrapper)
-    expect(recognizer.recognize).toHaveBeenCalledOnce()
-    expect(recognizer.dispose).not.toHaveBeenCalled()
     expect(wrapper.get('.consent-signed-image').attributes('src')).toMatch(/^data:image\/png;base64,/)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     expect(wrapper.get('.consent-confirm').attributes('disabled')).toBeDefined()
     await agree(wrapper)
     await wrapper.get('.consent-confirm').trigger('click'); await settle()
     expect(backend.submitStudyConsent).toHaveBeenCalledWith(expect.objectContaining({ agree: true, template_id: 1,
-      client_recognition: { method: 'wechat-visionkit', text: '李芳滨' } }))
+      signature_token: 'server-proof' }))
     expect(uni.reLaunch).toHaveBeenCalledWith({ url: '/pages/access/questionnaire?checkpoint=baseline' })
+    wrapper.unmount()
+  })
+  it('opens and rewrites the sheet without any server recognition until completion', async () => {
+    const wrapper = await page()
+    await wrapper.get('.consent-document-field--signature').trigger('click')
+    wrapper.findComponent({ name: 'SignatureSheet' }).vm.$emit('change', { width: 319, height: 190, strokes: [] })
+    await settle()
+    expect(backend.verifyStudyConsent).not.toHaveBeenCalled()
+    expect(backend.submitStudyConsent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('preserves a verified signature and displays the request ID after formal service failure', async () => {
+    backend.submitStudyConsent.mockRejectedValueOnce(new BackendRequestError('service unavailable', 503, { requestId: 'formal-request' }))
+    const wrapper = await page(); await complete(wrapper); await agree(wrapper)
+    await wrapper.get('.consent-confirm').trigger('click'); await settle()
+    expect(wrapper.text()).toContain('已保留您的签名')
+    expect(wrapper.text()).toContain('formal-request')
+    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
     wrapper.unmount()
   })
   it('discards unverified edits when closing and restores the last verified strokes', async () => {
@@ -125,7 +86,7 @@ describe('local verified signatures and formal consent submission', () => {
     wrapper.unmount()
   })
   it('drops the first failed draft without sending an error history to the server', async () => {
-    recognizer.recognize.mockRejectedValue(new Error('signature_detection_timeout'))
+    backend.verifyStudyConsent.mockRejectedValue(new Error('signature_detection_timeout'))
     const wrapper = await page(), sheet = await complete(wrapper)
     expect(sheet.props('error')).toContain('请点击“重写”')
     expect(wrapper.text()).not.toMatch(/OCR|超时/)
@@ -138,27 +99,12 @@ describe('local verified signatures and formal consent submission', () => {
   })
   it('preserves a previously verified signature when the next edited signature fails', async () => {
     const wrapper = await page(), saved = draft(), sheet = await complete(wrapper, saved)
-    recognizer.recognize.mockResolvedValueOnce('其他姓名')
+    backend.verifyStudyConsent.mockRejectedValueOnce(new Error('name mismatch'))
     await complete(wrapper, draft(80))
     sheet.vm.$emit('close'); await settle()
     await wrapper.get('.consent-document-field--signature').trigger('click')
     expect(sheet.props('draft')).toEqual(saved)
     expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
-    wrapper.unmount()
-  })
-  it('retains the page-scoped session across verified signatures until leaving the page', async () => {
-    const wrapper = await page()
-    await complete(wrapper); await complete(wrapper, draft(80))
-    expect(recognizer.recognize).toHaveBeenCalledTimes(2)
-    expect(recognizer.dispose).not.toHaveBeenCalled()
-    wrapper.unmount()
-    expect(recognizer.dispose).toHaveBeenCalledOnce()
-  })
-  it('prompts an unsupported device to update instead of retrying the native engine indefinitely', async () => {
-    recognizer.recognize.mockRejectedValue(new Error('signature_ocr_unsupported'))
-    const wrapper = await page(), sheet = await complete(wrapper)
-    expect(sheet.props('error')).toContain('请更新微信后重试')
-    expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('keeps signed height and left edge but narrows the frame to the real image aspect', async () => {
@@ -175,30 +121,17 @@ describe('local verified signatures and formal consent submission', () => {
     await wrapper.get('.consent-confirm').trigger('click'); await settle()
     expect(uni.reLaunch).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('已保留您的签名')
-    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
     await wrapper.get('.consent-confirm').trigger('click'); await settle()
     expect(backend.submitStudyConsent.mock.calls[1][0].client_request_id).toBe(backend.submitStudyConsent.mock.calls[0][0].client_request_id)
     expect(uni.reLaunch).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
-  it('reports service failure as a retryable submission error with its request ID', async () => {
-    backend.submitStudyConsent.mockRejectedValueOnce(new BackendRequestError('文档服务暂不可用', 503, { requestId: 'consent-service-failed' }))
-    const wrapper = await page(); await complete(wrapper); await agree(wrapper)
-    await wrapper.get('.consent-confirm').trigger('click'); await settle()
-    expect(wrapper.text()).toContain('已保留您的签名')
-    expect(wrapper.text()).toContain('consent-service-failed')
-    expect(wrapper.text()).not.toContain('重新签名后再试')
-    expect(wrapper.find('.consent-signed-image').exists()).toBe(true)
-    wrapper.unmount()
-  })
   it('ignores late verification after outside close and keeps the mask outside the scrolling shell', async () => {
-    let late!: (value: string) => void
-    const cancel = vi.fn()
-    recognizer.recognize.mockImplementationOnce((_pixels, register) => { register(cancel); return new Promise(resolve => { late = resolve }) })
+    let late!: (value: { signature_token: string }) => void
+    backend.verifyStudyConsent.mockImplementationOnce(() => new Promise(resolve => { late = resolve }))
     const wrapper = await page(), sheet = await complete(wrapper)
     expect(wrapper.findComponent({ name: 'UniAccessPageShell' }).element.contains(sheet.element)).toBe(false)
-    sheet.vm.$emit('close'); await settle(); late('李芳滨'); await settle()
-    expect(cancel).toHaveBeenCalledOnce()
+    sheet.vm.$emit('close'); await settle(); late({ signature_token: 'late-proof' }); await settle()
     expect(wrapper.find('.consent-signed-image').exists()).toBe(false)
     expect(backend.submitStudyConsent).not.toHaveBeenCalled()
     wrapper.unmount()

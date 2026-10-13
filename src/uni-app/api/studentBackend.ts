@@ -886,6 +886,10 @@ export function createStudentBackendSync(
       await dependencies.ensureSession()
       return dependencies.submitStudyConsent(input)
     },
+    async verifyStudyConsent(input: import('./consentTypes').ConsentVerificationInput) {
+      await dependencies.ensureSession()
+      return dependencies.verifyStudyConsent(input)
+    },
     async ensureStairsTrainingAccess() {
       if (!dependencies.isEnabled()) return true
       await dependencies.ensureSession()

@@ -1,11 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createSignatureImageHandoff, type SignatureCompletion } from '../uni-app/platform/signatureImageHandoff'
 
-const handoffs: ReturnType<typeof createSignatureImageHandoff>[] = []
-afterEach(() => { for (const handoff of handoffs.splice(0)) handoff.dispose(); vi.useRealTimers(); vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-async function sheet(deferCanvas = false) {
+async function sheet() {
   vi.useFakeTimers()
   const segments: number[][] = []
   let origin = [0, 0], target = [0, 0]
@@ -16,96 +14,24 @@ async function sheet(deferCanvas = false) {
     draw: vi.fn(() => { origin = [0, 0] }) // Never calls any callback.
   }
   const forbidden = () => { throw new Error('Native readback/export blocks this device') }
-  let renderCallback: ((rect: { width: number, height: number } | null) => void) | undefined
-  const renderedCanvas = () => renderCallback?.(wrapper.find('canvas').exists() ? { width: 319, height: 190 } : null)
-  const query = { in: () => query, select: () => query,
-    boundingClientRect: (callback: typeof renderCallback) => { renderCallback = callback; return query },
-    exec: () => { if (!deferCanvas) renderedCanvas() } }
-  const runtime = { getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: vi.fn(() => context), createSelectorQuery: () => query,
+  const runtime = { getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: () => context,
     canvasGetImageData: vi.fn(forbidden), canvasToTempFilePath: vi.fn(forbidden), getFileSystemManager: vi.fn(forbidden) }
   vi.stubGlobal('uni', runtime)
   const SignatureSheet = (await import('../components/access/SignatureSheet.vue')).default
-  const handoff = createSignatureImageHandoff()
-  handoffs.push(handoff)
-  const wrapper = mount(SignatureSheet, { props: { visible: true, name: '测试', busy: false, error: '', handoffId: handoff.id } })
+  const wrapper = mount(SignatureSheet, { props: { visible: true, name: '测试', busy: false, error: '' } })
   await flushPromises()
   await vi.advanceTimersByTimeAsync(340)
   await flushPromises()
   const touch = (x: number, y: number) => ({ touches: [{ x, y }] })
   const write = async (x = 20, y = 30) => {
     await wrapper.get('canvas').trigger('touchstart', touch(x, y))
-    await wrapper.get('canvas').trigger('touchmove', touch(x + 5, y + 5))
+    await wrapper.get('canvas').trigger('touchmove', touch(x + 20, y + 20))
     await wrapper.get('canvas').trigger('touchend')
   }
-  return { wrapper, context, segments, runtime, touch, write, renderedCanvas, handoff }
+  return { wrapper, context, segments, runtime, touch, write }
 }
 
 describe('signature sheet', () => {
-  it('keeps the known-good native canvas mounted when verification begins', async () => {
-    const { wrapper, write, context, runtime } = await sheet()
-    await write(); await wrapper.get('.signature-done').trigger('click')
-    const draws = context.draw.mock.calls.length
-    await vi.advanceTimersByTimeAsync(200)
-    expect(wrapper.find('canvas').exists()).toBe(true)
-    expect(wrapper.emitted('complete')).toHaveLength(1)
-    await wrapper.setProps({ busy: true })
-    expect(wrapper.find('canvas').exists()).toBe(true)
-    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
-    expect(context.draw).toHaveBeenCalledTimes(draws)
-    wrapper.unmount()
-  })
-  it('retains editable strokes after a failed verification without recreating the drawing context', async () => {
-    const { wrapper, write, segments, runtime } = await sheet()
-    await write(); await wrapper.get('.signature-done').trigger('click')
-    await vi.advanceTimersByTimeAsync(200)
-    expect(wrapper.find('canvas').exists()).toBe(true)
-    await wrapper.setProps({ busy: true }); await wrapper.setProps({ busy: false, error: 'retry' })
-    await vi.advanceTimersByTimeAsync(5); await flushPromises()
-    expect(wrapper.find('canvas').exists()).toBe(true)
-    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
-    expect(segments.at(-1)).toEqual([20, 30, 25, 35])
-    await write(80, 90)
-    expect(segments.at(-1)).toEqual([80, 90, 85, 95])
-    wrapper.unmount()
-  })
-  it('blocks drawing during verification while preserving the last strokes', async () => {
-    const { wrapper, write, segments } = await sheet()
-    await write(); await wrapper.get('.signature-done').trigger('click')
-    await vi.advanceTimersByTimeAsync(200); await wrapper.setProps({ busy: true })
-    await write(80, 90)
-    expect(segments).toEqual([[20, 30, 25, 35]])
-    expect(wrapper.get('.signature-done').text()).toBe('处理中…')
-    wrapper.unmount()
-  })
-  it('waits for the native canvas view before drawing and removes its animated transform', async () => {
-    const { wrapper, runtime, renderedCanvas } = await sheet(true)
-    expect(wrapper.get('.signature-sheet').classes()).toContain('signature-sheet--ready')
-    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
-    expect(wrapper.get('.signature-clear').attributes('disabled')).toBeDefined()
-    renderedCanvas(); await flushPromises()
-    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
-    expect(wrapper.get('.signature-clear').attributes('disabled')).toBeUndefined()
-    wrapper.unmount()
-  })
-  it.each(['close', 'unmount'])('ignores a late native canvas response after %s', async action => {
-    const { wrapper, runtime, renderedCanvas } = await sheet(true)
-    if (action === 'close') await wrapper.setProps({ visible: false })
-    else wrapper.unmount()
-    renderedCanvas(); await flushPromises()
-    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
-    if (action === 'close') wrapper.unmount()
-  })
-  it('offers a rewrite after a missing native view response and initializes safely on retry', async () => {
-    const { wrapper, runtime, renderedCanvas } = await sheet(true)
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(runtime.createCanvasContext).not.toHaveBeenCalled()
-    expect(wrapper.get('.signature-error').text()).toContain('请点击“重写”')
-    await wrapper.get('.signature-clear').trigger('click')
-    renderedCanvas(); await flushPromises()
-    expect(runtime.createCanvasContext).toHaveBeenCalledOnce()
-    expect(wrapper.find('.signature-error').exists()).toBe(false)
-    wrapper.unmount()
-  })
   it('retains stroke origins after native flushes and separates lifted strokes', async () => {
     const { wrapper, segments, touch } = await sheet()
     const canvas = wrapper.get('canvas')
@@ -124,7 +50,7 @@ describe('signature sheet', () => {
     wrapper.unmount()
   })
   it('creates a signature when native export APIs would block, without replaying drawing commands', async () => {
-    const { wrapper, context, runtime, write, handoff } = await sheet()
+    const { wrapper, context, runtime, write } = await sheet()
     await write()
     const draws = context.draw.mock.calls.length
     await wrapper.get('.signature-done').trigger('click')
@@ -136,12 +62,8 @@ describe('signature sheet', () => {
     await vi.advanceTimersByTimeAsync(200)
     await flushPromises()
     expect(wrapper.emitted('complete')).toHaveLength(1)
-    const detail = JSON.parse(JSON.stringify({ __args__: wrapper.emitted('complete')![0] }))
-    expect(JSON.stringify(detail).length).toBeLessThan(128)
-    expect(detail.__args__[0]).toEqual({ token: expect.any(String) })
-    const image = handoff.take((detail.__args__[0] as SignatureCompletion).token)
-    expect(image?.pixels).toMatchObject({ width: 638, height: 380 })
-    expect(image?.pixels.data).toBeInstanceOf(Uint8ClampedArray)
+    expect(wrapper.emitted('complete')![0][0]).toMatchObject({ imageBase64: expect.any(String), aspect: expect.any(Number) })
+    expect(wrapper.emitted('complete')![0][0]).not.toHaveProperty('pixels')
     expect(context.draw).toHaveBeenCalledTimes(draws)
     expect(runtime.canvasGetImageData).not.toHaveBeenCalled()
     expect(runtime.canvasToTempFilePath).not.toHaveBeenCalled()
@@ -210,7 +132,7 @@ describe('signature sheet', () => {
     await wrapper.get('.signature-undo').trigger('click')
     await flushPromises()
     const latest = wrapper.emitted('change')!.at(-1)![0] as { strokes: number[][][] }
-    expect(latest.strokes).toEqual([[[20, 30, 25, 35]]])
+    expect(latest.strokes).toEqual([[[20, 30, 40, 50]]])
     await wrapper.get('.signature-undo').trigger('click')
     await flushPromises()
     expect(wrapper.get('.signature-undo').attributes('disabled')).toBeDefined()

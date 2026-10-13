@@ -6,15 +6,13 @@ import { studentBackendSync } from '../../api/studentBackend'
 import { formatBackendErrorMessage } from '../../api/reportBackendSyncError'
 import { BackendRequestError } from '../../api/backendClient'
 import type { StudyConsentDocument, ConsentField, ConsentSignatureInput } from '../../api/consentTypes'
-import { createSignatureRecognizer, normalizeSignatureName } from '../../platform/signatureOcr'
-import { createSignatureImageHandoff, type SignatureCompletion } from '../../platform/signatureImageHandoff'
+import type { SignatureCompletion } from '../../platform/signatureTypes'
 import { consentFieldStyle } from '../../platform/consentLayout'
-import { signatureOperation } from '../../platform/signatureOperation'
-import { yieldSignatureUi, cropSignatureImage, type SignatureDraft } from '../../platform/signatureImage'
-import { SIGNATURE_REWRITE_MESSAGE, SIGNATURE_UNSUPPORTED_MESSAGE } from '../../platform/signaturePresentation'
+import { yieldSignatureUi, type SignatureDraft } from '../../platform/signatureImage'
+import { SIGNATURE_REWRITE_MESSAGE } from '../../platform/signaturePresentation'
 
 const document = shallowRef<StudyConsentDocument | null>(null)
-interface SavedSignature { imageBase64: string, imageUrl: string, aspect: number, text: string, draft: SignatureDraft }
+interface SavedSignature { imageBase64: string, imageUrl: string, aspect: number, token: string, draft: SignatureDraft }
 const signature = shallowRef<SavedSignature | null>(null)
 const sheetOpen = shallowRef(false)
 const busy = shallowRef(false)
@@ -22,13 +20,10 @@ const loading = shallowRef(true)
 const error = shallowRef('')
 const signatureError = shallowRef('')
 const signatureDraft = shallowRef<SignatureDraft | null>(null)
-const recognizer = createSignatureRecognizer()
-const signatureHandoff = createSignatureImageHandoff()
 const agreed = shallowRef(false)
 let pendingUpload: ConsentSignatureInput | null = null
 let active = true
 let uploadAttempt = 0
-let cancelRecognition: (() => void) | undefined
 const instance = getCurrentInstance()?.proxy
 const pageWidths = shallowRef<Record<number, number>>({})
 
@@ -64,7 +59,6 @@ async function load() {
   signatureDraft.value = null
   agreed.value = false
   pendingUpload = null
-  signatureHandoff.clear()
   try {
     document.value = await studentBackendSync.loadStudyConsent()
     if (!active) return
@@ -77,9 +71,8 @@ function cloneDraft(draft: SignatureDraft | null) {
   return draft ? { width: draft.width, height: draft.height,
     strokes: draft.strokes.map(stroke => stroke.map(segment => [...segment] as typeof segment)) } : null
 }
-async function verifySignature(completion: SignatureCompletion) {
-  const value = signatureHandoff.take(completion?.token)
-  if (busy.value || !document.value || !sheetOpen.value || !value) return
+async function verifySignature(value: SignatureCompletion) {
+  if (busy.value || !document.value || !sheetOpen.value) return
   const draft = cloneDraft(signatureDraft.value)
   if (!draft) return
   busy.value = true
@@ -90,60 +83,26 @@ async function verifySignature(completion: SignatureCompletion) {
     await nextTick()
     await yieldSignatureUi()
     if (!current()) return
-    let text = ''
-    try { text = await signatureOperation<string>((resolve, reject) => {
-      recognizer.recognize(value.pixels, cancel => {
-        if (current()) cancelRecognition = cancel
-        else cancel()
-      }).then(resolve, reject)
-    }, 'signature_recognition_deadline', 30000) }
-    catch (cause) {
-      cancelRecognition?.()
-      cancelRecognition = undefined
-      throw cause instanceof Error && cause.message === 'signature_ocr_unsupported' ? cause : new Error('signature_verification_failed')
-    }
+    const verified = await studentBackendSync.verifyStudyConsent({ template_id: document.value.template_id, image_base64: value.imageBase64 })
     if (!current()) return
-    if (normalizeSignatureName(text) !== normalizeSignatureName(document.value.participant_name)) throw new Error('signature_name_mismatch')
-    const cropped = cropSignatureImage(value.pixels)
-    signature.value = { ...cropped, imageUrl: `data:image/png;base64,${cropped.imageBase64}`, text, draft }
+    if (!verified.signature_token) throw new Error('signature_verification_failed')
+    signature.value = { ...value, imageUrl: `data:image/png;base64,${value.imageBase64}`, token: verified.signature_token, draft }
     sheetOpen.value = false
     pendingUpload = null
-  } catch (cause) {
-    if (current()) signatureError.value = cause instanceof Error && cause.message === 'signature_ocr_unsupported'
-      ? SIGNATURE_UNSUPPORTED_MESSAGE : SIGNATURE_REWRITE_MESSAGE
-  }
-  // Keep the ready native session for this page. Releasing it after a result
-  // can overlap the native result dispatch and the sheet's closing render.
-  finally { if (current()) { cancelRecognition = undefined; busy.value = false } }
+  } catch { if (current()) signatureError.value = SIGNATURE_REWRITE_MESSAGE }
+  finally { if (current()) busy.value = false }
 }
 function closeSignature() {
   uploadAttempt++
-  signatureHandoff.clear()
-  cancelRecognition?.()
-  cancelRecognition = undefined
   sheetOpen.value = false
   busy.value = false
   signatureDraft.value = cloneDraft(signature.value?.draft ?? null)
 }
 function openSignature() {
   if (busy.value) return
-  signatureHandoff.clear()
   signatureError.value = ''
   signatureDraft.value = cloneDraft(signature.value?.draft ?? null)
-  // The sheet notifies us after its native drawing view is mounted.
   sheetOpen.value = true
-}
-async function prepareSignature() {
-  const cycle = uploadAttempt
-  await yieldSignatureUi()
-  if (!active || !sheetOpen.value || busy.value || uploadAttempt !== cycle) return
-  // Restore the working release's warm session while writing, but never start
-  // it before the native panel has rendered as the old open handler did.
-  try { await recognizer.prepare() }
-  catch (cause) {
-    if (active && sheetOpen.value && !busy.value && uploadAttempt === cycle) signatureError.value = cause instanceof Error && cause.message === 'signature_ocr_unsupported'
-      ? SIGNATURE_UNSUPPORTED_MESSAGE : SIGNATURE_REWRITE_MESSAGE
-  }
 }
 function updateSignatureDraft(draft: SignatureDraft) {
   signatureDraft.value = draft
@@ -160,21 +119,16 @@ async function confirm() {
   error.value = ''
   try {
     if (!pendingUpload) pendingUpload = { template_id: document.value.template_id, client_request_id: requestId(),
-      image_base64: signature.value.imageBase64, client_recognition: { method: 'wechat-visionkit', text: signature.value.text }, agree: true }
+      image_base64: signature.value.imageBase64, signature_token: signature.value.token, agree: true }
     const submitted = await studentBackendSync.submitStudyConsent(pendingUpload)
     if (submitted.status !== 'ACCEPTED') throw new Error('signature_not_submitted')
     await goNext()
   } catch (cause) {
     const status = cause instanceof BackendRequestError ? cause.statusCode : undefined
-    console.warn('[consent-signature] submission_failed', {
-      statusCode: status, requestId: cause instanceof BackendRequestError ? cause.requestId : undefined,
-      stage: 'formal_submission'
-    })
-    const message = status === 400
-      ? formatBackendErrorMessage(cause, '提交未完成，请检查同意书和签名后再试。')
-      : '提交暂未完成，已保留您的签名，请稍后再次点击“确认签署并继续”。'
     const requestId = cause instanceof BackendRequestError ? cause.requestId : ''
-    error.value = status === 400 ? message : `${message}${requestId ? `（请求编号：${requestId}）` : ''}`
+    error.value = status === 400
+      ? formatBackendErrorMessage(cause, '提交未完成，请检查同意书和签名后重试。')
+      : `提交暂未完成，已保留您的签名，请稍后再次点击“确认签署并继续”。${requestId ? `（请求编号：${requestId}）` : ''}`
   }
   finally { busy.value = false }
 }
@@ -182,7 +136,7 @@ function preview(index: number) {
   if (document.value) void uni.previewImage({ current: document.value.pages[index].url, urls: document.value.pages.map(page => page.url) })
 }
 onMounted(() => { void load() })
-onBeforeUnmount(() => { active = false; signatureHandoff.dispose(); recognizer.dispose(); cancelRecognition = undefined })
+onBeforeUnmount(() => { active = false; uploadAttempt++ })
 </script>
 
 <template>
@@ -204,7 +158,7 @@ onBeforeUnmount(() => { active = false; signatureHandoff.dispose(); recognizer.d
     </template>
     <view v-if="error" class="consent-error">{{ error }}<button :disabled="busy" @click="load">重新加载同意书</button></view>
   </UniAccessPageShell>
-  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :handoff-id="signatureHandoff.id" :draft="signatureDraft" @ready="prepareSignature" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
+  <SignatureSheet :visible="sheetOpen" :name="document?.participant_name ?? ''" :busy="busy" :error="signatureError" :draft="signatureDraft" @change="updateSignatureDraft" @close="closeSignature" @complete="verifySignature" />
 </template>
 
 <style scoped>

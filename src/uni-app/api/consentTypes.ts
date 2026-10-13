@@ -33,6 +33,9 @@ export interface ConsentSignatureInput {
   template_id: number
   client_request_id: string
   image_base64: string
-  client_recognition: { method: string, text: string, error?: string }
+  signature_token: string
   agree: true
 }
+
+export interface ConsentVerificationInput { template_id: number, image_base64: string }
+export interface ConsentVerificationResult { signature_token: string }

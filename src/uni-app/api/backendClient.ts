@@ -57,6 +57,7 @@ type BackendReminderSubscriptionReport = {
 type RequestMethod = NonNullable<UniApp.RequestOptions['method']> | 'PATCH'
 
 interface RequestOptions {
+  timeoutMs?: number
   method?: RequestMethod
   data?: unknown
   headers?: Record<string, string>
@@ -360,7 +361,7 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
             url: `${baseUrl}${path}`,
             method: method as UniApp.RequestOptions['method'],
             data: options.data ?? {},
-            timeout: requestTimeoutMs,
+            timeout: options.timeoutMs ?? requestTimeoutMs,
             header: {
               'content-type': 'application/json',
               ...(sessionCookie ? { Cookie: sessionCookie } : {}),
@@ -520,8 +521,11 @@ export function createBackendClient(baseUrl = resolveBaseUrl()) {
     getStudyConsent() {
       return request<import('./consentTypes').StudyConsentDocument>('/users/consent/')
     },
+    verifyStudyConsent(data: import('./consentTypes').ConsentVerificationInput) {
+      return request<import('./consentTypes').ConsentVerificationResult>('/users/consent/verify/', { method: 'POST', data, timeoutMs: 30000 })
+    },
     submitStudyConsent(data: import('./consentTypes').ConsentSignatureInput) {
-      return request<import('./consentTypes').ConsentSignatureResult>('/users/consent/submit/', { method: 'POST', data })
+      return request<import('./consentTypes').ConsentSignatureResult>('/users/consent/submit/', { method: 'POST', data, timeoutMs: 120000 })
     },
     updateProfile(payload: UserUpdatePayload) {
       return request('/users/me/', {

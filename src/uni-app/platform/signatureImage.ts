@@ -1,5 +1,5 @@
 import { zlibSync } from 'fflate'
-import type { SignaturePixels } from './signatureOcr'
+import type { SignaturePixels } from './signatureTypes'
 
 export type SignatureSegment = readonly [number, number, number, number]
 export interface SignatureDraft { width: number, height: number, strokes: readonly (readonly SignatureSegment[])[] }
