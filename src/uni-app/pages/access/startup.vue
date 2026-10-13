@@ -25,6 +25,7 @@ function resolveTargetPageUrl(result: BootstrapAccessResult) {
   if (result.targetPage === 'register') {
     return '/pages/access/register'
   }
+  if (result.targetPage === 'consent') return '/pages/access/consent'
 
   if (result.targetPage === 'questionnaire') {
     return `/pages/access/questionnaire?checkpoint=${result.checkpoint ?? 'baseline'}`

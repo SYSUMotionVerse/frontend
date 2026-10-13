@@ -60,10 +60,11 @@ import {
   type RegistrationProfileStorage
 } from '../platform/registrationProfileStorage'
 
-type StartupTargetPage = 'register' | 'questionnaire' | 'home'
+type StartupTargetPage = 'register' | 'consent' | 'questionnaire' | 'home'
 
 type StartupTargetPageUrl =
   | '/pages/access/register'
+  | '/pages/access/consent'
   | `/pages/access/questionnaire?checkpoint=${CheckpointKey}`
   | '/pages/training/home'
 
@@ -877,6 +878,18 @@ export function createStudentBackendSync(
 
   return {
     isEnabled: dependencies.isEnabled,
+    async loadStudyConsent() {
+      await dependencies.ensureSession()
+      return dependencies.getStudyConsent()
+    },
+    async uploadConsentSignature(input: import('./consentTypes').ConsentSignatureInput) {
+      await dependencies.ensureSession()
+      return dependencies.uploadConsentSignature(input)
+    },
+    async acceptStudyConsent(signatureId: string) {
+      await dependencies.ensureSession()
+      return dependencies.acceptStudyConsent(signatureId)
+    },
     async ensureStairsTrainingAccess() {
       if (!dependencies.isEnabled()) return true
       await dependencies.ensureSession()
@@ -917,6 +930,10 @@ export function createStudentBackendSync(
         return buildRegistrationAccessResult()
       }
 
+      if (backendUser.consent_required === true) {
+        bootstrapAccess.hydrateAccessState({ profile, completedQuestionnaireCheckpoints: [], activeCheckpoint: 'baseline' })
+        return { targetPage: 'consent' as const, targetPageUrl: '/pages/access/consent' as const }
+      }
       const questionnairePlan = questionnairePlanLoader
         ? await questionnairePlanLoader('baseline')
         : undefined

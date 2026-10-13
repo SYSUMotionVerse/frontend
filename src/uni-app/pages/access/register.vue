@@ -43,7 +43,7 @@ async function handleSubmit(payload: RegistrationPayload) {
   store.completeProfile({ ...completedProfile, invitationCode: undefined })
   store.setActiveCheckpoint('baseline')
   void uni.reLaunch({
-    url: '/pages/access/questionnaire?checkpoint=baseline'
+    url: '/pages/access/consent'
   })
 }
 </script>

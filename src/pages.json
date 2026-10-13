@@ -15,6 +15,10 @@
       }
     },
     {
+      "path": "pages/access/consent",
+      "style": { "navigationBarTitleText": "知情同意书", "navigationStyle": "custom", "backgroundColor": "#FCF7F0" }
+    },
+    {
       "path": "pages/access/questionnaire",
       "style": {
         "navigationBarTitleText": "问卷"

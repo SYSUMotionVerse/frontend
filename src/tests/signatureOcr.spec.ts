@@ -1,0 +1,34 @@
+import { describe, expect, it, vi } from 'vitest'
+import { recognizeSignatureWithVisionKit, type SignatureOcrSession } from '../uni-app/platform/signatureOcr'
+
+describe('VisionKit signature recognition', () => {
+  it('uses static OCR and releases the native session after detection', async () => {
+    let anchor!: (anchors: Array<{ text: string }>) => void
+    const session: SignatureOcrSession = {
+      on: (_event, handler) => { anchor = handler },
+      start: handler => handler(null),
+      runOCR: vi.fn(() => anchor([{ text: '李' }, { text: '芳滨' }])), stop: vi.fn(), destroy: vi.fn()
+    }
+    const createVKSession = vi.fn(() => session)
+    const result = await recognizeSignatureWithVisionKit({ data: new Uint8ClampedArray(16), width: 2, height: 2 }, { createVKSession })
+    expect(createVKSession).toHaveBeenCalledWith({ track: { OCR: { mode: 2 } } })
+    expect(result).toBe('李芳滨')
+    expect(session.stop).toHaveBeenCalledTimes(1)
+    expect(session.destroy).toHaveBeenCalledTimes(1)
+  })
+  it('rejects unsupported devices so the caller can use server OCR', async () => {
+    await expect(recognizeSignatureWithVisionKit({ data: new Uint8ClampedArray(), width: 0, height: 0 }, {})).rejects.toThrow('服务器识别')
+  })
+  it('releases a timed-out session and ignores late callbacks', async () => {
+    vi.useFakeTimers()
+    let anchor!: (anchors: Array<{ text: string }>) => void
+    const session: SignatureOcrSession = { on: (_event, handler) => { anchor = handler }, start: handler => handler(null), runOCR: vi.fn(), stop: vi.fn(), destroy: vi.fn() }
+    const promise = recognizeSignatureWithVisionKit({ data: new Uint8ClampedArray(4), width: 1, height: 1 }, { createVKSession: () => session })
+    const assertion = expect(promise).rejects.toThrow('超时')
+    await vi.advanceTimersByTimeAsync(6000)
+    await assertion
+    anchor([{ text: '不应放行' }])
+    expect(session.destroy).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+})

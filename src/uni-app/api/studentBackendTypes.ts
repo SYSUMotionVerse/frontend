@@ -37,6 +37,7 @@ export interface UserUpdatePayload {
 }
 
 export interface BackendCurrentUser {
+  consent_required?: boolean
   study_group?: { id: number, name: string, code: string, allowed_modalities: BackendExerciseType[] } | null
   id: number
   name: string | null
@@ -640,6 +641,9 @@ export interface GrowthAssessmentHistoryItem {
 }
 
 export interface StudentBackendSyncDependencies {
+  getStudyConsent: () => Promise<import('./consentTypes').StudyConsentDocument>
+  uploadConsentSignature: (input: import('./consentTypes').ConsentSignatureInput) => Promise<import('./consentTypes').ConsentSignatureResult>
+  acceptStudyConsent: (signatureId: string) => Promise<import('./consentTypes').ConsentSignatureResult>
   startStroop: (scaleId: number, screening: StroopColor[], checkpoint?: CheckpointKey) => Promise<StroopStartResponse>
   submitStroop: (scaleId: number, payload: StroopSubmission) => Promise<PsychologyScaleSubmitResponse>
   isEnabled: () => boolean

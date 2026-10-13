@@ -11,6 +11,21 @@ const user: BackendCurrentUser = {
 }
 
 describe('study group training access', () => {
+  it('routes an existing registered participant to consent before questionnaires', async () => {
+    const { createStudentBackendSync } = await import('../uni-app/api/studentBackend')
+    const hydrateAccessState = vi.fn()
+    const getNextPsychologyScale = vi.fn()
+    const sync = createStudentBackendSync({
+      isEnabled: () => true, ensureSession: vi.fn(),
+      getCurrentUser: vi.fn().mockResolvedValue({ ...user, consent_required: true }),
+      listPsychologyRecords: vi.fn().mockResolvedValue([]), getNextPsychologyScale
+    }, { resolveLocalProfile: () => createInitialStudentState().profile, hydrateAccessState }, {
+      registrationProfileStorage: { load: () => null, save: vi.fn(), clear: vi.fn() }
+    })
+    expect(await sync.bootstrapAccess()).toMatchObject({ targetPage: 'consent', targetPageUrl: '/pages/access/consent' })
+    expect(getNextPsychologyScale).not.toHaveBeenCalled()
+    expect(hydrateAccessState).toHaveBeenCalled()
+  })
   it('maps server group permissions independently of cached profile permissions', async () => {
     const { mapBackendCurrentUserToStudentProfile } = await import('../uni-app/api/studentBackend')
     const seed = { ...createInitialStudentState().profile, allowedModalities: ['wushu', 'hiit', 'stair'] as const }

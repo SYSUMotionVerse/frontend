@@ -589,7 +589,7 @@ describe('page-level backend sync wiring', () => {
     expect(store.completeProfile).toHaveBeenCalled()
     expect(store.setActiveCheckpoint).toHaveBeenCalledWith('baseline')
     expect(currentUni().reLaunch).toHaveBeenCalledWith({
-      url: '/pages/access/questionnaire?checkpoint=baseline'
+      url: '/pages/access/consent'
     })
   })
 
