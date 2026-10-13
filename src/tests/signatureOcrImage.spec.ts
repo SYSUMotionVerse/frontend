@@ -10,7 +10,9 @@ describe('signature recognition input', () => {
     expect(result.width).toBe(163)
     expect(result.height).toBe(133)
     expect(result.data.filter(value => value === 32)).toHaveLength(2)
-    expect(data).toEqual(original)
+    // Compare every byte without Vitest recursively visiting a megabyte of
+    // indexed properties (which exceeds the test budget on the CI runner).
+    expect(Buffer.from(data).equals(Buffer.from(original))).toBe(true)
     expect(result.data.length).toBeLessThan(data.length / 10)
   })
   it('reduces a large crop with its aspect ratio intact and rejects blank or corrupt buffers', () => {
