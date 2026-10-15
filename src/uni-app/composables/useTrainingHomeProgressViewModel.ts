@@ -24,22 +24,24 @@ export function useTrainingHomeProgressViewModel(
     if (!progress.value) {
       return '今日训练进度同步中'
     }
-    const total = progress.value.modalities.length
+    const total = progress.value.dailyTarget ?? (progress.value.modalities.length ? 3 : 0)
     if (!total) return '今日请完成久坐问卷'
     return progress.value.goalCompleted
-      ? (total === 3 ? '今天的三项训练已完成' : '今天的组内训练已完成')
+      ? '今天的三次训练已完成'
       : `今日已完成 ${progress.value.dailyCount}/${total}`
   })
 
   const quests = computed(() => {
     const modalities = progress.value?.modalities ?? []
-    const firstPendingId = modalities.find(item => !item.completed)?.id
+    const firstPendingId = progress.value?.goalCompleted
+      ? undefined
+      : (modalities.find(item => !item.completed)?.id ?? modalities[0]?.id)
 
     return modalities.map(item => ({
       id: item.id,
       title: item.label,
       detail: item.completed
-        ? '今天已完成，可以按自己的节奏继续练习。'
+        ? '今天已练过，可再次完成同一种训练，累计每日次数。'
         : '完成一轮训练，点亮今天的进度。',
       completed: item.completed,
       highlight: item.id === firstPendingId
@@ -51,7 +53,7 @@ export function useTrainingHomeProgressViewModel(
   )
 
   const completedQuestCount = computed(() =>
-    quests.value.filter(quest => quest.completed).length
+    progress.value?.dailyCount ?? 0
   )
 
   const coachCards = computed(() => [

@@ -19,7 +19,7 @@ const progressSegments = [1, 2, 3]
         </view>
         <text class="block section-title">今日能量循环</text>
         <text class="block mt-[20rpx] text-[34rpx] leading-8 text-slate-600 font-700">
-          三种训练各完成一次，重复训练会保留记录，但不会重复增加进度。
+          每天累计完成三次训练、每周达标三天。同一种获准训练可以重复进行。
         </text>
       </view>
 

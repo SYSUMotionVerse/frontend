@@ -730,13 +730,19 @@ export interface BackendTrainingProgress {
   modalities: Array<{
     modality: BackendTrainingModality
     completed: boolean
+    completion_count?: number
   }>
   distinct_daily_count: number
+  daily_count?: number
+  daily_target?: number
+  weekly_target_days?: number
   daily_goal_completed: boolean
   week: {
     start_date: string
     end_date: string
     qualifying_day_count: number
+    qualifying_dates?: string[]
+    goal_completed?: boolean
   }
 }
 

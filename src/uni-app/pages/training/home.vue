@@ -363,7 +363,7 @@ function authorizeTrainingReminders() {
 
       <view v-else-if="progress?.goalCompleted" class="home-next-action home-next-action--complete">
         <text class="home-next-action__eyebrow">今日训练已完成</text>
-        <text class="home-next-action__complete-copy">三项训练都已记录，按自己的节奏恢复和补水。</text>
+        <text class="home-next-action__complete-copy">今天已累计完成三次训练，按自己的节奏恢复和补水。</text>
       </view>
 
       <TrainingReminderAuthorizationCard
@@ -378,8 +378,9 @@ function authorizeTrainingReminders() {
         v-if="progress && progress.modalities.length > 0"
         :completed-count="completedQuestCount"
         :goal-completed="progress.goalCompleted"
-        :total-count="progress.modalities.length"
+        :total-count="progress.dailyTarget ?? 3"
         :week-qualifying-day-count="weeklyQualifyingDayCount"
+        :week-qualifying-dates="progress.week.qualifyingDates"
       />
       <view v-else class="home-page__progress-status">
         <text>{{ store.state.profile.allowedModalities?.length === 0

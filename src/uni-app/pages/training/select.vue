@@ -40,8 +40,8 @@ type TrainingLaunchMode = TrainingModeSummary & {
 
 const modeStatusLabels: Record<TrainingModeStatus, string> = {
   recommended: '推荐',
-  pending: '待完成',
-  completed: '已完成',
+  pending: '未练过',
+  completed: '已练过',
   locked: '问卷未解锁',
   syncing: '进度同步中'
 }
@@ -137,8 +137,8 @@ const launchModes = computed(() => {
   const completionByModality = new Map(
     (progress.value?.modalities ?? []).map(item => [item.id, item.completed])
   )
-  const firstPendingModality = progress.value
-    ? progress.value.modalities.find(item => !item.completed)?.id
+  const firstPendingModality = progress.value && !progress.value.goalCompleted
+    ? (progress.value.modalities.find(item => !item.completed)?.id ?? progress.value.modalities[0]?.id)
     : undefined
 
   const modes = trainingModes.filter(mode => isTrainingAllowed(store.state.profile, mode.modality)).map<TrainingLaunchMode>(mode => {
@@ -148,11 +148,9 @@ const launchModes = computed(() => {
       ? 'locked'
       : !progress.value || !hasAuthoritativeStatus
         ? 'syncing'
-        : completed
-          ? 'completed'
-          : mode.modality === firstPendingModality
-            ? 'recommended'
-            : 'pending'
+        : mode.modality === firstPendingModality
+          ? 'recommended'
+          : completed ? 'completed' : 'pending'
 
     return {
       ...mode,

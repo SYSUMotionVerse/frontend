@@ -139,6 +139,25 @@ describe('training home next action', () => {
     vi.stubGlobal('uni', { navigateTo: controls.navigateTo })
   })
 
+  it('continues recommending the only permitted mode until three sessions are complete', async () => {
+    controls.progressState.value = {
+      status: 'ready',
+      progress: {
+        date: '2026-10-15', dailyCount: 2, dailyTarget: 3, goalCompleted: false,
+        modalities: [{ id: 'hiit', label: '自重抗阻跟练', completed: true, completionCount: 2 }],
+        week: { startDate: '2026-10-12', endDate: '2026-10-18', qualifyingDayCount: 0 }
+      }
+    }
+    const wrapper = await mountHome()
+    expect(wrapper.get('.home-next-action__title').text()).toBe('自重抗阻跟练')
+    expect(wrapper.getComponent({ name: 'TrainingHomeProgressOverview' }).props()).toMatchObject({
+      completedCount: 2, totalCount: 3, goalCompleted: false
+    })
+    await wrapper.get('.home-next-action__button').trigger('click')
+    await flushPromises()
+    expect(controls.navigateTo).toHaveBeenCalledWith({ url: '/pages/training/exercise-sets?modality=hiit' })
+  })
+
   it('puts the first incomplete visual training first and opens that exact mode', async () => {
     setProgress({ wushu: true, hiit: false, stair: false })
     const wrapper = await mountHome()

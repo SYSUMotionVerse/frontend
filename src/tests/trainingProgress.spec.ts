@@ -80,6 +80,8 @@ describe('authoritative training progress', () => {
     expect(mapTrainingProgress(backendProgress)).toEqual({
       date: '2026-07-16',
       dailyCount: 1,
+      dailyTarget: 3,
+      weeklyTargetDays: 3,
       goalCompleted: false,
       modalities: [
         { id: 'wushu', label: '传统体育养生跟练', completed: true },
@@ -150,9 +152,9 @@ describe('authoritative training progress', () => {
     expect(launchRows[0].text()).toContain('推荐')
     expect(launchRows[1].text()).toContain('传统体育养生')
     expect(launchRows[1].text()).not.toContain('武术')
-    expect(launchRows[1].text()).toContain('已完成')
+    expect(launchRows[1].text()).toContain('已练过')
     expect(launchRows[2].text()).toContain('跑楼梯')
     expect(launchRows[2].text()).not.toContain('Stairs')
-    expect(launchRows[2].text()).toContain('待完成')
+    expect(launchRows[2].text()).toContain('未练过')
   }, 15000)
 })

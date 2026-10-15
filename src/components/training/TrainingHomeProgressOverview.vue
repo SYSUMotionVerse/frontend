@@ -6,17 +6,22 @@ const props = defineProps<{
   goalCompleted: boolean
   totalCount: number
   weekQualifyingDayCount: number
+  weekQualifyingDates?: readonly string[]
 }>()
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日']
-const qualifyingStartIndex = computed(() => Math.max(0, weekdays.length - props.weekQualifyingDayCount))
+const qualifyingWeekdays = computed(() => new Set(
+  (props.weekQualifyingDates ?? []).map(date =>
+    (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7
+  )
+))
 </script>
 
 <template>
   <view class="home-progress" aria-label="训练概览">
     <view class="home-progress__head">
       <text class="home-progress__title">训练进度</text>
-      <text class="home-progress__subtitle">完成情况会在训练结束后更新。</text>
+      <text class="home-progress__subtitle">每天累计 3 次，每周达标 3 天；同一种训练可重复进行。</text>
     </view>
 
     <view class="home-progress__metrics">
@@ -41,7 +46,7 @@ const qualifyingStartIndex = computed(() => Math.max(0, weekdays.length - props.
           <text class="home-progress__weekday-label">{{ weekday }}</text>
           <view
             class="home-progress__weekday-dot"
-            :class="{ 'home-progress__weekday-dot--done': index >= qualifyingStartIndex }"
+            :class="{ 'home-progress__weekday-dot--done': qualifyingWeekdays.has(index) }"
           />
         </view>
       </view>
