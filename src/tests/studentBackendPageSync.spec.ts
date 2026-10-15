@@ -632,6 +632,47 @@ describe('page-level backend sync wiring', () => {
     expect(wrapper.text()).toContain('资料提交失败')
   })
 
+  it.each([
+    { checkpoint: 'daily', orders: [10], currentIndex: 0 },
+    { checkpoint: 'baseline', orders: [2, 7, 10], currentIndex: 1 },
+    { checkpoint: 'week4', orders: [2, 7, 10], currentIndex: 2 }
+  ])('shows the position within the $checkpoint plan instead of the configured sort order', async ({ checkpoint, orders, currentIndex }) => {
+    const { onLoad } = await import('@dcloudio/uni-app')
+    vi.mocked(onLoad).mockImplementationOnce(callback => callback({ checkpoint }))
+    studentBackendSync.loadLongQuestionnaire.mockResolvedValueOnce({
+      scaleId: currentIndex + 1,
+      title: '久坐行为每日测量问卷',
+      description: '',
+      checkpoint,
+      questions: [{ id: 11, prompt: '测试题目', options: [{ id: 101, label: '是', score: 1 }] }]
+    } as never)
+    studentBackendSync.loadQuestionnairePlan.mockResolvedValueOnce({
+      checkpoint,
+      questionnaire_count: orders.length,
+      completed_questionnaire_count: currentIndex,
+      estimated_total_minutes: 2,
+      current_questionnaire_id: currentIndex + 1,
+      questionnaires: orders.map((order, index) => ({
+        id: index + 1,
+        code: `scale-${index + 1}`,
+        title: '测试问卷',
+        short_title: '测试问卷',
+        order,
+        estimated_minutes: 2,
+        question_count: 1,
+        completed: index < currentIndex
+      }))
+    } as never)
+    const QuestionnairePage = (await import('../uni-app/pages/access/questionnaire.vue')).default
+    const wrapper = mount(QuestionnairePage, { global: { stubs: {
+      UniAccessPageShell: { template: '<div><slot /></div>' }
+    } } })
+    await flushPromises()
+    await wrapper.get('.questionnaire-overview__start').trigger('click')
+    expect(wrapper.get('.questionnaire-progress__step').text()).toBe(`第 ${currentIndex + 1} / ${orders.length} 份`)
+    wrapper.unmount()
+  })
+
   it('refuses to submit yesterday’s open daily form as today’s answers', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-20T02:00:00Z'))

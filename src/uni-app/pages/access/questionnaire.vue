@@ -111,8 +111,8 @@ const questionnaireCount = computed(() =>
 )
 const questionnaireNumber = computed(() => {
   const scaleId = questionnaire.value?.scaleId
-  const entry = questionnairePlan.value?.questionnaires.find(item => item.id === scaleId)
-  return entry?.order ?? 1
+  const index = questionnairePlan.value?.questionnaires.findIndex(item => item.id === scaleId) ?? -1
+  return index >= 0 ? index + 1 : 1
 })
 const totalQuestionCount = computed(() => {
   const plannedTotal = questionnairePlan.value?.questionnaires.reduce(
